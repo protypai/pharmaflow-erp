@@ -5,8 +5,13 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding Super Admin...');
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@pharmaflow.in';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required for seeding.');
+  }
+
   const hash = await bcrypt.hash(adminPassword, 12);
 
   await prisma.superAdmin.upsert({

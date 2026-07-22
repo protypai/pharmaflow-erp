@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   pharmaflow-network:
     name: pharmaflow_shared_network
