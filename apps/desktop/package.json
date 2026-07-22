@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "PharmaFlow ERP Windows Desktop Application",
   "author": "PharmaFlow",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/protypai/pharmaflow-erp.git"
+  },
   "private": true,
   "main": "electron/main.js",
   "scripts": {

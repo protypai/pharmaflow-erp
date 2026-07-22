@@ -39,10 +39,8 @@ jobs:
           VITE_UPDATER_REPO: protypai/pharmaflow-releases
 
       - name: Build Electron .exe Installer
-        run: npx electron-builder --win nsis --config.electronVersion=31.0.0
+        run: npx electron-builder --win nsis --config.electronVersion=31.0.0 --config.publish=never
         working-directory: apps/desktop
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload .exe Installer to GitHub Releases
         uses: softprops/action-gh-release@v2
