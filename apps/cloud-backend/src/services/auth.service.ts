@@ -3,6 +3,81 @@ import { db } from '../config/database';
 import { AppError } from '../utils/AppError';
 import { signAccessToken, signRefreshToken, signAdminToken, verifyRefreshToken } from '../utils/jwt';
 
+export interface RegisterPayload {
+  companyName: string;
+  shortName?: string;
+  gstin?: string;
+  phone?: string;
+  city?: string;
+  state?: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
+export const registerCompany = async (data: RegisterPayload) => {
+  const existingUser = await db.user.findUnique({ where: { email: data.email } });
+  if (existingUser) {
+    throw new AppError('Email address already registered', 400);
+  }
+
+  const trialExpiry = new Date();
+  trialExpiry.setDate(trialExpiry.getDate() + 14); // 14-day trial
+
+  const passwordHash = await bcrypt.hash(data.password, 12);
+
+  return db.$transaction(async (tx: any) => {
+    const company = await tx.company.create({
+      data: {
+        name: data.companyName,
+        shortName: data.shortName || data.companyName,
+        gstin: data.gstin,
+        phone: data.phone,
+        city: data.city,
+        state: data.state,
+        subscriptionStatus: 'trial',
+        subscriptionExpiry: trialExpiry,
+        isActive: true,
+      },
+    });
+
+    const user = await tx.user.create({
+      data: {
+        companyId: company.id,
+        name: data.name,
+        email: data.email,
+        passwordHash,
+        role: 'admin',
+        isActive: true,
+      },
+    });
+
+    const payload = { userId: user.id, companyId: company.id, role: user.role };
+    const accessToken = signAccessToken(payload);
+    const refreshToken = signRefreshToken(payload);
+
+    await tx.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        company,
+      },
+    };
+  });
+};
+
 export const loginUser = async (email: string, password: string) => {
   const user = await db.user.findUnique({ where: { email }, include: { company: true } });
   if (!user || !user.isActive) throw new AppError('Invalid credentials', 401);

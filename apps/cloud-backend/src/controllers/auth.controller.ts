@@ -3,6 +3,11 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess } from '../utils/response';
 import * as authService from '../services/auth.service';
 
+export const register = asyncHandler(async (req: Request, res: Response) => {
+  const result = await authService.registerCompany(req.body);
+  sendSuccess(res, result, 'Company registered successfully', 201);
+});
+
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
   const result = await authService.loginUser(email, password);

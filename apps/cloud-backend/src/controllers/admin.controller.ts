@@ -28,6 +28,27 @@ export const toggleCompany = asyncHandler(async (req: Request, res: Response) =>
   sendSuccess(res, updated, `Company ${updated.isActive ? 'activated' : 'deactivated'}`);
 });
 
+export const updateSubscription = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { subscriptionStatus, expiryDays } = req.body;
+  const company = await db.company.findUnique({ where: { id } });
+  if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
+
+  const expiry = new Date();
+  expiry.setDate(expiry.getDate() + (expiryDays || 365));
+
+  const updated = await db.company.update({
+    where: { id },
+    data: {
+      subscriptionStatus: subscriptionStatus || 'active',
+      subscriptionExpiry: expiry,
+      isActive: subscriptionStatus !== 'inactive',
+    },
+  });
+
+  sendSuccess(res, updated, 'Subscription updated successfully');
+});
+
 export const resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
   const { companyId, newPassword } = req.body;
   const hash = await bcrypt.hash(newPassword, 12);
