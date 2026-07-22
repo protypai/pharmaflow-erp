@@ -443,3 +443,11 @@ CREATE TABLE IF NOT EXISTS sync_queue (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sync_queue_pending ON sync_queue(is_synced, created_at);
+
+-- Pre-seeded Initial Demo Data for Team Testing
+INSERT OR IGNORE INTO companies (id, name, short_name, gstin, phone, city, state, financial_year)
+VALUES ('COMP-DEMO-001', 'PharmaFlow Demo Medicals', 'PharmaFlow Demo', '27AABCA1234F1Z5', '9876543210', 'Mumbai', 'Maharashtra', '2025-26');
+
+INSERT OR IGNORE INTO users (id, company_id, name, email, password_hash, role)
+VALUES ('USER-DEMO-001', 'COMP-DEMO-001', 'Demo Admin User', 'demo@pharmaflow.in', '$2a$12$eImiTXuWVxfM37uY4JANj.R5x.jC.8f0L4hE9k.9g.H2k1u.L.2S', 'admin');
+

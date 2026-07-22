@@ -254,6 +254,8 @@ model Product {
   category     Category?     @relation(fields: [categoryId], references: [id])
   rack         Rack?         @relation(fields: [rackId], references: [id])
   batches      Batch[]
+  purchaseItems PurchaseItem[]
+  saleItems     SaleItem[]
 
   @@unique([companyId, code])
   @@index([companyId])
