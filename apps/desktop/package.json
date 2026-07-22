@@ -8,7 +8,7 @@
     "url": "https://github.com/protypai/pharmaflow-erp.git"
   },
   "private": true,
-  "main": "electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc && vite build",
