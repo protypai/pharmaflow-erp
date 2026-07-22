@@ -44,6 +44,11 @@ jobs:
         run: npx electron-builder --win nsis --config.electronVersion=31.0.0 --publish never
         working-directory: apps/desktop
 
+      - name: Locate compiled installer files
+        run: |
+          Get-ChildItem -Path . -Recurse -Filter "*.exe" | Select-Object FullName
+          Get-ChildItem -Path . -Recurse -Filter "latest.yml" | Select-Object FullName
+
       - name: Upload .exe Installer to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
@@ -64,3 +69,7 @@ jobs:
           files: |
             apps/desktop/release/*.exe
             apps/desktop/release/latest.yml
+            release/*.exe
+            release/latest.yml
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/win-unpacked/*.exe
