@@ -39,7 +39,7 @@ jobs:
           VITE_UPDATER_REPO: protypai/pharmaflow-releases
 
       - name: Build Electron .exe Installer
-        run: npx electron-builder --win nsis --config.electronVersion=31.0.0 --config.publish=never
+        run: npx electron-builder --win nsis --config.electronVersion=31.0.0 --publish never
         working-directory: apps/desktop
 
       - name: Upload .exe Installer to GitHub Releases
