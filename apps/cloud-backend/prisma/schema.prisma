@@ -1,0 +1,662 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  admin
+  staff
+}
+
+enum SubscriptionStatus {
+  trial
+  active
+  inactive
+  expired
+}
+
+enum Status {
+  active
+  inactive
+}
+
+enum CustomerType {
+  retail
+  wholesale
+}
+
+enum BalanceType {
+  debit
+  credit
+}
+
+enum GstType {
+  exclusive
+  inclusive
+}
+
+enum PaymentMode {
+  cash
+  cheque
+  neft_rtgs
+  upi
+  credit_card
+  credit
+}
+
+enum TxnStatus {
+  draft
+  saved
+  cancelled
+}
+
+enum ReturnReason {
+  near_expiry
+  expired
+  damaged
+  wrong_product
+  excess_supply
+  quality_issue
+}
+
+enum AdjustmentReason {
+  physical_count
+  damage
+  lost_theft
+  expired_destroyed
+  other
+}
+
+enum EntryType {
+  debit
+  credit
+}
+
+enum SyncOp {
+  create
+  update
+  delete
+}
+
+// ─── Auth & Tenancy ───────────────────────────────────────────────────────────
+
+model Company {
+  id                 String             @id @default(cuid())
+  name               String
+  shortName          String?
+  gstin              String?
+  drugLicense20B     String?
+  drugLicense21B     String?
+  fssaiLicense       String?
+  pan                String?
+  address            String?
+  city               String?
+  state              String?
+  pincode            String?
+  stateCode          String?
+  phone              String?
+  email              String?
+  website            String?
+  financialYear      String             @default("2025-26")
+  bankName           String?
+  bankAccount        String?
+  bankIfsc           String?
+  bankBranch         String?
+  upiId              String?
+  authorizedSign     String?
+  estYear            Int?
+  logoUrl            String?
+  subscriptionStatus SubscriptionStatus @default(trial)
+  subscriptionExpiry DateTime?
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  users            User[]
+  products         Product[]
+  customers        Customer[]
+  suppliers        Supplier[]
+  manufacturers    Manufacturer[]
+  categories       Category[]
+  racks            Rack[]
+  purchases        Purchase[]
+  sales            Sale[]
+  purchaseReturns  PurchaseReturn[]
+  salesReturns     SaleReturn[]
+  receipts         Receipt[]
+  payments         Payment[]
+  journals         Journal[]
+  stockAdjustments StockAdjustment[]
+  syncQueue        SyncQueue[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  companyId    String
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(admin)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  refreshTokens RefreshToken[]
+
+  @@index([email])
+  @@index([companyId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  isValid   Boolean  @default(true)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+model SuperAdmin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+}
+
+// ─── Masters ──────────────────────────────────────────────────────────────────
+
+model Manufacturer {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  status    Status   @default(active)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  products Product[]
+
+  @@index([companyId])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  status    Status   @default(active)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  products Product[]
+
+  @@index([companyId])
+}
+
+model Rack {
+  id          String   @id @default(cuid())
+  companyId   String
+  code        String
+  description String?
+  status      Status   @default(active)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  products Product[]
+
+  @@index([companyId])
+}
+
+model Product {
+  id               String   @id @default(cuid())
+  companyId        String
+  code             String
+  barcode          String?
+  name             String
+  genericName      String?
+  manufacturerId   String?
+  categoryId       String?
+  rackId           String?
+  packing          String?
+  purchaseUnit     String?
+  saleUnit         String?
+  conversionFactor Float?
+  hsnCode          String?
+  gstRate          Float    @default(12)
+  schedule         String?
+  minStock         Float    @default(0)
+  maxStock         Float    @default(0)
+  reorderQty       Float    @default(0)
+  discontinued     Boolean  @default(false)
+  status           Status   @default(active)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  manufacturer Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  rack         Rack?         @relation(fields: [rackId], references: [id])
+  batches      Batch[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([barcode])
+}
+
+model Batch {
+  id            String   @id @default(cuid())
+  productId     String
+  batchNo       String
+  expiryDate    DateTime
+  mrp           Float
+  ptr           Float
+  pts           Float?
+  purchasePrice Float
+  gstRate       Float
+  currentQty    Float    @default(0)
+  freeQty       Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product         Product              @relation(fields: [productId], references: [id])
+  purchaseItems   PurchaseItem[]
+  saleItems       SaleItem[]
+  returnItems     PurchaseReturnItem[]
+  saleReturnItems SaleReturnItem[]
+  adjustmentItems StockAdjustmentItem[]
+
+  @@unique([productId, batchNo])
+  @@index([productId])
+  @@index([expiryDate])
+}
+
+model Customer {
+  id                 String       @id @default(cuid())
+  companyId          String
+  code               String?
+  name               String
+  type               CustomerType @default(retail)
+  gstin              String?
+  drugLicense        String?
+  phone              String?
+  email              String?
+  address            String?
+  area               String?
+  city               String?
+  state              String?
+  pincode            String?
+  salesman           String?
+  creditLimit        Float        @default(0)
+  creditDays         Int          @default(0)
+  openingBalance     Float        @default(0)
+  openingBalanceType BalanceType  @default(debit)
+  status             Status       @default(active)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  sales        Sale[]
+  receipts     Receipt[]
+  salesReturns SaleReturn[]
+
+  @@index([companyId])
+  @@index([phone])
+}
+
+model Supplier {
+  id                 String      @id @default(cuid())
+  companyId          String
+  code               String?
+  name               String
+  gstin              String?
+  drugLicense        String?
+  phone              String?
+  email              String?
+  address            String?
+  city               String?
+  state              String?
+  pincode            String?
+  creditDays         Int         @default(0)
+  creditLimit        Float       @default(0)
+  openingBalance     Float       @default(0)
+  openingBalanceType BalanceType @default(credit)
+  status             Status      @default(active)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  company         Company          @relation(fields: [companyId], references: [id])
+  purchases       Purchase[]
+  payments        Payment[]
+  purchaseReturns PurchaseReturn[]
+
+  @@index([companyId])
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+model Purchase {
+  id            String      @id @default(cuid())
+  companyId     String
+  entryNo       String
+  supplierId    String
+  invoiceNo     String
+  invoiceDate   DateTime
+  gstType       GstType     @default(exclusive)
+  subtotal      Float       @default(0)
+  discountAmount Float      @default(0)
+  taxableAmount Float       @default(0)
+  cgstAmount    Float       @default(0)
+  sgstAmount    Float       @default(0)
+  igstAmount    Float       @default(0)
+  netAmount     Float       @default(0)
+  roundOff      Float       @default(0)
+  paymentMode   PaymentMode @default(credit)
+  paidAmount    Float       @default(0)
+  notes         String?
+  status        TxnStatus   @default(saved)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  company  Company        @relation(fields: [companyId], references: [id])
+  supplier Supplier       @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+  returns  PurchaseReturn[]
+
+  @@unique([companyId, entryNo])
+  @@index([companyId, invoiceDate])
+  @@index([supplierId])
+}
+
+model PurchaseItem {
+  id            String  @id @default(cuid())
+  purchaseId    String
+  productId     String
+  batchId       String
+  qty           Float
+  freeQty       Float   @default(0)
+  purchasePrice Float
+  ptr           Float
+  mrp           Float
+  discPercent   Float   @default(0)
+  discAmount    Float   @default(0)
+  gstRate       Float
+  cgst          Float   @default(0)
+  sgst          Float   @default(0)
+  igst          Float   @default(0)
+  taxableAmt    Float   @default(0)
+  netAmount     Float
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+  batch    Batch    @relation(fields: [batchId], references: [id])
+}
+
+model Sale {
+  id             String      @id @default(cuid())
+  companyId      String
+  invoiceNo      String
+  customerId     String
+  date           DateTime
+  salesman       String?
+  gstType        GstType     @default(exclusive)
+  subtotal       Float       @default(0)
+  discountAmount Float       @default(0)
+  taxableAmount  Float       @default(0)
+  cgstAmount     Float       @default(0)
+  sgstAmount     Float       @default(0)
+  igstAmount     Float       @default(0)
+  netAmount      Float       @default(0)
+  roundOff       Float       @default(0)
+  paymentMode    PaymentMode @default(credit)
+  paidAmount     Float       @default(0)
+  notes          String?
+  status         TxnStatus   @default(saved)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  company  Company      @relation(fields: [companyId], references: [id])
+  customer Customer     @relation(fields: [customerId], references: [id])
+  items    SaleItem[]
+  returns  SaleReturn[]
+
+  @@unique([companyId, invoiceNo])
+  @@index([companyId, date])
+  @@index([customerId])
+}
+
+model SaleItem {
+  id          String  @id @default(cuid())
+  saleId      String
+  productId   String
+  batchId     String
+  qty         Float
+  mrp         Float
+  ptr         Float
+  salePrice   Float
+  discPercent Float   @default(0)
+  discAmount  Float   @default(0)
+  gstRate     Float
+  cgst        Float   @default(0)
+  sgst        Float   @default(0)
+  igst        Float   @default(0)
+  taxableAmt  Float   @default(0)
+  netAmount   Float
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  batch   Batch   @relation(fields: [batchId], references: [id])
+}
+
+model PurchaseReturn {
+  id           String    @id @default(cuid())
+  companyId    String
+  entryNo      String
+  purchaseId   String?
+  supplierId   String
+  returnDate   DateTime
+  reason       String?
+  debitNoteNo  String?
+  netAmount    Float     @default(0)
+  status       TxnStatus @default(saved)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company  Company              @relation(fields: [companyId], references: [id])
+  supplier Supplier             @relation(fields: [supplierId], references: [id])
+  purchase Purchase?            @relation(fields: [purchaseId], references: [id])
+  items    PurchaseReturnItem[]
+
+  @@unique([companyId, entryNo])
+}
+
+model PurchaseReturnItem {
+  id         String       @id @default(cuid())
+  returnId   String
+  productId  String
+  batchId    String
+  qty        Float
+  mrp        Float
+  ptr        Float
+  netAmount  Float
+  reason     ReturnReason
+
+  purchaseReturn PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  batch          Batch          @relation(fields: [batchId], references: [id])
+}
+
+model SaleReturn {
+  id           String    @id @default(cuid())
+  companyId    String
+  entryNo      String
+  saleId       String?
+  customerId   String
+  returnDate   DateTime
+  reason       String?
+  creditNoteNo String?
+  netAmount    Float     @default(0)
+  status       TxnStatus @default(saved)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company  Company          @relation(fields: [companyId], references: [id])
+  customer Customer         @relation(fields: [customerId], references: [id])
+  sale     Sale?            @relation(fields: [saleId], references: [id])
+  items    SaleReturnItem[]
+
+  @@unique([companyId, entryNo])
+}
+
+model SaleReturnItem {
+  id         String       @id @default(cuid())
+  returnId   String
+  productId  String
+  batchId    String
+  qty        Float
+  mrp        Float
+  salePrice  Float
+  netAmount  Float
+  reason     ReturnReason
+
+  saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  batch      Batch      @relation(fields: [batchId], references: [id])
+}
+
+model Receipt {
+  id          String      @id @default(cuid())
+  companyId   String
+  receiptNo   String
+  customerId  String
+  date        DateTime
+  amount      Float
+  paymentMode PaymentMode
+  chequeNo    String?
+  chequeDate  DateTime?
+  bankName    String?
+  utrNo       String?
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([companyId, receiptNo])
+  @@index([companyId, date])
+}
+
+model Payment {
+  id          String      @id @default(cuid())
+  companyId   String
+  paymentNo   String
+  supplierId  String
+  date        DateTime
+  amount      Float
+  paymentMode PaymentMode
+  chequeNo    String?
+  chequeDate  DateTime?
+  bankName    String?
+  utrNo       String?
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@unique([companyId, paymentNo])
+}
+
+model Journal {
+  id        String   @id @default(cuid())
+  companyId String
+  entryNo   String
+  date      DateTime
+  narration String
+  debitAmt  Float
+  creditAmt Float
+  createdAt DateTime @default(now())
+
+  company Company        @relation(fields: [companyId], references: [id])
+  entries JournalEntry[]
+
+  @@unique([companyId, entryNo])
+}
+
+model JournalEntry {
+  id         String    @id @default(cuid())
+  journalId  String
+  particular String
+  type       EntryType
+  amount     Float
+
+  journal Journal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+}
+
+model StockAdjustment {
+  id        String           @id @default(cuid())
+  companyId String
+  entryNo   String
+  date      DateTime
+  reason    AdjustmentReason
+  notes     String?
+  createdAt DateTime         @default(now())
+
+  company Company               @relation(fields: [companyId], references: [id])
+  items   StockAdjustmentItem[]
+
+  @@unique([companyId, entryNo])
+}
+
+model StockAdjustmentItem {
+  id            String           @id @default(cuid())
+  adjustmentId  String
+  productId     String
+  batchId       String
+  systemQty     Float
+  physicalQty   Float
+  differenceQty Float
+  reason        AdjustmentReason
+
+  adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  batch      Batch           @relation(fields: [batchId], references: [id])
+}
+
+// ─── Sync Queue ───────────────────────────────────────────────────────────────
+
+model SyncQueue {
+  id          String    @id @default(cuid())
+  companyId   String
+  deviceId    String
+  tableName   String
+  recordId    String
+  operation   SyncOp
+  payload     Json
+  isSynced    Boolean   @default(false)
+  syncedAt    DateTime?
+  syncError   String?
+  retryCount  Int       @default(0)
+  appVersion  String
+  createdAt   DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, isSynced])
+  @@index([createdAt])
+}

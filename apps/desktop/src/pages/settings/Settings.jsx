@@ -1,0 +1,164 @@
+import React, { useState } from 'react';
+import { Save, FileText, Settings as SettingsIcon, Database, CheckSquare, Layers } from 'lucide-react';
+
+export default function Settings() {
+  const [activeTab, setActiveTab] = useState('invoicing');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
+      <div className="page-header" style={{ marginBottom: 0 }}>
+        <div>
+          <h1 className="page-title">System Settings</h1>
+          <div className="page-sub">Configure billing rules and application preferences</div>
+        </div>
+        <button className="btn btn-primary"><Save size={16} /> Save Configuration</button>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar Tabs */}
+        <div className="card" style={{ width: '250px', padding: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <button 
+              className={`btn ${activeTab === 'invoicing' ? 'btn-primary' : 'btn-ghost'}`} 
+              style={{ justifyContent: 'flex-start' }}
+              onClick={() => setActiveTab('invoicing')}
+            >
+              <FileText size={16} /> Invoicing Details
+            </button>
+            <button 
+              className={`btn ${activeTab === 'rules' ? 'btn-primary' : 'btn-ghost'}`} 
+              style={{ justifyContent: 'flex-start' }}
+              onClick={() => setActiveTab('rules')}
+            >
+              <CheckSquare size={16} /> Inventory Rules
+            </button>
+            <button 
+              className={`btn ${activeTab === 'system' ? 'btn-primary' : 'btn-ghost'}`} 
+              style={{ justifyContent: 'flex-start' }}
+              onClick={() => setActiveTab('system')}
+            >
+              <SettingsIcon size={16} /> System & Theme
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        <div className="card" style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="card-body">
+            {activeTab === 'invoicing' && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <FileText size={18} color="var(--primary)" /> Billing & Invoice Formatting
+                </h3>
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label className="form-label">Invoice Prefix</label>
+                    <input className="form-input" defaultValue="INV/25-26/" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Next Invoice Number</label>
+                    <input className="form-input" type="number" defaultValue="42" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Print Format</label>
+                    <select className="form-select" defaultValue="A4">
+                      <option value="A4">A4 Full Page</option>
+                      <option value="A5">A5 Half Page</option>
+                      <option value="Thermal">Thermal 80mm</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Number of Print Copies</label>
+                    <select className="form-select" defaultValue="2">
+                      <option value="1">1 (Original)</option>
+                      <option value="2">2 (Original + Duplicate)</option>
+                      <option value="3">3 (Original + Duplicate + Transport)</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label">Terms and Conditions (Printed on Invoice)</label>
+                    <textarea className="form-input" rows={4} defaultValue="1. Goods once sold will not be taken back.\n2. Interest @24% p.a. will be charged if payment is delayed beyond 30 days.\n3. Subject to Mumbai Jurisdiction." />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'rules' && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <CheckSquare size={18} color="var(--primary)" /> Inventory & Sales Rules
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                    <input type="checkbox" style={{ width: '18px', height: '18px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Allow Negative Stock Billing</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Allow creating sales invoices even if system stock is zero (fixes physical vs system mismatch instantly).</div>
+                    </div>
+                  </label>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                    <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Warn on selling Near Expiry stock</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Show a warning popup if batch expires within 30 days.</div>
+                    </div>
+                  </label>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                    <input type="checkbox" defaultChecked disabled style={{ width: '18px', height: '18px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Block sale of Expired Medicines</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Legally mandatory. System will not allow adding expired batches to any sales invoice.</div>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                    <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Enforce FEFO (First Expire First Out)</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Automatically suggest the batch closest to expiry when generating sales.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'system' && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <SettingsIcon size={18} color="var(--primary)" /> System Utilities
+                </h3>
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label className="form-label">Financial Year</label>
+                    <select className="form-select" defaultValue="25-26">
+                      <option value="25-26">April 2025 - March 2026</option>
+                      <option value="24-25">April 2024 - March 2025</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">UI Theme</label>
+                    <select className="form-select" defaultValue="light">
+                      <option value="light">Light Mode</option>
+                    </select>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Dark mode restricted by admin.</span>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Auto Backup Frequency</label>
+                    <select className="form-select" defaultValue="daily">
+                      <option value="daily">Daily at 11:00 PM</option>
+                      <option value="close">On Application Close</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

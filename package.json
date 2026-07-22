@@ -1,0 +1,21 @@
+{
+  "name": "pharmaflow-erp",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=apps/cloud-backend",
+    "dev:desktop": "npm run dev --workspace=apps/desktop",
+    "dev:db": "docker compose -f docker-compose.dev.yml up -d",
+    "build:desktop": "npm run electron:build --workspace=apps/desktop",
+    "migrate": "npm run migrate --workspace=apps/cloud-backend",
+    "studio": "npm run studio --workspace=apps/cloud-backend",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}
