@@ -1,9 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ShieldAlert, Trash2, Printer, ArrowRightLeft } from 'lucide-react';
-import { products, suppliers } from '../../data/mockData';
+
 import { useNavigate } from 'react-router-dom';
 
 export default function ExpiredStock() {
+  const [products, set_products] = useState([]);
+  const [suppliers, set_suppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+      set_products(res_products?.data || []);
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const navigate = useNavigate();
 
   // Mock function to determine if a batch is ALREADY expired

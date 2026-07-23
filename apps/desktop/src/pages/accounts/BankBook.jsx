@@ -1,34 +1,38 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Printer, Download, Landmark } from 'lucide-react';
 
 export default function BankBook() {
   const [bankId, setBankId] = useState('hdfc');
 
-  // Mock Bank Book Entries
-  const bankEntries = useMemo(() => {
-    // Generate different mock data based on bank selected
-    let entries = [];
-    if (bankId === 'hdfc') {
-      entries = [
-        { id: 1, date: '2025-07-01', particulars: 'By Opening Balance', instrument: '-', withdrawal: 0, deposit: 250000 },
-        { id: 2, date: '2025-07-05', particulars: 'To Supplier (Sun Pharma) - NEFT', instrument: 'N123456789', withdrawal: 45000, deposit: 0 },
-        { id: 3, date: '2025-07-08', particulars: 'By Customer (Sharma Clinic) - Cheque', instrument: 'CHQ-889922', withdrawal: 0, deposit: 12500 },
-        { id: 4, date: '2025-07-10', particulars: 'To Electricity Bill - Auto Debit', instrument: 'ACH-1122', withdrawal: 3500, deposit: 0 },
-        { id: 5, date: '2025-07-15', particulars: 'By Cash Deposit', instrument: 'Slip-001', withdrawal: 0, deposit: 20000 }
-      ];
-    } else {
-      entries = [
-        { id: 1, date: '2025-07-01', particulars: 'By Opening Balance', instrument: '-', withdrawal: 0, deposit: 75000 },
-        { id: 2, date: '2025-07-10', particulars: 'By UPI Settlements (Razorpay)', instrument: 'UTR-ABC123', withdrawal: 0, deposit: 8500 },
-        { id: 3, date: '2025-07-12', particulars: 'To Bank Charges', instrument: '-', withdrawal: 250, deposit: 0 }
-      ];
-    }
+  const [bankEntries, setBankEntries] = useState([]);
 
-    let currentBalance = 0;
-    return entries.map(entry => {
-      currentBalance += entry.deposit - entry.withdrawal;
-      return { ...entry, balance: currentBalance };
-    });
+  useEffect(() => {
+    const fetchBankBook = async () => {
+      try {
+        const query = `
+          SELECT * FROM (
+            SELECT id, date, 'By Receipt: ' || IFNULL(notes, 'Bank') as particulars, IFNULL(cheque_no, payment_mode) as instrument, amount as deposit, 0 as withdrawal 
+            FROM receipts WHERE payment_mode != 'cash'
+            UNION ALL
+            SELECT id, date, 'To Payment: ' || IFNULL(notes, 'Bank') as particulars, IFNULL(cheque_no, payment_mode) as instrument, 0 as deposit, amount as withdrawal 
+            FROM payments WHERE payment_mode != 'cash'
+          ) ORDER BY date ASC
+        `;
+        const res = await window.pharmaAPI.db.query(query);
+        const entries = res?.data || [];
+        
+        let currentBalance = 0;
+        const processed = entries.map(entry => {
+          currentBalance += (entry.deposit || 0) - (entry.withdrawal || 0);
+          return { ...entry, balance: currentBalance };
+        });
+        
+        setBankEntries(processed);
+      } catch (err) {
+        console.error("Failed to fetch bank book:", err);
+      }
+    };
+    fetchBankBook();
   }, [bankId]);
 
   const totals = bankEntries.reduce((acc, curr) => {

@@ -1,8 +1,49 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Printer, Download, Package } from 'lucide-react';
-import { products, categories, manufacturers } from '../../data/mockData';
+
 
 export default function CurrentStock() {
+  const [products, set_products] = useState([]);
+  const [categories, set_categories] = useState([]);
+  const [manufacturers, set_manufacturers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*, 
+               c.name as category, 
+               m.name as manufacturer, 
+               r.code as rack,
+               IFNULL(b_agg.totalQty, 0) as totalQty,
+               IFNULL(b_agg.avgPtr, 0) as avgPtr,
+               IFNULL(b_agg.avgMrp, 0) as avgMrp,
+               IFNULL(b_agg.totalValuePTR, 0) as totalValuePTR,
+               IFNULL(b_agg.totalValueMRP, 0) as totalValueMRP
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
+        LEFT JOIN racks r ON p.rack_id = r.id
+        LEFT JOIN (
+           SELECT product_id,
+                  SUM(current_qty) as totalQty,
+                  SUM(current_qty * ptr) / SUM(current_qty) as avgPtr,
+                  SUM(current_qty * mrp) / SUM(current_qty) as avgMrp,
+                  SUM(current_qty * ptr) as totalValuePTR,
+                  SUM(current_qty * mrp) as totalValueMRP
+           FROM batches
+           WHERE current_qty > 0
+           GROUP BY product_id
+        ) b_agg ON b_agg.product_id = p.id
+      `);
+      set_products(res_products?.data || []);
+      const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
+      set_categories(res_categories?.data || []);
+      const res_manufacturers = await window.pharmaAPI.db.query("SELECT * FROM manufacturers");
+      set_manufacturers(res_manufacturers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [mfgFilter, setMfgFilter] = useState('');
@@ -10,20 +51,11 @@ export default function CurrentStock() {
   // Calculate aggregated stock data
   const stockData = useMemo(() => {
     return products.map(p => {
-      let totalQty = 0;
-      let totalValuePTR = 0;
-      let totalValueMRP = 0;
-
-      p.batches.forEach(b => {
-        totalQty += b.qty;
-        // Mock PTR as 70% of MRP for valuation purposes
-        const ptr = b.mrp * 0.7;
-        totalValuePTR += b.qty * ptr;
-        totalValueMRP += b.qty * b.mrp;
-      });
-
-      const avgPtr = totalQty > 0 ? (totalValuePTR / totalQty) : 0;
-      const avgMrp = totalQty > 0 ? (totalValueMRP / totalQty) : 0;
+      const totalQty = p.totalQty || 0;
+      const avgPtr = p.avgPtr || 0;
+      const avgMrp = p.avgMrp || 0;
+      const totalValuePTR = p.totalValuePTR || 0;
+      const totalValueMRP = p.totalValueMRP || 0;
 
       return {
         ...p,
@@ -34,14 +66,14 @@ export default function CurrentStock() {
         totalValueMRP
       };
     }).filter(p => {
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.genericName.toLowerCase().includes(search.toLowerCase())) return false;
-      if (catFilter && p.categoryId !== parseInt(catFilter)) return false;
-      if (mfgFilter && p.manufacturerId !== parseInt(mfgFilter)) return false;
+      if (search && !p.name?.toLowerCase().includes(search.toLowerCase()) && !p.generic_name?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (catFilter && p.category_id !== catFilter) return false;
+      if (mfgFilter && p.manufacturer_id !== mfgFilter) return false;
       // Only show items that actually have stock
       if (p.totalQty <= 0) return false;
       return true;
     });
-  }, [search, catFilter, mfgFilter]);
+  }, [search, catFilter, mfgFilter, products]);
 
   // Aggregate totals for the footer
   const grandTotals = stockData.reduce((acc, curr) => {

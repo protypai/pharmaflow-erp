@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building2, Users, Database, ShieldAlert, Activity, CheckCircle2, Clock } from 'lucide-react';
-import { adminCompanies, adminActivityLogs } from '../../data/mockData';
+
 
 export default function AdminDashboard() {
+  const [adminCompanies, set_adminCompanies] = useState([]);
+  const [adminActivityLogs, set_adminActivityLogs] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      set_adminCompanies([]);
+      set_adminActivityLogs([]);
+    };
+    fetchData();
+  }, []);
+
   const activeCompanies = adminCompanies.filter(c => c.status === 'active').length;
   const inactiveCompanies = adminCompanies.filter(c => c.status === 'inactive').length;
   const trialCompanies = adminCompanies.filter(c => c.plan === 'Trial').length;

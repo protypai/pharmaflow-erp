@@ -37,10 +37,51 @@ exports.default = CompanyMaster;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function CompanyMaster() {
     const [search, setSearch] = (0, react_1.useState)('');
     const [isModalOpen, setIsModalOpen] = (0, react_1.useState)(false);
-    const filtered = mockData_1.manufacturers.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
-    return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", children: "Company Master (Manufacturers)" }), (0, jsx_runtime_1.jsxs)("div", { className: "search-bar", children: [(0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search companies...", value: search, onChange: e => setSearch(e.target.value) })] }), (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary", onClick: () => setIsModalOpen(true), children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Plus, { size: 16 }), " Add Company"] })] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { style: { width: '60px' }, children: "ID" }), (0, jsx_runtime_1.jsx)("th", { children: "Company Name" }), (0, jsx_runtime_1.jsx)("th", { children: "Status" }), (0, jsx_runtime_1.jsx)("th", { className: "col-actions", children: "Actions" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filtered.map(comp => ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("td", { style: { color: 'var(--text-secondary)' }, children: comp.id }), (0, jsx_runtime_1.jsx)("td", { style: { fontWeight: 500, color: 'var(--text-primary)' }, children: comp.name }), (0, jsx_runtime_1.jsx)("td", { children: (0, jsx_runtime_1.jsx)("span", { className: "badge badge-success", children: "Active" }) }), (0, jsx_runtime_1.jsx)("td", { className: "col-actions", children: (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-ghost btn-sm", onClick: () => setIsModalOpen(true), children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Edit2, { size: 14 }), " Edit"] }) })] }, comp.id))) })] }) }), isModalOpen && ((0, jsx_runtime_1.jsx)("div", { className: "modal-overlay", children: (0, jsx_runtime_1.jsxs)("div", { className: "modal modal-sm", children: [(0, jsx_runtime_1.jsxs)("div", { className: "modal-header", children: [(0, jsx_runtime_1.jsx)("h3", { className: "modal-title", children: "Company Details" }), (0, jsx_runtime_1.jsx)("button", { className: "modal-close", onClick: () => setIsModalOpen(false), children: (0, jsx_runtime_1.jsx)(lucide_react_1.X, { size: 18 }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "modal-body", children: [(0, jsx_runtime_1.jsxs)("div", { className: "form-group mb-3", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Company Name ", (0, jsx_runtime_1.jsx)("span", { className: "required", children: "*" })] }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "e.g. Sun Pharma", autoFocus: true })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Status" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", children: [(0, jsx_runtime_1.jsx)("option", { value: "active", children: "Active" }), (0, jsx_runtime_1.jsx)("option", { value: "inactive", children: "Inactive" })] })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "modal-footer", children: [(0, jsx_runtime_1.jsx)("button", { className: "btn btn-secondary", onClick: () => setIsModalOpen(false), children: "Cancel" }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-primary", onClick: () => setIsModalOpen(false), children: "Save Company" })] })] }) }))] }));
+    const [manufacturersList, setManufacturersList] = (0, react_1.useState)([]);
+    const [formData, setFormData] = (0, react_1.useState)({ name: '', status: 'active' });
+    const [errorMsg, setErrorMsg] = (0, react_1.useState)('');
+    const fetchManufacturers = async () => {
+        try {
+            const res = await window.pharmaAPI.db.query("SELECT * FROM manufacturers ORDER BY name ASC");
+            setManufacturersList(res?.data || []);
+        }
+        catch (err) {
+            console.error('Failed to load manufacturers', err);
+        }
+    };
+    (0, react_1.useEffect)(() => {
+        fetchManufacturers();
+    }, []);
+    const handleSave = async () => {
+        setErrorMsg('');
+        if (!formData.name) {
+            setErrorMsg("Company Name is required.");
+            return;
+        }
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const companyId = user.companyId || 'COMP-DEMO-001';
+            const id = 'MFG-' + Date.now();
+            const res = await window.pharmaAPI.db.run(`
+        INSERT INTO manufacturers (id, company_id, name, status, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      `, [id, companyId, formData.name, formData.status]);
+            if (!res.success) {
+                setErrorMsg("Database error: " + res.error);
+                return;
+            }
+            setIsModalOpen(false);
+            setFormData({ name: '', status: 'active' });
+            fetchManufacturers();
+        }
+        catch (err) {
+            console.error("Save failed", err);
+            setErrorMsg("Failed to save company: " + err.message);
+        }
+    };
+    const filtered = manufacturersList.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+    return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", children: "Company Master (Manufacturers)" }), (0, jsx_runtime_1.jsxs)("div", { className: "search-bar", children: [(0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search companies...", value: search, onChange: e => setSearch(e.target.value) })] }), (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary", onClick: () => { setErrorMsg(''); setIsModalOpen(true); }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Plus, { size: 16 }), " Add Company"] })] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { style: { width: '120px' }, children: "ID" }), (0, jsx_runtime_1.jsx)("th", { children: "Company Name" }), (0, jsx_runtime_1.jsx)("th", { children: "Status" }), (0, jsx_runtime_1.jsx)("th", { className: "col-actions", children: "Actions" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filtered.map(comp => ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("td", { style: { color: 'var(--text-secondary)' }, children: comp.id }), (0, jsx_runtime_1.jsx)("td", { style: { fontWeight: 500, color: 'var(--text-primary)' }, children: comp.name }), (0, jsx_runtime_1.jsx)("td", { children: (0, jsx_runtime_1.jsx)("span", { className: `badge ${comp.status === 'active' ? 'badge-success' : 'badge-danger'}`, children: comp.status === 'active' ? 'Active' : 'Inactive' }) }), (0, jsx_runtime_1.jsx)("td", { className: "col-actions", children: (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-ghost btn-sm", title: "Edit", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Edit2, { size: 14 }), " Edit"] }) })] }, comp.id))) })] }) }), isModalOpen && ((0, jsx_runtime_1.jsx)("div", { className: "modal-overlay", children: (0, jsx_runtime_1.jsxs)("div", { className: "modal modal-sm", children: [(0, jsx_runtime_1.jsxs)("div", { className: "modal-header", children: [(0, jsx_runtime_1.jsx)("h3", { className: "modal-title", children: "Company Details" }), (0, jsx_runtime_1.jsx)("button", { className: "modal-close", onClick: () => setIsModalOpen(false), children: (0, jsx_runtime_1.jsx)(lucide_react_1.X, { size: 18 }) })] }), errorMsg && ((0, jsx_runtime_1.jsx)("div", { style: { background: '#fee2e2', color: '#dc2626', padding: '0.75rem', margin: '1rem 1.5rem 0', borderRadius: '4px', border: '1px solid #f87171' }, children: errorMsg })), (0, jsx_runtime_1.jsxs)("div", { className: "modal-body", children: [(0, jsx_runtime_1.jsxs)("div", { className: "form-group mb-3", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Company Name ", (0, jsx_runtime_1.jsx)("span", { className: "text-danger", children: "*" })] }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "e.g. Sun Pharma", value: formData.name, onChange: e => setFormData({ ...formData, name: e.target.value }), autoFocus: true })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Status" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.status, onChange: e => setFormData({ ...formData, status: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { value: "active", children: "Active" }), (0, jsx_runtime_1.jsx)("option", { value: "inactive", children: "Inactive" })] })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "modal-footer", children: [(0, jsx_runtime_1.jsx)("button", { className: "btn btn-secondary", onClick: () => setIsModalOpen(false), children: "Cancel" }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-primary", onClick: handleSave, children: "Save Company" })] })] }) }))] }));
 }

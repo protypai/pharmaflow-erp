@@ -37,11 +37,17 @@ exports.default = BackupMonitor;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function BackupMonitor() {
+    const [adminCompanies, set_adminCompanies] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            set_adminCompanies([]);
+        };
+        fetchData();
+    }, []);
     const [search, setSearch] = (0, react_1.useState)('');
     const [triggering, setTriggering] = (0, react_1.useState)(null);
-    const filtered = mockData_1.adminCompanies.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) ||
+    const filtered = adminCompanies.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.city.toLowerCase().includes(search.toLowerCase()));
     const handleTrigger = (id) => {
         setTriggering(id);

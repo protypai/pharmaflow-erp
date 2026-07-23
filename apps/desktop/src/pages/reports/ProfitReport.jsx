@@ -1,8 +1,21 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, TrendingUp, BarChart3 } from 'lucide-react';
-import { products, categories } from '../../data/mockData';
+
 
 export default function ProfitReport() {
+  const [products, set_products] = useState([]);
+  const [categories, set_categories] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+      set_products(res_products?.data || []);
+      const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
+      set_categories(res_categories?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [groupBy, setGroupBy] = useState('product'); // 'product' or 'category'
   const [dateRange, setDateRange] = useState('this_month');
 

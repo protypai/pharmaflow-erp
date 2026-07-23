@@ -38,7 +38,6 @@ const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const react_router_dom_1 = require("react-router-dom");
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 const pageTitles = {
     '/dashboard': { title: 'Dashboard', sub: 'Overview of today\'s business' },
     '/masters/products': { title: 'Product Master', sub: 'Manage medicines & batches' },
@@ -77,11 +76,6 @@ const pageTitles = {
     '/settings': { title: 'Settings', sub: 'Application configuration' },
     '/profile': { title: 'Company Profile', sub: 'Manage your company details' },
 };
-const searchableData = [
-    ...mockData_1.products.map(p => ({ type: 'Medicine', icon: lucide_react_1.Pill, name: p.name, sub: p.genericName, path: '/masters/products' })),
-    ...mockData_1.customers.map(c => ({ type: 'Customer', icon: lucide_react_1.Users, name: c.name, sub: c.area, path: '/masters/customers' })),
-    ...mockData_1.suppliers.map(s => ({ type: 'Supplier', icon: lucide_react_1.Truck, name: s.name, sub: s.city, path: '/masters/suppliers' })),
-];
 function Header({ collapsed, onToggle, pathname }) {
     const [searchOpen, setSearchOpen] = (0, react_1.useState)(false);
     const [searchQuery, setSearchQuery] = (0, react_1.useState)('');
@@ -90,8 +84,28 @@ function Header({ collapsed, onToggle, pathname }) {
     const searchRef = (0, react_1.useRef)(null);
     const navigate = (0, react_router_dom_1.useNavigate)();
     const pageInfo = pageTitles[pathname] || { title: 'Pharma ERP', sub: '' };
+    const [searchableData, setSearchableData] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchSearchData = async () => {
+            try {
+                const prodRes = await window.pharmaAPI.db.query("SELECT id, name, generic_name FROM products");
+                const custRes = await window.pharmaAPI.db.query("SELECT id, name, area FROM customers");
+                const supRes = await window.pharmaAPI.db.query("SELECT id, name, city FROM suppliers");
+                const data = [
+                    ...(prodRes?.data || []).map(p => ({ type: 'Medicine', icon: lucide_react_1.Pill, name: p.name, sub: p.generic_name, path: '/masters/products' })),
+                    ...(custRes?.data || []).map(c => ({ type: 'Customer', icon: lucide_react_1.Users, name: c.name, sub: c.area, path: '/masters/customers' })),
+                    ...(supRes?.data || []).map(s => ({ type: 'Supplier', icon: lucide_react_1.Truck, name: s.name, sub: s.city, path: '/masters/suppliers' })),
+                ];
+                setSearchableData(data);
+            }
+            catch (err) {
+                console.error("Failed to load search data", err);
+            }
+        };
+        fetchSearchData();
+    }, []);
     const searchResults = searchQuery.length > 1
-        ? searchableData.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ? searchableData.filter(d => d.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (d.sub && d.sub.toLowerCase().includes(searchQuery.toLowerCase()))).slice(0, 8)
         : [];
     (0, react_1.useEffect)(() => {

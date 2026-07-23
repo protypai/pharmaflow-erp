@@ -1,28 +1,43 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, ShoppingCart } from 'lucide-react';
-import { suppliers } from '../../data/mockData';
+
 
 export default function PurchaseReport() {
+  const [suppliers, set_suppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [dateRange, setDateRange] = useState('this_month');
   const [supplierId, setSupplierId] = useState('');
 
-  // Mock Purchase Data
-  const purchaseData = useMemo(() => {
-    const data = [
-      { id: 'PO-2001', date: '2025-07-02', supplierId: 1, gross: 45000, discount: 2000, gst: 5160, net: 48160, items: 45 },
-      { id: 'PO-2002', date: '2025-07-08', supplierId: 2, gross: 120000, discount: 5000, gst: 13800, net: 128800, items: 120 },
-      { id: 'PO-2003', date: '2025-07-15', supplierId: 1, gross: 25000, discount: 1000, gst: 2880, net: 26880, items: 30 },
-      { id: 'PO-2004', date: '2025-07-19', supplierId: 3, gross: 8000, discount: 0, gst: 960, net: 8960, items: 10 }
-    ];
+  const [purchaseData, setPurchaseData] = useState([]);
 
-    let filtered = data;
-    if (supplierId) {
-      filtered = data.filter(d => d.supplierId === parseInt(supplierId));
-    }
-    return filtered.map(d => ({
-      ...d,
-      supplierName: suppliers.find(s => s.id === d.supplierId)?.name || 'Unknown Supplier'
-    }));
+  useEffect(() => {
+    const fetchPurchases = async () => {
+      try {
+        const query = `
+          SELECT p.invoice_date as date, p.entry_no as id, s.name as supplierName, p.subtotal as gross, 
+                 p.discount_amount as discount, (p.cgst_amount + p.sgst_amount + p.igst_amount) as gst, 
+                 p.net_amount as net, 
+                 (SELECT COUNT(*) FROM purchase_items WHERE purchase_id = p.id) as items
+          FROM purchases p
+          LEFT JOIN suppliers s ON p.supplier_id = s.id
+          ${supplierId ? `WHERE p.supplier_id = '${supplierId}'` : ''}
+          ORDER BY p.invoice_date DESC
+        `;
+        const res = await window.pharmaAPI.db.query(query);
+        setPurchaseData(res?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch purchase data:", err);
+      }
+    };
+    fetchPurchases();
   }, [supplierId, dateRange]);
 
   const totals = purchaseData.reduce((acc, curr) => {

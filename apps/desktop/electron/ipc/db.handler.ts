@@ -5,6 +5,7 @@ import { logger } from '../services/logger';
 export function setupDbHandlers(): void {
   ipcMain.handle('db:query', async (_event, sql: string, params?: any[]) => {
     try {
+      logger.info('db:query', { sql, params });
       return { success: true, data: queryDb(sql, params) };
     } catch (err: any) {
       logger.error('db:query failed', { sql, error: err.message });
@@ -14,6 +15,7 @@ export function setupDbHandlers(): void {
 
   ipcMain.handle('db:run', async (_event, sql: string, params?: any[]) => {
     try {
+      logger.info('db:run', { sql, params });
       const result = runDb(sql, params);
       return { success: true, changes: result.changes, lastInsertRowid: result.lastInsertRowid };
     } catch (err: any) {

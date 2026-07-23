@@ -37,15 +37,25 @@ exports.default = ProfitReport;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function ProfitReport() {
+    const [products, set_products] = (0, react_1.useState)([]);
+    const [categories, set_categories] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+            set_products(res_products?.data || []);
+            const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
+            set_categories(res_categories?.data || []);
+        };
+        fetchData();
+    }, []);
     const [groupBy, setGroupBy] = (0, react_1.useState)('product'); // 'product' or 'category'
     const [dateRange, setDateRange] = (0, react_1.useState)('this_month');
     // Mock Profit Data Calculation
     const profitData = (0, react_1.useMemo)(() => {
         let data = [];
         if (groupBy === 'product') {
-            data = mockData_1.products.map(p => {
+            data = products.map(p => {
                 // Mock sales volume for this period
                 const qtySold = (p.id * 15) + 10;
                 // Revenue is qty * MRP
@@ -68,9 +78,9 @@ function ProfitReport() {
             });
         }
         else if (groupBy === 'category') {
-            data = mockData_1.categories.map(c => {
+            data = categories.map(c => {
                 // Find all products in this category to aggregate
-                const catProducts = mockData_1.products.filter(p => p.categoryId === c.id);
+                const catProducts = products.filter(p => p.categoryId === c.id);
                 let totalQty = 0;
                 let totalRevenue = 0;
                 let totalCogs = 0;

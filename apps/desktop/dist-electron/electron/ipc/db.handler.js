@@ -7,6 +7,7 @@ const logger_1 = require("../services/logger");
 function setupDbHandlers() {
     electron_1.ipcMain.handle('db:query', async (_event, sql, params) => {
         try {
+            logger_1.logger.info('db:query', { sql, params });
             return { success: true, data: (0, localDb_service_1.queryDb)(sql, params) };
         }
         catch (err) {
@@ -16,6 +17,7 @@ function setupDbHandlers() {
     });
     electron_1.ipcMain.handle('db:run', async (_event, sql, params) => {
         try {
+            logger_1.logger.info('db:run', { sql, params });
             const result = (0, localDb_service_1.runDb)(sql, params);
             return { success: true, changes: result.changes, lastInsertRowid: result.lastInsertRowid };
         }

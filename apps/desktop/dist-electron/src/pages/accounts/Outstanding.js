@@ -37,15 +37,25 @@ exports.default = Outstanding;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function Outstanding() {
+    const [customers, set_customers] = (0, react_1.useState)([]);
+    const [suppliers, set_suppliers] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
+            set_customers(res_customers?.data || []);
+            const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+            set_suppliers(res_suppliers?.data || []);
+        };
+        fetchData();
+    }, []);
     const [viewType, setViewType] = (0, react_1.useState)('receivables'); // 'receivables' or 'payables'
     const [search, setSearch] = (0, react_1.useState)('');
     const outstandingData = (0, react_1.useMemo)(() => {
         let data = [];
         if (viewType === 'receivables') {
             // Customers owe money TO the pharmacy
-            data = mockData_1.customers.map(c => {
+            data = customers.map(c => {
                 // Mock pending calculation based on credit limit
                 const pendingAmt = c.outstanding;
                 const totalBilled = pendingAmt + (c.id * 15000); // Mock total billed
@@ -64,7 +74,7 @@ function Outstanding() {
         }
         else {
             // Pharmacy owes money TO suppliers
-            data = mockData_1.suppliers.map(s => {
+            data = suppliers.map(s => {
                 // Mock pending calculation
                 const pendingAmt = s.id * 25000;
                 const totalBilled = pendingAmt + 100000;

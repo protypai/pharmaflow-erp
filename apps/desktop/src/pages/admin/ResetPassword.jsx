@@ -1,8 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Key, ShieldAlert } from 'lucide-react';
-import { adminCompanies } from '../../data/mockData';
+
 
 export default function ResetPassword() {
+  const [adminCompanies, set_adminCompanies] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      set_adminCompanies([]);
+    };
+    fetchData();
+  }, []);
+
   const [companyId, setCompanyId] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

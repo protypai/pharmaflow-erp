@@ -1,8 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, BookOpen } from 'lucide-react';
-import { suppliers } from '../../data/mockData';
+
 
 export default function SupplierLedger() {
+  const [suppliers, set_suppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [supplierId, setSupplierId] = useState('');
   
   // Mock Ledger Entries for a specific supplier

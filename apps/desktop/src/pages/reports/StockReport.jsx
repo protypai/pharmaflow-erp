@@ -1,38 +1,73 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, PackageSearch } from 'lucide-react';
-import { products, categories, manufacturers } from '../../data/mockData';
+
 
 export default function StockReport() {
+  const [products, set_products] = useState([]);
+  const [categories, set_categories] = useState([]);
+  const [manufacturers, set_manufacturers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*, 
+               c.name as category, 
+               m.name as manufacturer, 
+               r.code as rack,
+               IFNULL(b_agg.totalQty, 0) as totalQty,
+               IFNULL(b_agg.avgPtr, 0) as avgPtr,
+               IFNULL(b_agg.totalValuePTR, 0) as totalValuePTR
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
+        LEFT JOIN racks r ON p.rack_id = r.id
+        LEFT JOIN (
+           SELECT product_id,
+                  SUM(current_qty) as totalQty,
+                  SUM(current_qty * ptr) / SUM(current_qty) as avgPtr,
+                  SUM(current_qty * ptr) as totalValuePTR
+           FROM batches
+           WHERE current_qty > 0
+           GROUP BY product_id
+        ) b_agg ON b_agg.product_id = p.id
+      `);
+      set_products(res_products?.data || []);
+      const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
+      set_categories(res_categories?.data || []);
+      const res_manufacturers = await window.pharmaAPI.db.query("SELECT * FROM manufacturers");
+      set_manufacturers(res_manufacturers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [catFilter, setCatFilter] = useState('');
   const [mfgFilter, setMfgFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const stockData = useMemo(() => {
     let data = products.map(p => {
-      let totalQty = 0;
-      p.batches.forEach(b => { totalQty += b.qty; });
-      
-      const avgPtr = 150; // Mock PTR for demo
-      const stockValue = totalQty * avgPtr;
+      const totalQty = p.totalQty || 0;
+      const avgPtr = p.avgPtr || 0;
+      const stockValue = p.totalValuePTR || 0;
 
       return {
         ...p,
         totalQty,
         avgPtr,
         stockValue,
-        status: totalQty <= 0 ? 'Out of Stock' : (totalQty < p.minStock ? 'Low Stock' : 'In Stock')
+        status: totalQty <= 0 ? 'Out of Stock' : (totalQty < (p.min_stock || 0) ? 'Low Stock' : 'In Stock')
       };
     });
 
-    if (catFilter) data = data.filter(d => d.categoryId === parseInt(catFilter));
-    if (mfgFilter) data = data.filter(d => d.manufacturerId === parseInt(mfgFilter));
+    if (catFilter) data = data.filter(d => d.category_id === parseInt(catFilter));
+    if (mfgFilter) data = data.filter(d => d.manufacturer_id === parseInt(mfgFilter));
     
     if (statusFilter === 'in_stock') data = data.filter(d => d.totalQty > 0);
     if (statusFilter === 'out_of_stock') data = data.filter(d => d.totalQty <= 0);
     if (statusFilter === 'low_stock') data = data.filter(d => d.status === 'Low Stock');
 
     return data;
-  }, [catFilter, mfgFilter, statusFilter]);
+  }, [catFilter, mfgFilter, statusFilter, products]);
 
   const totals = stockData.reduce((acc, curr) => {
     acc.qty += curr.totalQty;

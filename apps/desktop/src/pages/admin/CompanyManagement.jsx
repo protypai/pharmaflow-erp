@@ -1,8 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Building2, Key, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
-import { adminCompanies } from '../../data/mockData';
+
 
 export default function CompanyManagement() {
+  const [adminCompanies, set_adminCompanies] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      set_adminCompanies([]);
+    };
+    fetchData();
+  }, []);
+
   const [search, setSearch] = useState('');
 
   const filtered = adminCompanies.filter(c => 

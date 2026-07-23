@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer } from 'lucide-react';
-import { products } from '../../data/mockData';
+
 
 export default function StockAdjustment() {
+  const [products, set_products] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+      set_products(res_products?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [rows, setRows] = useState([
     { id: 1, product: '', batch: '', sysQty: 0, actualQty: '', diff: 0 }
   ]);

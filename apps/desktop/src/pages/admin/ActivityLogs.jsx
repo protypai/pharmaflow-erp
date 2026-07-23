@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
-import { adminActivityLogs, adminCompanies } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
+
 import { Search, Filter, Calendar } from 'lucide-react';
 
 export default function ActivityLogs() {
+  const [adminActivityLogs, set_adminActivityLogs] = useState([]);
+  const [adminCompanies, set_adminCompanies] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      set_adminActivityLogs([]);
+      set_adminCompanies([]);
+    };
+    fetchData();
+  }, []);
+
   const [companyFilter, setCompanyFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
 

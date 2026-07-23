@@ -12,37 +12,40 @@ const backup_handler_1 = require("./ipc/backup.handler");
 const update_handler_1 = require("./ipc/update.handler");
 const localDb_service_1 = require("./services/localDb.service");
 const tray_1 = require("./windows/tray");
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !electron_1.app.isPackaged;
 let mainWindow = null;
 let tray = null;
 async function createWindow() {
     // Initialize local SQLite database
     await (0, localDb_service_1.initLocalDb)();
+    // Resolve icon path — works in dev and packaged
+    const iconPath = path_1.default.join(electron_1.app.getAppPath(), 'assets', 'icon.png');
     mainWindow = new electron_1.BrowserWindow({
         width: 1400,
         height: 900,
         minWidth: 1024,
         minHeight: 700,
         title: 'PharmaFlow ERP',
-        icon: path_1.default.join(__dirname, '../../assets/icon.png'),
+        icon: iconPath,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
             webSecurity: false,
             preload: path_1.default.join(__dirname, 'preload.js'),
         },
-        show: false,
+        show: true,
         backgroundColor: '#F1F5F9',
     });
-    // Load URL
+    // Load URL - use app.getAppPath() so it works in packaged .exe too
     if (isDev) {
         mainWindow.loadURL('http://localhost:5173');
+        mainWindow.webContents.openDevTools();
     }
     else {
-        mainWindow.loadFile(path_1.default.join(__dirname, '../../dist/index.html'));
+        // app.getAppPath() returns the root of the ASAR or app directory
+        const indexPath = path_1.default.join(electron_1.app.getAppPath(), 'dist', 'index.html');
+        mainWindow.loadFile(indexPath);
     }
-    // Always open DevTools to debug (remove before final release)
-    mainWindow.webContents.openDevTools();
     mainWindow.once('ready-to-show', () => mainWindow?.show());
     mainWindow.on('close', (e) => {
         e.preventDefault();

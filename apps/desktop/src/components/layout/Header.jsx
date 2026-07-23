@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bell, Menu, X, ChevronDown, LogOut, Settings, User, Pill, Users, Truck, Package, FileText } from 'lucide-react';
-import { products, customers, suppliers } from '../../data/mockData';
 
 const pageTitles = {
   '/dashboard': { title: 'Dashboard', sub: 'Overview of today\'s business' },
@@ -42,11 +41,7 @@ const pageTitles = {
   '/profile': { title: 'Company Profile', sub: 'Manage your company details' },
 };
 
-const searchableData = [
-  ...products.map(p => ({ type: 'Medicine', icon: Pill, name: p.name, sub: p.genericName, path: '/masters/products' })),
-  ...customers.map(c => ({ type: 'Customer', icon: Users, name: c.name, sub: c.area, path: '/masters/customers' })),
-  ...suppliers.map(s => ({ type: 'Supplier', icon: Truck, name: s.name, sub: s.city, path: '/masters/suppliers' })),
-];
+
 
 export default function Header({ collapsed, onToggle, pathname }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -58,9 +53,31 @@ export default function Header({ collapsed, onToggle, pathname }) {
 
   const pageInfo = pageTitles[pathname] || { title: 'Pharma ERP', sub: '' };
 
+  const [searchableData, setSearchableData] = useState([]);
+
+  useEffect(() => {
+    const fetchSearchData = async () => {
+      try {
+        const prodRes = await window.pharmaAPI.db.query("SELECT id, name, generic_name FROM products");
+        const custRes = await window.pharmaAPI.db.query("SELECT id, name, area FROM customers");
+        const supRes = await window.pharmaAPI.db.query("SELECT id, name, city FROM suppliers");
+
+        const data = [
+          ...(prodRes?.data || []).map(p => ({ type: 'Medicine', icon: Pill, name: p.name, sub: p.generic_name, path: '/masters/products' })),
+          ...(custRes?.data || []).map(c => ({ type: 'Customer', icon: Users, name: c.name, sub: c.area, path: '/masters/customers' })),
+          ...(supRes?.data || []).map(s => ({ type: 'Supplier', icon: Truck, name: s.name, sub: s.city, path: '/masters/suppliers' })),
+        ];
+        setSearchableData(data);
+      } catch (err) {
+        console.error("Failed to load search data", err);
+      }
+    };
+    fetchSearchData();
+  }, []);
+
   const searchResults = searchQuery.length > 1
     ? searchableData.filter(d =>
-        d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (d.sub && d.sub.toLowerCase().includes(searchQuery.toLowerCase()))
       ).slice(0, 8)
     : [];

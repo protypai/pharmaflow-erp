@@ -1,28 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Printer, Download, FileText, AlertCircle } from 'lucide-react';
 
 export default function GSTReport() {
   const [reportType, setReportType] = useState('gstr3b');
   const [period, setPeriod] = useState('july_2025');
 
-  // Mock GST Data for Indian Context
-  const gstSummary = {
-    salesValue: 245000,
-    purchaseValue: 180000,
-    
-    // Output Tax (Collected on Sales)
-    outputCGST: 12500,
-    outputSGST: 12500,
-    outputIGST: 2500,
-    
-    // Input Tax (Paid on Purchases) - ITC
-    inputCGST: 9800,
-    inputSGST: 9800,
-    inputIGST: 1200,
-  };
+  const [gstSummary, setGstSummary] = useState({
+    salesValue: 0, purchaseValue: 0,
+    outputCGST: 0, outputSGST: 0, outputIGST: 0,
+    inputCGST: 0, inputSGST: 0, inputIGST: 0,
+  });
 
-  const totalOutput = gstSummary.outputCGST + gstSummary.outputSGST + gstSummary.outputIGST;
-  const totalInput = gstSummary.inputCGST + gstSummary.inputSGST + gstSummary.inputIGST;
+  useEffect(() => {
+    const fetchGST = async () => {
+      try {
+        const salesRes = await window.pharmaAPI.db.query("SELECT SUM(subtotal) as salesValue, SUM(cgst_amount) as outputCGST, SUM(sgst_amount) as outputSGST, SUM(igst_amount) as outputIGST FROM sales");
+        const purchRes = await window.pharmaAPI.db.query("SELECT SUM(subtotal) as purchaseValue, SUM(cgst_amount) as inputCGST, SUM(sgst_amount) as inputSGST, SUM(igst_amount) as inputIGST FROM purchases");
+        
+        const s = salesRes?.data?.[0] || {};
+        const p = purchRes?.data?.[0] || {};
+        
+        setGstSummary({
+          salesValue: s.salesValue || 0,
+          outputCGST: s.outputCGST || 0,
+          outputSGST: s.outputSGST || 0,
+          outputIGST: s.outputIGST || 0,
+          purchaseValue: p.purchaseValue || 0,
+          inputCGST: p.inputCGST || 0,
+          inputSGST: p.inputSGST || 0,
+          inputIGST: p.inputIGST || 0,
+        });
+      } catch (err) {
+        console.error("Failed to fetch GST data:", err);
+      }
+    };
+    fetchGST();
+  }, [period]);
+
+  const totalOutput = (gstSummary.outputCGST || 0) + (gstSummary.outputSGST || 0) + (gstSummary.outputIGST || 0);
+  const totalInput = (gstSummary.inputCGST || 0) + (gstSummary.inputSGST || 0) + (gstSummary.inputIGST || 0);
   const netPayable = totalOutput - totalInput;
 
   // Mock HSN wise breakdown

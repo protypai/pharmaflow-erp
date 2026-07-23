@@ -37,17 +37,31 @@ exports.default = CustomerReport;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function CustomerReport() {
+    const [customers, set_customers] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            const res_customers = await window.pharmaAPI.db.query(`
+        SELECT c.*, 
+               COUNT(s.id) as totalOrders,
+               SUM(s.net_amount) as totalRevenue,
+               SUM(s.net_amount - s.paid_amount) as outstandingBalance
+        FROM customers c
+        LEFT JOIN sales s ON c.id = s.customer_id
+        GROUP BY c.id
+      `);
+            set_customers(res_customers?.data || []);
+        };
+        fetchData();
+    }, []);
     const [minOrderFilter, setMinOrderFilter] = (0, react_1.useState)('');
     // Mock Customer Analysis Data
     const customerData = (0, react_1.useMemo)(() => {
-        return mockData_1.customers.map(c => {
-            // Mock metrics for demo
-            const totalOrders = c.id * 5;
-            const avgOrderValue = 1500 + (c.id * 200);
-            const totalRevenue = totalOrders * avgOrderValue;
-            const outstandingBalance = c.outstanding || 0;
+        return customers.map(c => {
+            const totalOrders = c.totalOrders || 0;
+            const totalRevenue = c.totalRevenue || 0;
+            const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
+            const outstandingBalance = (c.opening_balance || 0) + (c.outstandingBalance || 0);
             return {
                 ...c,
                 totalOrders,

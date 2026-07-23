@@ -1,8 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Ghost, ArrowDownToLine, Printer } from 'lucide-react';
-import { products } from '../../data/mockData';
+
 
 export default function DeadStock() {
+  const [products, set_products] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+      set_products(res_products?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [daysFilter, setDaysFilter] = useState('180');
 
   // Mock function to determine if a product is Dead Stock

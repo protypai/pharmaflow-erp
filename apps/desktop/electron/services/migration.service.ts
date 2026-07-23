@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { app } from 'electron';
 import { logger } from './logger';
 
 export async function runMigrations(db: Database.Database): Promise<void> {
@@ -13,7 +14,12 @@ export async function runMigrations(db: Database.Database): Promise<void> {
     )
   `);
 
-  const migrationsDir = path.join(__dirname, '../migrations');
+  const isDev = !app.isPackaged;
+  logger.info(`App path: ${app.getAppPath()}`);
+  const migrationsDir = isDev 
+    ? path.join(app.getAppPath(), 'electron', 'migrations')
+    : path.join(app.getAppPath(), 'dist-electron', 'migrations');
+  logger.info(`Checking migrations dir: ${migrationsDir}`);
   if (!fs.existsSync(migrationsDir)) {
     logger.warn('No migrations directory found, skipping migrations');
     return;

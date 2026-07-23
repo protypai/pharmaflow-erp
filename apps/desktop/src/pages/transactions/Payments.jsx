@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Printer, IndianRupee } from 'lucide-react';
-import { suppliers } from '../../data/mockData';
+
 
 export default function Payments() {
+  const [suppliers, set_suppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [supplierId, setSupplierId] = useState('');
   const [amountPaid, setAmountPaid] = useState(0);
   const [payMode, setPayMode] = useState('bank');

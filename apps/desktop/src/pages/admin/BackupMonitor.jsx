@@ -1,8 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database, Search, RefreshCw, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
-import { adminCompanies } from '../../data/mockData';
+
 
 export default function BackupMonitor() {
+  const [adminCompanies, set_adminCompanies] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      set_adminCompanies([]);
+    };
+    fetchData();
+  }, []);
+
   const [search, setSearch] = useState('');
   const [triggering, setTriggering] = useState(null);
 

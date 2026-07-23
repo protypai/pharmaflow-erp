@@ -1,32 +1,43 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, TrendingUp, Calendar } from 'lucide-react';
-import { customers } from '../../data/mockData';
+
 
 export default function SalesReport() {
+  const [customers, set_customers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
+      set_customers(res_customers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [dateRange, setDateRange] = useState('this_month');
   const [customerId, setCustomerId] = useState('');
 
-  // Mock Sales Data
-  const salesData = useMemo(() => {
-    // Generate some mock invoices
-    const data = [
-      { id: 'INV-1001', date: '2025-07-01', customerId: 1, gross: 15000, discount: 1500, gst: 1620, net: 15120, items: 12 },
-      { id: 'INV-1002', date: '2025-07-05', customerId: 2, gross: 8500, discount: 0, gst: 1020, net: 9520, items: 5 },
-      { id: 'INV-1003', date: '2025-07-10', customerId: 1, gross: 22000, discount: 2200, gst: 2376, net: 22176, items: 18 },
-      { id: 'INV-1004', date: '2025-07-12', customerId: 3, gross: 5400, discount: 200, gst: 624, net: 5824, items: 3 },
-      { id: 'INV-1005', date: '2025-07-18', customerId: 2, gross: 12000, discount: 1200, gst: 1296, net: 12096, items: 8 },
-      { id: 'INV-1006', date: '2025-07-20', customerId: 4, gross: 35000, discount: 3500, gst: 3780, net: 35280, items: 25 },
-      { id: 'INV-1007', date: '2025-07-21', customerId: 1, gross: 9000, discount: 500, gst: 1020, net: 9520, items: 6 }
-    ];
+  const [salesData, setSalesData] = useState([]);
 
-    let filtered = data;
-    if (customerId) {
-      filtered = data.filter(d => d.customerId === parseInt(customerId));
-    }
-    return filtered.map(d => ({
-      ...d,
-      customerName: customers.find(c => c.id === d.customerId)?.name || 'Walk-in Customer'
-    }));
+  useEffect(() => {
+    const fetchSales = async () => {
+      try {
+        const query = `
+          SELECT s.date, s.invoice_no as id, c.name as customerName, s.subtotal as gross, 
+                 s.discount_amount as discount, (s.cgst_amount + s.sgst_amount + s.igst_amount) as gst, 
+                 s.net_amount as net, 
+                 (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as items
+          FROM sales s
+          LEFT JOIN customers c ON s.customer_id = c.id
+          ${customerId ? `WHERE s.customer_id = '${customerId}'` : ''}
+          ORDER BY s.date DESC
+        `;
+        const res = await window.pharmaAPI.db.query(query);
+        setSalesData(res?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch sales data:", err);
+      }
+    };
+    fetchSales();
   }, [customerId, dateRange]);
 
   const totals = salesData.reduce((acc, curr) => {

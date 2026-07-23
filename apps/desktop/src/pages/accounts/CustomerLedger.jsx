@@ -1,8 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, BookOpen } from 'lucide-react';
-import { customers } from '../../data/mockData';
+
 
 export default function CustomerLedger() {
+  const [customers, set_customers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
+      set_customers(res_customers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [customerId, setCustomerId] = useState('');
   
   // Mock Ledger Entries for a specific customer

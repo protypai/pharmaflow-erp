@@ -37,9 +37,19 @@ exports.default = NearExpiry;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 const react_router_dom_1 = require("react-router-dom");
 function NearExpiry() {
+    const [products, set_products] = (0, react_1.useState)([]);
+    const [suppliers, set_suppliers] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+            set_products(res_products?.data || []);
+            const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+            set_suppliers(res_suppliers?.data || []);
+        };
+        fetchData();
+    }, []);
     const navigate = (0, react_router_dom_1.useNavigate)();
     const [daysFilter, setDaysFilter] = (0, react_1.useState)('90'); // Default to 90 days
     // Mock function to determine if a batch is expiring within X days
@@ -49,7 +59,7 @@ function NearExpiry() {
         const today = new Date();
         const currentYear = today.getFullYear() % 100;
         const currentMonth = today.getMonth() + 1;
-        mockData_1.products.forEach(p => {
+        products.forEach(p => {
             p.batches.forEach(b => {
                 if (!b.expiry || b.qty <= 0)
                     return;
@@ -69,7 +79,7 @@ function NearExpiry() {
                         productCode: p.code,
                         daysRemaining: daysDiff,
                         stockValue: b.qty * b.mrp * 0.7, // Mock PTR value
-                        supplierName: mockData_1.suppliers[b.id % mockData_1.suppliers.length].name // Mock supplier
+                        supplierName: suppliers[b.id % suppliers.length].name // Mock supplier
                     });
                 }
             });

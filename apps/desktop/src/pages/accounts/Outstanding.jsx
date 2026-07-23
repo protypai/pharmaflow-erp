@@ -1,8 +1,21 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, TrendingUp, TrendingDown } from 'lucide-react';
-import { customers, suppliers } from '../../data/mockData';
+
 
 export default function Outstanding() {
+  const [customers, set_customers] = useState([]);
+  const [suppliers, set_suppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
+      set_customers(res_customers?.data || []);
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [viewType, setViewType] = useState('receivables'); // 'receivables' or 'payables'
   const [search, setSearch] = useState('');
 

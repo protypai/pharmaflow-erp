@@ -1,8 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
-import { suppliers, products } from '../../data/mockData';
+
 
 export default function PurchaseReturn() {
+  const [suppliers, set_suppliers] = useState([]);
+  const [products, set_products] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+      set_products(res_products?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [supplierId, setSupplierId] = useState('');
   
   const [rows, setRows] = useState([

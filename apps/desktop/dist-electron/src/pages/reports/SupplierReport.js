@@ -37,12 +37,19 @@ exports.default = SupplierReport;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function SupplierReport() {
+    const [suppliers, set_suppliers] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+            set_suppliers(res_suppliers?.data || []);
+        };
+        fetchData();
+    }, []);
     const [dateRange, setDateRange] = (0, react_1.useState)('this_year');
     // Mock Supplier Analysis Data
     const supplierData = (0, react_1.useMemo)(() => {
-        return mockData_1.suppliers.map(s => {
+        return suppliers.map(s => {
             // Mock metrics for demo
             const totalInvoices = s.id * 12;
             const totalProcurement = totalInvoices * 45000;

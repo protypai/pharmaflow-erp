@@ -33,7 +33,7 @@ async function createWindow() {
       webSecurity: false,
       preload: path.join(__dirname, 'preload.js'),
     },
-    show: false,
+    show: true,
     backgroundColor: '#F1F5F9',
   });
 

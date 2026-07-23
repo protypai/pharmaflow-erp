@@ -1,17 +1,82 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Edit2 } from 'lucide-react';
-import { suppliers } from '../../data/mockData';
 
 export default function SupplierMaster() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [suppliersList, setSuppliersList] = useState([]);
+  
+  // Form State
+  const [formData, setFormData] = useState({
+    name: '', contact_person: '', phone: '', email: '', city: '',
+    address: '', pincode: '', drug_license: '', gstin: '',
+    credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
+  });
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const filtered = suppliers.filter(s => 
+  const fetchSuppliers = async () => {
+    try {
+      const res = await window.pharmaAPI.db.query("SELECT * FROM suppliers ORDER BY name ASC");
+      setSuppliersList(res?.data || []);
+    } catch (err) {
+      console.error('Failed to load suppliers', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
+
+  const handleSave = async () => {
+    setErrorMsg('');
+    if (!formData.name || !formData.phone || !formData.drug_license || !formData.gstin) {
+      setErrorMsg("Name, Phone, Drug License, and GSTIN are required.");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const id = 'SUPP-' + Date.now();
+
+      const res = await window.pharmaAPI.db.run(`
+        INSERT INTO suppliers (
+          id, company_id, name, phone, email, address, city, pincode, 
+          drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
+          status, created_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+        )
+      `, [
+        id, companyId, formData.name, formData.phone, formData.email,
+        formData.address, formData.city, formData.pincode, formData.drug_license, formData.gstin,
+        formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
+      ]);
+
+      if (!res.success) {
+        setErrorMsg("Database error: " + res.error);
+        return;
+      }
+
+      setIsModalOpen(false);
+      setFormData({
+        name: '', contact_person: '', phone: '', email: '', city: '',
+        address: '', pincode: '', drug_license: '', gstin: '',
+        credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
+      });
+      fetchSuppliers();
+    } catch (err) {
+      console.error("Save failed", err);
+      setErrorMsg("Failed to save supplier: " + err.message);
+    }
+  };
+
+  const filtered = suppliersList.filter(s => 
     s.name.toLowerCase().includes(search.toLowerCase()) || 
-    s.city.toLowerCase().includes(search.toLowerCase())
+    (s.city && s.city.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const formatCurr = (val) => `₹${val.toLocaleString('en-IN')}`;
+  const formatCurr = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -63,15 +128,15 @@ export default function SupplierMaster() {
                   </div>
                 </td>
                 <td>
-                  <div style={{ fontSize: '0.8rem' }}>DL: {supp.drugLicense}</div>
+                  <div style={{ fontSize: '0.8rem' }}>DL: {supp.drug_license}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>GST: {supp.gstin}</div>
                 </td>
                 <td>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Limit: {formatCurr(supp.creditLimit)}
+                    Limit: {formatCurr(supp.credit_limit)}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    {supp.creditDays} days credit
+                    {supp.credit_days} days credit
                   </div>
                 </td>
                 <td>
@@ -100,31 +165,37 @@ export default function SupplierMaster() {
               </button>
             </div>
             
+            {errorMsg && (
+              <div style={{ background: '#fee2e2', color: '#dc2626', padding: '0.75rem', margin: '1rem 1.5rem 0', borderRadius: '4px', border: '1px solid #f87171' }}>
+                {errorMsg}
+              </div>
+            )}
+            
             <div className="card-body" style={{ overflowY: 'auto' }}>
               <div className="form-row-2">
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="form-label">Supplier Name (Agency) <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="e.g. Sun Pharma CFA" />
+                  <input className="form-input" placeholder="e.g. Sun Pharma CFA" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Contact Person</label>
-                  <input className="form-input" placeholder="e.g. Supplier Contact" />
+                  <input className="form-input" placeholder="e.g. Supplier Contact" value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phone Number <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="e.g. 022-40398000" />
+                  <input className="form-input" placeholder="e.g. 022-40398000" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Email ID</label>
-                  <input className="form-input" type="email" placeholder="e.g. orders@supplier.com" />
+                  <input className="form-input" type="email" placeholder="e.g. orders@supplier.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">City</label>
-                  <input className="form-input" placeholder="e.g. Mumbai" />
+                  <input className="form-input" placeholder="e.g. Mumbai" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
                 </div>
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="form-label">Address</label>
-                  <input className="form-input" placeholder="Full address" />
+                  <input className="form-input" placeholder="Full address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                 </div>
                 
                 {/* Licenses */}
@@ -133,29 +204,29 @@ export default function SupplierMaster() {
                 </h4>
                 <div className="form-group">
                   <label className="form-label">Drug License No. <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="e.g. MH-CFA-..." />
+                  <input className="form-input" placeholder="e.g. MH-CFA-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">GSTIN <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" />
+                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Credit Limit (₹)</label>
-                  <input className="form-input" type="number" placeholder="e.g. 500000" defaultValue="500000" />
+                  <input className="form-input" type="number" placeholder="e.g. 500000" value={formData.credit_limit} onChange={e => setFormData({...formData, credit_limit: Number(e.target.value)})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Credit Days</label>
-                  <input className="form-input" type="number" placeholder="e.g. 45" defaultValue="45" />
+                  <input className="form-input" type="number" placeholder="e.g. 45" value={formData.credit_days} onChange={e => setFormData({...formData, credit_days: Number(e.target.value)})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Opening Balance (₹)</label>
-                  <input className="form-input" type="number" placeholder="0" defaultValue="0" />
+                  <input className="form-input" type="number" placeholder="0" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Balance Type</label>
-                  <select className="form-select">
-                    <option>Credit (Cr) - We owe them</option>
-                    <option>Debit (Dr) - They owe us</option>
+                  <select className="form-select" value={formData.opening_balance_type} onChange={e => setFormData({...formData, opening_balance_type: e.target.value})}>
+                    <option value="credit">Credit (Cr) - We owe them</option>
+                    <option value="debit">Debit (Dr) - They owe us</option>
                   </select>
                 </div>
               </div>
@@ -163,7 +234,7 @@ export default function SupplierMaster() {
 
             <div className="card-header" style={{ borderTop: '1px solid var(--border)', justifyContent: 'flex-end', background: '#F8FAFC' }}>
               <button className="btn btn-ghost" onClick={() => setIsModalOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => setIsModalOpen(false)}>
+              <button className="btn btn-primary" onClick={handleSave}>
                 Save Supplier
               </button>
             </div>

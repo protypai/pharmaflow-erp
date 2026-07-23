@@ -46,7 +46,7 @@ function Login() {
     const [loading, setLoading] = (0, react_1.useState)(false);
     const [error, setError] = (0, react_1.useState)('');
     const navigate = (0, react_router_dom_1.useNavigate)();
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
         if (!username || !password) {
@@ -54,10 +54,26 @@ function Login() {
             return;
         }
         setLoading(true);
-        setTimeout(() => {
+        try {
+            // Query the local SQLite database via IPC
+            const response = await window.pharmaAPI.db.query('SELECT id, name, companyId, role FROM User WHERE email = ? AND passwordHash = ? AND isActive = 1', [username, password]);
+            const users = response?.data;
+            if (users && users.length > 0) {
+                // Success
+                localStorage.setItem('user', JSON.stringify(users[0]));
+                navigate('/dashboard');
+            }
+            else {
+                setError('Invalid username or password.');
+            }
+        }
+        catch (err) {
+            console.error('Login error:', err);
+            setError('Database error: ' + (err.message || 'Failed to query'));
+        }
+        finally {
             setLoading(false);
-            navigate('/dashboard');
-        }, 900);
+        }
     };
     return ((0, jsx_runtime_1.jsxs)("div", { style: {
             minHeight: '100vh',
@@ -111,10 +127,10 @@ function Login() {
                                                     width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)',
                                                     borderTopColor: 'white', borderRadius: '50%',
                                                     animation: 'spin 0.8s linear infinite',
-                                                } }), "Signing in\u2026"] })) : ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: ["Sign In", (0, jsx_runtime_1.jsx)(lucide_react_1.ArrowRight, { size: 16 })] })) }), (0, jsx_runtime_1.jsxs)("div", { style: {
+                                                } }), "Signing in\u2026"] })) : ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: ["Sign In", (0, jsx_runtime_1.jsx)(lucide_react_1.ArrowRight, { size: 16 })] })) }), (0, jsx_runtime_1.jsx)("div", { style: {
                                         background: 'var(--primary-50)', border: '1px solid var(--primary-light)',
                                         borderRadius: 'var(--radius-sm)', padding: '0.625rem 0.875rem',
                                         fontSize: '0.75rem', color: 'var(--primary-darker)',
                                         display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                    }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Shield, { size: 13 }), (0, jsx_runtime_1.jsxs)("span", { children: [(0, jsx_runtime_1.jsx)("strong", { children: "Demo:" }), " Use any username & password to login"] })] })] }), (0, jsx_runtime_1.jsx)("div", { style: { marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', textAlign: 'center' }, children: (0, jsx_runtime_1.jsx)("a", { href: "/admin/login", style: { fontSize: '0.78rem', color: 'var(--text-muted)' }, onClick: (e) => { e.preventDefault(); navigate('/admin/login'); }, children: "Super Admin Portal \u2192" }) })] }) })] }));
+                                    }, children: (0, jsx_runtime_1.jsxs)("span", { children: [(0, jsx_runtime_1.jsx)("strong", { children: "Demo:" }), " Store Admin: demo@pharmaflow.in / Password@123"] }) })] }), (0, jsx_runtime_1.jsx)("div", { style: { marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', textAlign: 'center' }, children: (0, jsx_runtime_1.jsx)("a", { href: "/admin/login", style: { fontSize: '0.78rem', color: 'var(--text-muted)' }, onClick: (e) => { e.preventDefault(); navigate('/admin/login'); }, children: "Super Admin Portal \u2192" }) })] }) })] }));
 }

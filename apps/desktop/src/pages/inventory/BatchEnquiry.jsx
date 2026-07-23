@@ -1,22 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, History, Package } from 'lucide-react';
-import { products, suppliers } from '../../data/mockData';
+
 
 export default function BatchEnquiry() {
+  const [products, set_products] = useState([]);
+  const [suppliers, set_suppliers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.id as p_id, p.name, p.code, b.id as b_id, b.batch_no as batch, b.expiry_date as expiry, b.mrp, b.current_qty as qty, b.created_at as inwardDate
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+      `);
+      
+      const prodMap = {};
+      (res_products?.data || []).forEach(row => {
+        if (!prodMap[row.p_id]) prodMap[row.p_id] = { id: row.p_id, name: row.name, code: row.code, batches: [] };
+        if (row.b_id) {
+          prodMap[row.p_id].batches.push({
+            id: row.b_id, batch: row.batch, expiry: row.expiry, mrp: row.mrp, qty: row.qty, inwardDate: row.inwardDate
+          });
+        }
+      });
+      set_products(Object.values(prodMap));
+      
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [selectedProductId, setSelectedProductId] = useState('');
   
   const selectedProduct = products.find(p => p.id === parseInt(selectedProductId));
 
   // Mock function to attach a random supplier to a batch for demonstration of the flow
   const enrichBatchWithSupplier = (batch) => {
-    // Deterministic mock supplier based on batch string
-    const charSum = batch.batch.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-    const mockSupplier = suppliers[charSum % suppliers.length] || suppliers[0];
+    // If supplier logic is complex, just mock for now or use real inwardDate from batch
     return {
       ...batch,
-      supplierName: mockSupplier.name,
-      inwardDate: '2025-06-15', // Mock inward date
-      invoiceNo: `INV-${1000 + (charSum % 1000)}`
+      supplierName: 'Local Supplier', 
+      inwardDate: batch.inwardDate ? batch.inwardDate.split(' ')[0] : 'N/A',
+      invoiceNo: `INV-BATCH`
     };
   };
 
@@ -64,13 +90,13 @@ export default function BatchEnquiry() {
             </tr>
           </thead>
           <tbody>
-            {(selectedProductId ? [selectedProduct] : products).flatMap(p => 
-              p.batches.map(batch => ({ ...batch, product: p }))
+            {(selectedProductId && selectedProduct ? [selectedProduct] : products).flatMap(p => 
+              (p?.batches || []).map(batch => ({ ...batch, product: p }))
             ).length === 0 ? (
               <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>No active batches found.</td></tr>
             ) : (
-              (selectedProductId ? [selectedProduct] : products).flatMap(p => 
-                p.batches.map(batch => ({ ...batch, product: p }))
+              (selectedProductId && selectedProduct ? [selectedProduct] : products).flatMap(p => 
+                (p?.batches || []).map(batch => ({ ...batch, product: p }))
               ).map(batch => {
                 const enriched = enrichBatchWithSupplier(batch);
                 return (

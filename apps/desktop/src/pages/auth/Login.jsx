@@ -11,15 +11,34 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     if (!username || !password) { setError('Please enter username and password.'); return; }
     setLoading(true);
-    setTimeout(() => {
+    
+    try {
+      // Query the local SQLite database via IPC
+      const response = await window.pharmaAPI.db.query(
+        'SELECT id, name, companyId, role FROM User WHERE email = ? AND passwordHash = ? AND isActive = 1',
+        [username, password]
+      );
+      
+      const users = response?.data;
+
+      if (users && users.length > 0) {
+        // Success
+        localStorage.setItem('user', JSON.stringify(users[0]));
+        navigate('/dashboard');
+      } else {
+        setError('Invalid username or password.');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Database error: ' + (err.message || 'Failed to query'));
+    } finally {
       setLoading(false);
-      navigate('/dashboard');
-    }, 900);
+    }
   };
 
   return (
@@ -221,8 +240,7 @@ export default function Login() {
               fontSize: '0.75rem', color: 'var(--primary-darker)',
               display: 'flex', alignItems: 'center', gap: '0.5rem',
             }}>
-              <Shield size={13} />
-              <span><strong>Demo:</strong> Use any username & password to login</span>
+              <span><strong>Demo:</strong> Store Admin: demo@pharmaflow.in / Password@123</span>
             </div>
           </form>
 

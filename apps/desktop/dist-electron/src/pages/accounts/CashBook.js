@@ -38,21 +38,33 @@ const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
 function CashBook() {
-    // Mock Cash Book Entries for today
-    const cashEntries = (0, react_1.useMemo)(() => {
-        const entries = [
-            { id: 1, date: '2025-07-21', particulars: 'By Opening Cash Balance', receipt: 12500, payment: 0 },
-            { id: 2, date: '2025-07-21', particulars: 'To Sales A/c (Cash Counter)', receipt: 4500, payment: 0 },
-            { id: 3, date: '2025-07-21', particulars: 'By Tea & Snacks Exp', receipt: 0, payment: 150 },
-            { id: 4, date: '2025-07-21', particulars: 'By Courier Charges', receipt: 0, payment: 80 },
-            { id: 5, date: '2025-07-21', particulars: 'To Receipt A/c (Sharma Clinic - Advance)', receipt: 2000, payment: 0 },
-            { id: 6, date: '2025-07-21', particulars: 'By Supplier Payment (Local Vendor)', receipt: 0, payment: 3000 }
-        ];
-        let currentBalance = 0;
-        return entries.map(entry => {
-            currentBalance += entry.receipt - entry.payment;
-            return { ...entry, balance: currentBalance };
-        });
+    const [cashEntries, setCashEntries] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchCashBook = async () => {
+            try {
+                const query = `
+          SELECT * FROM (
+            SELECT id, date, 'By Receipt: ' || IFNULL(notes, 'Cash') as particulars, amount as receipt, 0 as payment 
+            FROM receipts WHERE payment_mode = 'cash'
+            UNION ALL
+            SELECT id, date, 'To Payment: ' || IFNULL(notes, 'Cash') as particulars, 0 as receipt, amount as payment 
+            FROM payments WHERE payment_mode = 'cash'
+          ) ORDER BY date ASC
+        `;
+                const res = await window.pharmaAPI.db.query(query);
+                const entries = res?.data || [];
+                let currentBalance = 0;
+                const processed = entries.map(entry => {
+                    currentBalance += (entry.receipt || 0) - (entry.payment || 0);
+                    return { ...entry, balance: currentBalance };
+                });
+                setCashEntries(processed);
+            }
+            catch (err) {
+                console.error("Failed to fetch cash book:", err);
+            }
+        };
+        fetchCashBook();
     }, []);
     const totals = cashEntries.reduce((acc, curr) => {
         acc.receipt += curr.receipt;

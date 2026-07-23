@@ -1,12 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, X } from 'lucide-react';
-import { categories } from '../../data/mockData';
 
 export default function CategoryMaster() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [categoriesList, setCategoriesList] = useState([]);
+  
+  const [formData, setFormData] = useState({ name: '', status: 'active' });
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const filtered = categories.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+  const fetchCategories = async () => {
+    try {
+      const res = await window.pharmaAPI.db.query("SELECT * FROM categories ORDER BY name ASC");
+      setCategoriesList(res?.data || []);
+    } catch (err) {
+      console.error('Failed to load categories', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const handleSave = async () => {
+    setErrorMsg('');
+    if (!formData.name) {
+      setErrorMsg("Category Name is required.");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const id = 'CAT-' + Date.now();
+
+      const res = await window.pharmaAPI.db.run(`
+        INSERT INTO categories (id, company_id, name, status, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      `, [id, companyId, formData.name, formData.status]);
+
+      if (!res.success) {
+        setErrorMsg("Database error: " + res.error);
+        return;
+      }
+
+      setIsModalOpen(false);
+      setFormData({ name: '', status: 'active' });
+      fetchCategories();
+    } catch (err) {
+      console.error("Save failed", err);
+      setErrorMsg("Failed to save category: " + err.message);
+    }
+  };
+
+  const filtered = categoriesList.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -23,7 +70,7 @@ export default function CategoryMaster() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+          <button className="btn btn-primary" onClick={() => { setErrorMsg(''); setIsModalOpen(true); }}>
             <Plus size={16} /> Add Category
           </button>
         </div>
@@ -33,7 +80,7 @@ export default function CategoryMaster() {
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: '60px' }}>ID</th>
+              <th style={{ width: '120px' }}>ID</th>
               <th>Category Name</th>
               <th>Status</th>
               <th className="col-actions">Actions</th>
@@ -44,9 +91,13 @@ export default function CategoryMaster() {
               <tr key={cat.id}>
                 <td style={{ color: 'var(--text-secondary)' }}>{cat.id}</td>
                 <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{cat.name}</td>
-                <td><span className="badge badge-success">Active</span></td>
+                <td>
+                  <span className={`badge ${cat.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
+                    {cat.status === 'active' ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
                 <td className="col-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setIsModalOpen(true)}>
+                  <button className="btn btn-ghost btn-sm" title="Edit">
                     <Edit2 size={14} /> Edit
                   </button>
                 </td>
@@ -65,14 +116,32 @@ export default function CategoryMaster() {
                 <X size={18} />
               </button>
             </div>
+            
+            {errorMsg && (
+              <div style={{ background: '#fee2e2', color: '#dc2626', padding: '0.75rem', margin: '1rem 1.5rem 0', borderRadius: '4px', border: '1px solid #f87171' }}>
+                {errorMsg}
+              </div>
+            )}
+            
             <div className="modal-body">
               <div className="form-group mb-3">
-                <label className="form-label">Category Name <span className="required">*</span></label>
-                <input type="text" className="form-input" placeholder="e.g. Tablet, Syrup" autoFocus />
+                <label className="form-label">Category Name <span className="text-danger">*</span></label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="e.g. Tablet, Syrup" 
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  autoFocus 
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Status</label>
-                <select className="form-select">
+                <select 
+                  className="form-select"
+                  value={formData.status}
+                  onChange={e => setFormData({...formData, status: e.target.value})}
+                >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
@@ -80,7 +149,7 @@ export default function CategoryMaster() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => setIsModalOpen(false)}>Save Category</button>
+              <button className="btn btn-primary" onClick={handleSave}>Save Category</button>
             </div>
           </div>
         </div>

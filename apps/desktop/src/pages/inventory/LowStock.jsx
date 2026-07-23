@@ -1,8 +1,24 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TrendingDown, FilePlus2, Printer } from 'lucide-react';
-import { products, suppliers, manufacturers } from '../../data/mockData';
+
 
 export default function LowStock() {
+  const [products, set_products] = useState([]);
+  const [suppliers, set_suppliers] = useState([]);
+  const [manufacturers, set_manufacturers] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+      set_products(res_products?.data || []);
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      set_suppliers(res_suppliers?.data || []);
+      const res_manufacturers = await window.pharmaAPI.db.query("SELECT * FROM manufacturers");
+      set_manufacturers(res_manufacturers?.data || []);
+    };
+    fetchData();
+  }, []);
+
   const [mfgFilter, setMfgFilter] = useState('');
 
   // Calculate products that are below their minimum stock level

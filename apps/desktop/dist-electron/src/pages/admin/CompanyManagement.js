@@ -37,10 +37,16 @@ exports.default = CompanyManagement;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function CompanyManagement() {
+    const [adminCompanies, set_adminCompanies] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            set_adminCompanies([]);
+        };
+        fetchData();
+    }, []);
     const [search, setSearch] = (0, react_1.useState)('');
-    const filtered = mockData_1.adminCompanies.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) ||
+    const filtered = adminCompanies.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.city.toLowerCase().includes(search.toLowerCase()));
     return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", style: { fontSize: '1.1rem' }, children: "Client Companies" }), (0, jsx_runtime_1.jsxs)("div", { className: "search-bar", children: [(0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search companies, cities...", value: search, onChange: e => setSearch(e.target.value) })] }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-primary", style: { background: 'var(--purple)', borderColor: 'var(--purple)' }, children: "+ Register Company" })] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { children: "Company Name & Location" }), (0, jsx_runtime_1.jsx)("th", { children: "Plan & Reg. Date" }), (0, jsx_runtime_1.jsx)("th", { children: "Usage Stats" }), (0, jsx_runtime_1.jsx)("th", { children: "Last Activity" }), (0, jsx_runtime_1.jsx)("th", { children: "Status" }), (0, jsx_runtime_1.jsx)("th", { className: "col-actions", children: "Actions" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filtered.map(company => ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("td", { children: (0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.75rem' }, children: [(0, jsx_runtime_1.jsx)("div", { style: {
                                                         width: 36, height: 36, borderRadius: '8px',

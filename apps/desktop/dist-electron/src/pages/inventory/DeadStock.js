@@ -37,12 +37,19 @@ exports.default = DeadStock;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
-const mockData_1 = require("../../data/mockData");
 function DeadStock() {
+    const [products, set_products] = (0, react_1.useState)([]);
+    (0, react_1.useEffect)(() => {
+        const fetchData = async () => {
+            const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+            set_products(res_products?.data || []);
+        };
+        fetchData();
+    }, []);
     const [daysFilter, setDaysFilter] = (0, react_1.useState)('180');
     // Mock function to determine if a product is Dead Stock
     const deadStockData = (0, react_1.useMemo)(() => {
-        return mockData_1.products.map(p => {
+        return products.map(p => {
             const totalQty = p.batches.reduce((acc, b) => acc + b.qty, 0);
             // Mock Last Sale Date (Deterministic based on product ID for demo purposes)
             // If ID is even, it sold recently. If ID is odd, it hasn't sold in a long time.

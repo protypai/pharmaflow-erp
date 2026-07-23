@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runMigrations = runMigrations;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const electron_1 = require("electron");
 const logger_1 = require("./logger");
 async function runMigrations(db) {
     // Create migrations tracking table
@@ -16,7 +17,12 @@ async function runMigrations(db) {
       applied_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-    const migrationsDir = path_1.default.join(__dirname, '../migrations');
+    const isDev = !electron_1.app.isPackaged;
+    logger_1.logger.info(`App path: ${electron_1.app.getAppPath()}`);
+    const migrationsDir = isDev
+        ? path_1.default.join(electron_1.app.getAppPath(), 'electron', 'migrations')
+        : path_1.default.join(electron_1.app.getAppPath(), 'dist-electron', 'migrations');
+    logger_1.logger.info(`Checking migrations dir: ${migrationsDir}`);
     if (!fs_1.default.existsSync(migrationsDir)) {
         logger_1.logger.warn('No migrations directory found, skipping migrations');
         return;

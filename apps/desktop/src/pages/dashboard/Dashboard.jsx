@@ -1,23 +1,68 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  BadgeIndianRupee, ShoppingCart, Receipt, Wallet, 
-  TrendingUp, TrendingDown, Package, AlertTriangle, 
-  XCircle, Clock, ShieldAlert, ArrowUpRight, ArrowDownRight,
-  UserPlus
+  TrendingUp, TrendingDown, Users, Package, AlertTriangle, IndianRupee, 
+  ArrowUpRight, ArrowDownRight, Clock, FileText, Activity,
+  ShoppingCart, Receipt, Wallet, BadgeIndianRupee, Building2,
+  XCircle, ShieldAlert, UserPlus
 } from 'lucide-react';
-import { 
-  dashboardStats, recentActivities, outstandingAging, topProducts 
-} from '../../data/mockData';
 
 export default function Dashboard() {
+
+  const [stats, setStats] = useState({
+    todaySales: { amount: 0, count: 0 },
+    todayPurchase: { amount: 0, count: 0 },
+    todayCollections: { amount: 0, count: 0 },
+    todayPayments: { amount: 0, count: 0 },
+    cashBalance: 0,
+    bankBalance: 0,
+    outstandingReceivable: 0,
+    outstandingPayable: 0,
+    nearExpiry: 0,
+    expiredStock: 0,
+    lowStock: 0,
+    outOfStock: 0,
+    deadStock: 0,
+    newCustomers: 0,
+    pendingReturns: 0
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const salesRes = await window.pharmaAPI.db.query("SELECT COUNT(*) as count, SUM(netAmount) as total FROM Sale WHERE date = date('now')");
+        const customersRes = await window.pharmaAPI.db.query("SELECT COUNT(*) as count FROM Customer");
+        const outstandingRes = await window.pharmaAPI.db.query("SELECT SUM(outstanding) as total FROM Customer");
+
+        const sales = salesRes?.data || [];
+        const customers = customersRes?.data || [];
+        const outstanding = outstandingRes?.data || [];
+
+        setStats(prev => ({
+          ...prev,
+          todaySales: { amount: sales[0]?.total || 0, count: sales[0]?.count || 0 },
+          newCustomers: customers[0]?.count || 0,
+          outstandingReceivable: outstanding[0]?.total || 0,
+        }));
+      } catch (err) {
+        console.error('Failed to load DB stats', err);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const salesTrend = [];
+  const outstandingAging = [];
+  const topProducts = [];
+  const recentActivities = [];
+
   const {
     todaySales, todayPurchase, todayCollections, todayPayments,
     cashBalance, bankBalance, outstandingReceivable, outstandingPayable,
     nearExpiry, expiredStock, lowStock, outOfStock, deadStock,
     newCustomers, pendingReturns
-  } = dashboardStats;
+  } = stats;
 
-  const formatCurr = (val) => `₹${val.toLocaleString('en-IN')}`;
+  const formatCurr = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '2rem' }}>
@@ -190,9 +235,4 @@ export default function Dashboard() {
   );
 }
 
-// Temporary shim for Building2 icon since it was used in Dashboard but not imported at the top
-const Building2 = ({ size, color, className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>
-  </svg>
-);
+
