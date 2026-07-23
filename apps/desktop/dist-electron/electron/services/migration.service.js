@@ -21,7 +21,7 @@ async function runMigrations(db) {
     logger_1.logger.info(`App path: ${electron_1.app.getAppPath()}`);
     const migrationsDir = isDev
         ? path_1.default.join(electron_1.app.getAppPath(), 'electron', 'migrations')
-        : path_1.default.join(electron_1.app.getAppPath(), 'dist-electron', 'migrations');
+        : path_1.default.join(electron_1.app.getAppPath(), 'dist-electron', 'electron', 'migrations');
     logger_1.logger.info(`Checking migrations dir: ${migrationsDir}`);
     if (!fs_1.default.existsSync(migrationsDir)) {
         logger_1.logger.warn('No migrations directory found, skipping migrations');

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray } from 'electron';
+import { app, BrowserWindow, Tray, protocol, net } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import { setupDbHandlers } from './ipc/db.handler';
@@ -42,10 +42,13 @@ async function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    // app.getAppPath() returns the root of the ASAR or app directory
-    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
-    mainWindow.loadFile(indexPath);
+    // Use the custom app:// protocol to bypass file:// CORS restrictions for ES modules
+    mainWindow.loadURL('app://index.html');
   }
+
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer] ${message} (${sourceId}:${line})`);
+  });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
@@ -65,7 +68,20 @@ async function createWindow() {
   setupUpdateHandlers(mainWindow);
 }
 
-app.whenReady().then(createWindow);
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
+]);
+
+app.whenReady().then(() => {
+  // Register custom protocol for local files (fixes Vite type="module" CORS on file://)
+  protocol.handle('app', (request) => {
+    const requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
+    const filePath = path.join(app.getAppPath(), 'dist', requestUrl);
+    return net.fetch(`file:///${filePath.replace(/\\/g, '/')}`);
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

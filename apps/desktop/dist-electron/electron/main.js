@@ -12,7 +12,7 @@ const backup_handler_1 = require("./ipc/backup.handler");
 const update_handler_1 = require("./ipc/update.handler");
 const localDb_service_1 = require("./services/localDb.service");
 const tray_1 = require("./windows/tray");
-const isDev = !electron_1.app.isPackaged;
+const isDev = false;
 let mainWindow = null;
 let tray = null;
 async function createWindow() {
@@ -44,8 +44,13 @@ async function createWindow() {
     else {
         // app.getAppPath() returns the root of the ASAR or app directory
         const indexPath = path_1.default.join(electron_1.app.getAppPath(), 'dist', 'index.html');
+        console.log(`[MAIN] Loading index path: ${indexPath}`);
         mainWindow.loadFile(indexPath);
+        mainWindow.webContents.openDevTools();
     }
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        console.log(`[Renderer] ${message} (${sourceId}:${line})`);
+    });
     mainWindow.once('ready-to-show', () => mainWindow?.show());
     mainWindow.on('close', (e) => {
         e.preventDefault();

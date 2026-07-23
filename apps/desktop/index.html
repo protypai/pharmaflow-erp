@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https: http:; img-src 'self' data: https:;"
+      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' file:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com file:; font-src 'self' https://fonts.gstatic.com data: file:; connect-src 'self' https: http: file:; img-src 'self' data: https: file:;"
     />
     <title>PharmaFlow ERP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -14,6 +14,9 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      console.log("HELLO FROM HTML INLINE!");
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
