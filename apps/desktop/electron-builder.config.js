@@ -14,14 +14,14 @@ module.exports = {
   ],
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
-    icon: 'assets/icon.ico',
+    icon: 'assets/icon.png',
   },
   nsis: {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
-    installerIcon: 'assets/icon.ico',
-    uninstallerIcon: 'assets/icon.ico',
-    installerHeaderIcon: 'assets/icon.ico',
+    installerIcon: 'assets/icon.png',
+    uninstallerIcon: 'assets/icon.png',
+    installerHeaderIcon: 'assets/icon.png',
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'PharmaFlow ERP',
