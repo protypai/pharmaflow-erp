@@ -9,7 +9,7 @@ import { setupUpdateHandlers } from './ipc/update.handler';
 import { initLocalDb } from './services/localDb.service';
 import { setupTray } from './windows/tray';
 
-const isDev = !app.isPackaged;
+const isDev = !app.isPackaged && !process.argv.includes('--prod');
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
@@ -40,10 +40,14 @@ async function createWindow() {
   // Load URL - use app.getAppPath() so it works in packaged .exe too
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     // Use the custom app:// protocol to bypass file:// CORS restrictions for ES modules
     mainWindow.loadURL('app://index.html');
+  }
+
+  // Always open DevTools during local runs (unpackaged) for easy debugging
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
   }
 
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
@@ -73,9 +77,21 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.whenReady().then(() => {
-  // Register custom protocol for local files (fixes Vite type="module" CORS on file://)
   protocol.handle('app', (request) => {
-    const requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
+    let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
+    
+    // If the browser treats index.html as a host, relative paths will request "index.html/assets/..."
+    // We must strip "index.html/" to correctly locate the files under the "dist/" directory
+    if (requestUrl.startsWith('index.html/')) {
+      requestUrl = requestUrl.substring('index.html/'.length);
+    }
+    
+    if (requestUrl.endsWith('/')) {
+      requestUrl = requestUrl.slice(0, -1);
+    }
+    if (!requestUrl || requestUrl === 'index.html') {
+      requestUrl = 'index.html';
+    }
     const filePath = path.join(app.getAppPath(), 'dist', requestUrl);
     return net.fetch(`file:///${filePath.replace(/\\/g, '/')}`);
   });

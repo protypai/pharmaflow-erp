@@ -1,6 +1,6 @@
 {
   "name": "pharmaflow-desktop",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "PharmaFlow ERP Windows Desktop Application",
   "author": "PharmaFlow",
   "repository": {
@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc && node -e \"require('fs').cpSync('electron/migrations', 'dist-electron/electron/migrations', {recursive:true})\" && vite build",
-    "electron:build": "npm run build && electron-builder",
+    "preview": "npm run build && electron . --prod",
+    "electron:build": "npm run build && electron-builder --config electron-builder.config.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
