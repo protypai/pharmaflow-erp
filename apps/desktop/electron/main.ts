@@ -23,13 +23,15 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: 'PharmaFlow ERP',
+    icon: path.join(__dirname, '../../assets/icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false,
       preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F1F5F9',
   });
 
   // Load URL
@@ -37,7 +39,7 @@ async function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());

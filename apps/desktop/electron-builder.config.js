@@ -19,9 +19,6 @@ module.exports = {
   nsis: {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
-    installerIcon: 'assets/icon.png',
-    uninstallerIcon: 'assets/icon.png',
-    installerHeaderIcon: 'assets/icon.png',
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'PharmaFlow ERP',
