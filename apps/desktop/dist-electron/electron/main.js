@@ -70,7 +70,6 @@ electron_1.protocol.registerSchemesAsPrivileged([
 ]);
 electron_1.app.whenReady().then(() => {
     electron_1.protocol.handle('app', (request) => {
-        console.log(`[Protocol Request] Original: ${request.url}`);
         let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
         // If the browser treats index.html as a host, relative paths will request "index.html/assets/..."
         // We must strip "index.html/" to correctly locate the files under the "dist/" directory
@@ -84,12 +83,6 @@ electron_1.app.whenReady().then(() => {
             requestUrl = 'index.html';
         }
         const filePath = path_1.default.join(electron_1.app.getAppPath(), 'dist', requestUrl);
-        console.log(`[Protocol Resolve] URL: ${requestUrl} -> FilePath: ${filePath}`);
-        // Check if file exists to help debugging
-        const fs = require('fs');
-        if (!fs.existsSync(filePath)) {
-            console.error(`[Protocol Error] File NOT found: ${filePath}`);
-        }
         return electron_1.net.fetch(`file:///${filePath.replace(/\\/g, '/')}`);
     });
     createWindow();

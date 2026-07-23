@@ -1,8 +1,42 @@
-import React, { useState } from 'react';
-import { Save, FileText, Settings as SettingsIcon, Database, CheckSquare, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Save, FileText, Settings as SettingsIcon, Database, CheckSquare, Layers, RefreshCw } from 'lucide-react';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('invoicing');
+  const [appVersion, setAppVersion] = useState('1.0.18');
+  const [checking, setChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState('');
+
+  useEffect(() => {
+    if (window.pharmaAPI && window.pharmaAPI.app) {
+      window.pharmaAPI.app.getVersion()
+        .then(ver => setAppVersion(ver))
+        .catch(err => console.error('Failed to get app version:', err));
+    }
+  }, []);
+
+  const handleCheckForUpdates = async () => {
+    if (!window.pharmaAPI || !window.pharmaAPI.update) {
+      alert('Update service not available in development server browser context.');
+      return;
+    }
+    setChecking(true);
+    setUpdateStatus('Checking for updates...');
+    try {
+      const result = await window.pharmaAPI.update.check();
+      if (result && result.success) {
+        setUpdateStatus('Checking finished.');
+        // The update handler will trigger the global update prompt if update is found.
+      } else {
+        setUpdateStatus(result.error || 'Failed to check for updates.');
+      }
+    } catch (err) {
+      setUpdateStatus('Error checking for updates.');
+    } finally {
+      setChecking(false);
+      setTimeout(() => setUpdateStatus(''), 5000);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
@@ -152,6 +186,43 @@ export default function Settings() {
                       <option value="close">On Application Close</option>
                       <option value="weekly">Weekly</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* Update Section */}
+                <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border)', paddingTop: '2rem' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>App Updates</h4>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    background: 'var(--primary-50)', 
+                    border: '1px solid var(--primary-light)', 
+                    borderRadius: 'var(--radius-sm)', 
+                    padding: '1.25rem' 
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                        PharmaFlow ERP v{appVersion}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Ensure you are running the latest version for updated GST compliance and security rules.
+                      </div>
+                      {updateStatus && (
+                        <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--primary)', marginTop: '0.5rem' }}>
+                          {updateStatus}
+                        </div>
+                      )}
+                    </div>
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={handleCheckForUpdates}
+                      disabled={checking}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <RefreshCw size={14} className={checking ? 'spin' : ''} />
+                      {checking ? 'Checking...' : 'Check for Updates'}
+                    </button>
                   </div>
                 </div>
               </div>
