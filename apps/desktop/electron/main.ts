@@ -17,8 +17,10 @@ async function createWindow() {
   // Initialize local SQLite database
   await initLocalDb();
 
-  // Resolve icon path — works in dev and packaged
-  const iconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
+  // Resolve icon path — use unpacked assets in packaged mode
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.png')
+    : path.join(app.getAppPath(), 'assets', 'icon.png');
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -77,22 +79,27 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.whenReady().then(() => {
+  // In packaged app: dist/ is in app.asar.unpacked/ (not inside app.asar)
+  // In dev/preview: dist/ is directly under the project root
+  const getDistPath = (...parts: string[]) => {
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', ...parts);
+    }
+    return path.join(app.getAppPath(), 'dist', ...parts);
+  };
+
   protocol.handle('app', (request) => {
     let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
-    
-    // If the browser treats index.html as a host, relative paths will request "index.html/assets/..."
-    // We must strip "index.html/" to correctly locate the files under the "dist/" directory
     if (requestUrl.startsWith('index.html/')) {
       requestUrl = requestUrl.substring('index.html/'.length);
     }
-    
     if (requestUrl.endsWith('/')) {
       requestUrl = requestUrl.slice(0, -1);
     }
     if (!requestUrl || requestUrl === 'index.html') {
       requestUrl = 'index.html';
     }
-    const filePath = path.join(app.getAppPath(), 'dist', requestUrl);
+    const filePath = getDistPath(requestUrl);
     return net.fetch(`file:///${filePath.replace(/\\/g, '/')}`);
   });
 

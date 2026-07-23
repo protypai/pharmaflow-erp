@@ -14,6 +14,8 @@ module.exports = {
   ],
   asarUnpack: [
     '**/*.node',
+    'dist/**/*',
+    'assets/**/*',
     'node_modules/better-sqlite3/**/*',
     'node_modules/keytar/**/*'
   ],
