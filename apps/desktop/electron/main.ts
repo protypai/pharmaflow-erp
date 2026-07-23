@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, protocol, net } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { setupDbHandlers } from './ipc/db.handler';
 import { setupSyncHandlers } from './ipc/sync.handler';
 import { setupPrintHandlers } from './ipc/print.handler';
@@ -35,7 +36,7 @@ async function createWindow() {
       webSecurity: false,
       preload: path.join(__dirname, 'preload.js'),
     },
-    show: true,
+    show: false,  // Show window only when content is ready
     backgroundColor: '#F1F5F9',
   });
 
@@ -56,7 +57,16 @@ async function createWindow() {
     console.log(`[Renderer] ${message} (${sourceId}:${line})`);
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  // Show window only when content has finished loading
+  mainWindow.once('ready-to-show', () => {
+    console.log('✓ Content ready, showing window');
+    mainWindow?.show();
+  });
+
+  // Handle failed page loads
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error(`✗ Failed to load ${validatedURL}: ${errorCode} - ${errorDescription}`);
+  });
 
   mainWindow.on('close', (e) => {
     e.preventDefault();
@@ -88,19 +98,40 @@ app.whenReady().then(() => {
     return path.join(app.getAppPath(), 'dist', ...parts);
   };
 
-  protocol.handle('app', (request) => {
-    let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
-    if (requestUrl.startsWith('index.html/')) {
-      requestUrl = requestUrl.substring('index.html/'.length);
+  protocol.handle('app', async (request) => {
+    try {
+      let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
+      
+      // Normalize request URL
+      if (requestUrl.startsWith('index.html/')) {
+        requestUrl = requestUrl.substring('index.html/'.length);
+      }
+      if (requestUrl.endsWith('/')) {
+        requestUrl = requestUrl.slice(0, -1);
+      }
+      if (!requestUrl || requestUrl === 'index.html') {
+        requestUrl = 'index.html';
+      }
+      
+      const filePath = getDistPath(requestUrl);
+      
+      // Convert to proper file:// URL for Windows and Unix
+      const fileUrl = pathToFileURL(filePath).toString();
+      console.log(`Loading: ${fileUrl}`);
+      
+      const response = await net.fetch(fileUrl);
+      if (!response.ok) {
+        console.error(`File fetch error for ${requestUrl}: ${response.status}`);
+        // Return a fallback for missing files (e.g., sourcemaps)
+        if (response.status === 404 && requestUrl.endsWith('.map')) {
+          return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+      return response;
+    } catch (error) {
+      console.error('Protocol handler error:', error);
+      return new Response('Error loading resource', { status: 500 });
     }
-    if (requestUrl.endsWith('/')) {
-      requestUrl = requestUrl.slice(0, -1);
-    }
-    if (!requestUrl || requestUrl === 'index.html') {
-      requestUrl = 'index.html';
-    }
-    const filePath = getDistPath(requestUrl);
-    return net.fetch(`file:///${filePath.replace(/\\/g, '/')}`);
   });
 
   createWindow();

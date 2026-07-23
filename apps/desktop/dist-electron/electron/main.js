@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
+const url_1 = require("url");
 const db_handler_1 = require("./ipc/db.handler");
 const sync_handler_1 = require("./ipc/sync.handler");
 const print_handler_1 = require("./ipc/print.handler");
@@ -18,8 +19,10 @@ let tray = null;
 async function createWindow() {
     // Initialize local SQLite database
     await (0, localDb_service_1.initLocalDb)();
-    // Resolve icon path — works in dev and packaged
-    const iconPath = path_1.default.join(electron_1.app.getAppPath(), 'assets', 'icon.png');
+    // Resolve icon path — use unpacked assets in packaged mode
+    const iconPath = electron_1.app.isPackaged
+        ? path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.png')
+        : path_1.default.join(electron_1.app.getAppPath(), 'assets', 'icon.png');
     mainWindow = new electron_1.BrowserWindow({
         width: 1400,
         height: 900,
@@ -33,7 +36,7 @@ async function createWindow() {
             webSecurity: false,
             preload: path_1.default.join(__dirname, 'preload.js'),
         },
-        show: true,
+        show: false, // Show window only when content is ready
         backgroundColor: '#F1F5F9',
     });
     // Load URL - use app.getAppPath() so it works in packaged .exe too
@@ -51,7 +54,15 @@ async function createWindow() {
     mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
         console.log(`[Renderer] ${message} (${sourceId}:${line})`);
     });
-    mainWindow.once('ready-to-show', () => mainWindow?.show());
+    // Show window only when content has finished loading
+    mainWindow.once('ready-to-show', () => {
+        console.log('✓ Content ready, showing window');
+        mainWindow?.show();
+    });
+    // Handle failed page loads
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+        console.error(`✗ Failed to load ${validatedURL}: ${errorCode} - ${errorDescription}`);
+    });
     mainWindow.on('close', (e) => {
         e.preventDefault();
         mainWindow?.hide();
@@ -69,21 +80,45 @@ electron_1.protocol.registerSchemesAsPrivileged([
     { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
 ]);
 electron_1.app.whenReady().then(() => {
-    electron_1.protocol.handle('app', (request) => {
-        let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
-        // If the browser treats index.html as a host, relative paths will request "index.html/assets/..."
-        // We must strip "index.html/" to correctly locate the files under the "dist/" directory
-        if (requestUrl.startsWith('index.html/')) {
-            requestUrl = requestUrl.substring('index.html/'.length);
+    // In packaged app: dist/ is in app.asar.unpacked/ (not inside app.asar)
+    // In dev/preview: dist/ is directly under the project root
+    const getDistPath = (...parts) => {
+        if (electron_1.app.isPackaged) {
+            return path_1.default.join(process.resourcesPath, 'app.asar.unpacked', 'dist', ...parts);
         }
-        if (requestUrl.endsWith('/')) {
-            requestUrl = requestUrl.slice(0, -1);
+        return path_1.default.join(electron_1.app.getAppPath(), 'dist', ...parts);
+    };
+    electron_1.protocol.handle('app', async (request) => {
+        try {
+            let requestUrl = request.url.replace('app://', '').split('?')[0].split('#')[0];
+            // Normalize request URL
+            if (requestUrl.startsWith('index.html/')) {
+                requestUrl = requestUrl.substring('index.html/'.length);
+            }
+            if (requestUrl.endsWith('/')) {
+                requestUrl = requestUrl.slice(0, -1);
+            }
+            if (!requestUrl || requestUrl === 'index.html') {
+                requestUrl = 'index.html';
+            }
+            const filePath = getDistPath(requestUrl);
+            // Convert to proper file:// URL for Windows and Unix
+            const fileUrl = (0, url_1.pathToFileURL)(filePath).toString();
+            console.log(`Loading: ${fileUrl}`);
+            const response = await electron_1.net.fetch(fileUrl);
+            if (!response.ok) {
+                console.error(`File fetch error for ${requestUrl}: ${response.status}`);
+                // Return a fallback for missing files (e.g., sourcemaps)
+                if (response.status === 404 && requestUrl.endsWith('.map')) {
+                    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
+            }
+            return response;
         }
-        if (!requestUrl || requestUrl === 'index.html') {
-            requestUrl = 'index.html';
+        catch (error) {
+            console.error('Protocol handler error:', error);
+            return new Response('Error loading resource', { status: 500 });
         }
-        const filePath = path_1.default.join(electron_1.app.getAppPath(), 'dist', requestUrl);
-        return electron_1.net.fetch(`file:///${filePath.replace(/\\/g, '/')}`);
     });
     createWindow();
 });
