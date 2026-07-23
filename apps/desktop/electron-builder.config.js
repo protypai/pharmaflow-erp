@@ -12,6 +12,11 @@ module.exports = {
     'node_modules/**/*',
     'package.json',
   ],
+  asarUnpack: [
+    '**/*.node',
+    'node_modules/better-sqlite3/**/*',
+    'node_modules/keytar/**/*'
+  ],
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/icon.png',
