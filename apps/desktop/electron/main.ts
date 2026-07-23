@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, Tray } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import { setupDbHandlers } from './ipc/db.handler';
@@ -9,7 +9,7 @@ import { setupUpdateHandlers } from './ipc/update.handler';
 import { initLocalDb } from './services/localDb.service';
 import { setupTray } from './windows/tray';
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
@@ -17,13 +17,16 @@ async function createWindow() {
   // Initialize local SQLite database
   await initLocalDb();
 
+  // Resolve icon path — works in dev and packaged
+  const iconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
     title: 'PharmaFlow ERP',
-    icon: path.join(__dirname, '../../assets/icon.png'),
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -34,12 +37,14 @@ async function createWindow() {
     backgroundColor: '#F1F5F9',
   });
 
-  // Load URL
+  // Load URL - use app.getAppPath() so it works in packaged .exe too
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+    // app.getAppPath() returns the root of the ASAR or app directory
+    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+    mainWindow.loadFile(indexPath);
   }
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
