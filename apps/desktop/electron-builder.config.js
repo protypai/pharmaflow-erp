@@ -24,10 +24,6 @@ module.exports = {
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     icon: 'assets/icon.png',
-    certificateFile: process.env.WIN_CSC_LINK,
-    certificatePassword: process.env.WIN_CSC_KEY_PASSWORD,
-    signingHashAlgorithms: ['sha256'],
-    sign: './customSign.js'
   },
   nsis: {
     oneClick: false,
