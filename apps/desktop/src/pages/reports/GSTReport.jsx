@@ -10,6 +10,7 @@ export default function GSTReport() {
     outputCGST: 0, outputSGST: 0, outputIGST: 0,
     inputCGST: 0, inputSGST: 0, inputIGST: 0,
   });
+  const [hsnData, setHsnData] = useState([]);
 
   useEffect(() => {
     const fetchGST = async () => {
@@ -30,6 +31,19 @@ export default function GSTReport() {
           inputSGST: p.inputSGST || 0,
           inputIGST: p.inputIGST || 0,
         });
+
+        const hsnRes = await window.pharmaAPI.db.query(`
+          SELECT p.hsn_code as hsn, p.gst_rate || '%' as slab,
+                 SUM(si.taxable_amt) as taxable,
+                 SUM(si.cgst) as cgst,
+                 SUM(si.sgst) as sgst,
+                 SUM(si.igst) as igst,
+                 SUM(si.cgst + si.sgst + si.igst) as total
+          FROM products p
+          JOIN sale_items si ON p.id = si.product_id
+          GROUP BY p.hsn_code, p.gst_rate
+        `);
+        setHsnData(hsnRes?.data || []);
       } catch (err) {
         console.error("Failed to fetch GST data:", err);
       }
@@ -40,14 +54,6 @@ export default function GSTReport() {
   const totalOutput = (gstSummary.outputCGST || 0) + (gstSummary.outputSGST || 0) + (gstSummary.outputIGST || 0);
   const totalInput = (gstSummary.inputCGST || 0) + (gstSummary.inputSGST || 0) + (gstSummary.inputIGST || 0);
   const netPayable = totalOutput - totalInput;
-
-  // Mock HSN wise breakdown
-  const hsnData = [
-    { hsn: '3004 (Medicines)', slab: '12%', taxable: 150000, cgst: 9000, sgst: 9000, igst: 0, total: 18000 },
-    { hsn: '3005 (Bandages)', slab: '5%', taxable: 45000, cgst: 1125, sgst: 1125, igst: 0, total: 2250 },
-    { hsn: '3304 (Cosmetics)', slab: '18%', taxable: 20000, cgst: 1800, sgst: 1800, igst: 1500, total: 5100 },
-    { hsn: '9018 (Instruments)', slab: '12%', taxable: 30000, cgst: 575, sgst: 575, igst: 1000, total: 2150 }
-  ];
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>

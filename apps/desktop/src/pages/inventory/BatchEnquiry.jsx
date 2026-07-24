@@ -33,7 +33,7 @@ export default function BatchEnquiry() {
 
   const [selectedProductId, setSelectedProductId] = useState('');
   
-  const selectedProduct = products.find(p => p.id === parseInt(selectedProductId));
+  const selectedProduct = products.find(p => p.id.toString() === selectedProductId.toString());
 
   // Mock function to attach a random supplier to a batch for demonstration of the flow
   const enrichBatchWithSupplier = (batch) => {
@@ -115,7 +115,12 @@ export default function BatchEnquiry() {
                     </td>
                     <td style={{ color: 'var(--text-secondary)' }}>{enriched.inwardDate}</td>
                     <td className="col-actions">
-                      <button className="btn btn-outline btn-sm" title="View Transaction History" style={{ color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }}>
+                      <button 
+                        className="btn btn-outline btn-sm" 
+                        title="View Transaction History" 
+                        style={{ color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }}
+                        onClick={() => alert(`Full trace history for Batch ${enriched.batch} will be available in the next update.`)}
+                      >
                         <History size={14} /> Trace
                       </button>
                     </td>

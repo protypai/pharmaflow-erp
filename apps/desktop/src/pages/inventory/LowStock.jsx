@@ -9,8 +9,24 @@ export default function LowStock() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
-      set_products(res_products?.data || []);
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*,
+        json_group_array(json_object(
+          'id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date,
+          'mrp', b.mrp, 'ptr', b.ptr, 'qty', b.current_qty
+        )) as batches
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+        GROUP BY p.id
+      `);
+      
+      const formattedProducts = (res_products?.data || []).map(p => ({
+        ...p,
+        batches: p.batches && typeof p.batches === 'string' 
+          ? JSON.parse(p.batches).filter(b => b.id) 
+          : []
+      }));
+      set_products(formattedProducts);
       const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
       set_suppliers(res_suppliers?.data || []);
       const res_manufacturers = await window.pharmaAPI.db.query("SELECT * FROM manufacturers");
@@ -24,16 +40,17 @@ export default function LowStock() {
   // Calculate products that are below their minimum stock level
   const lowStockData = useMemo(() => {
     return products.map(p => {
-      const totalQty = p.batches.reduce((acc, b) => acc + b.qty, 0);
+      const totalQty = p.batches.reduce((acc, b) => acc + (b.qty || 0), 0);
       
-      const deficit = p.minStock - totalQty;
+      const deficit = (p.min_stock || 0) - totalQty;
       
-      // Determine suggested order qty (usually deficit + buffer, or based on maxStock)
-      // We'll mock it as (MaxStock - Current) or just double the deficit if maxStock isn't defined properly
-      const suggestedOrder = (p.maxStock && p.maxStock > totalQty) ? (p.maxStock - totalQty) : (deficit > 0 ? deficit * 2 : 0);
+      // Determine suggested order qty (usually deficit + buffer, or based on max_stock)
+      const suggestedOrder = (p.max_stock && p.max_stock > totalQty) ? (p.max_stock - totalQty) : (deficit > 0 ? deficit * 2 : 0);
       
-      // Mock primary supplier for PO generation
-      const primarySupplier = suppliers[p.id % suppliers.length].name;
+      // We don't have a direct primary supplier link on products table right now, 
+      // but in a real app this would join from supplier_products. 
+      // For now, we'll mark as N/A or derive from latest purchase.
+      const primarySupplier = 'N/A';
 
       return {
         ...p,
@@ -43,9 +60,9 @@ export default function LowStock() {
         primarySupplier
       };
     }).filter(p => p.deficit > 0)
-      .filter(p => mfgFilter ? p.manufacturerId === parseInt(mfgFilter) : true)
+      .filter(p => mfgFilter ? p.manufacturer_id === mfgFilter : true)
       .sort((a, b) => b.deficit - a.deficit); // Sort by highest deficit first
-  }, [mfgFilter]);
+  }, [mfgFilter, products]);
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -57,8 +74,8 @@ export default function LowStock() {
           <div className="page-sub" style={{ color: '#1E3A8A' }}>Products running below minimum stock. Generate Purchase Orders instantly.</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" style={{ borderColor: '#1E40AF', color: '#1E40AF' }}><Printer size={16} /> Print Shortage List</button>
-          <button className="btn btn-primary"><FilePlus2 size={16} /> Generate PO for All</button>
+          <button className="btn btn-outline" style={{ borderColor: '#1E40AF', color: '#1E40AF' }} onClick={() => alert("Printing Shortage List...")}><Printer size={16} /> Print Shortage List</button>
+          <button className="btn btn-primary" onClick={() => alert("Generating POs for all low stock items...")}><FilePlus2 size={16} /> Generate PO for All</button>
         </div>
       </div>
 
@@ -112,6 +129,7 @@ export default function LowStock() {
                     className="btn btn-outline btn-sm" 
                     title="Generate Purchase Order"
                     style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
+                    onClick={() => alert(`Drafting PO for ${p.name}`)}
                   >
                     <FilePlus2 size={14} /> Draft PO
                   </button>

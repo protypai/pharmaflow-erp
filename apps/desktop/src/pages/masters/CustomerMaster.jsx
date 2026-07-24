@@ -8,6 +8,7 @@ export default function CustomerMaster() {
   
   // Form State
   const [formData, setFormData] = useState({
+    id: null,
     name: '', type: 'Retail', salesman: '', phone: '', email: '',
     address: '', area: 'Dadar', pincode: '', drug_license: '', gstin: '',
     credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
@@ -35,33 +36,45 @@ export default function CustomerMaster() {
     }
 
     try {
-      // Get current companyId (from local storage)
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      const id = 'CUST-' + Date.now();
 
-      const res = await window.pharmaAPI.db.run(`
-        INSERT INTO customers (
-          id, company_id, name, type, salesman, phone, email, address, area, pincode, 
-          drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
-          status, created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
-        )
-      `, [
-        id, companyId, formData.name, formData.type, formData.salesman, formData.phone, formData.email,
-        formData.address, formData.area, formData.pincode, formData.drug_license, formData.gstin,
-        formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
-      ]);
-
-      if (!res.success) {
-        setErrorMsg("Database error: " + res.error);
-        return;
+      if (formData.id) {
+        const res = await window.pharmaAPI.db.run(`
+          UPDATE customers SET
+            name = ?, type = ?, salesman = ?, phone = ?, email = ?, address = ?, area = ?, pincode = ?, 
+            drug_license = ?, gstin = ?, credit_limit = ?, credit_days = ?, opening_balance = ?, opening_balance_type = ?,
+            updated_at = datetime('now')
+          WHERE id = ?
+        `, [
+          formData.name, formData.type, formData.salesman, formData.phone, formData.email,
+          formData.address, formData.area, formData.pincode, formData.drug_license, formData.gstin,
+          formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type,
+          formData.id
+        ]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
+      } else {
+        const id = 'CUST-' + Date.now();
+        const res = await window.pharmaAPI.db.run(`
+          INSERT INTO customers (
+            id, company_id, name, type, salesman, phone, email, address, area, pincode, 
+            drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
+            status, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+          )
+        `, [
+          id, companyId, formData.name, formData.type, formData.salesman, formData.phone, formData.email,
+          formData.address, formData.area, formData.pincode, formData.drug_license, formData.gstin,
+          formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
+        ]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
 
       setIsModalOpen(false);
       // Reset form
       setFormData({
+        id: null,
         name: '', type: 'Retail', salesman: '', phone: '', email: '',
         address: '', area: 'Dadar', pincode: '', drug_license: '', gstin: '',
         credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
@@ -70,6 +83,26 @@ export default function CustomerMaster() {
     } catch (err) {
       console.error("Save failed", err);
       setErrorMsg("Failed to save customer: " + err.message);
+    }
+  };
+
+  const handleEdit = (cust) => {
+    setFormData({
+      id: cust.id,
+      name: cust.name || '', type: cust.type || 'Retail', salesman: cust.salesman || '', phone: cust.phone || '', email: cust.email || '',
+      address: cust.address || '', area: cust.area || 'Dadar', pincode: cust.pincode || '', drug_license: cust.drug_license || '', gstin: cust.gstin || '',
+      credit_limit: cust.credit_limit || 50000, credit_days: cust.credit_days || 30, opening_balance: cust.opening_balance || 0, opening_balance_type: cust.opening_balance_type || 'debit'
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this customer?")) return;
+    try {
+      await window.pharmaAPI.db.run("DELETE FROM customers WHERE id = ?", [id]);
+      fetchCustomers();
+    } catch (err) {
+      alert("Failed to delete customer: " + err.message);
     }
   };
 
@@ -96,7 +129,15 @@ export default function CustomerMaster() {
               style={{ width: '250px' }}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+          <button className="btn btn-primary" onClick={() => {
+            setFormData({
+              id: null,
+              name: '', type: 'Retail', salesman: '', phone: '', email: '',
+              address: '', area: 'Dadar', pincode: '', drug_license: '', gstin: '',
+              credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
+            });
+            setIsModalOpen(true);
+          }}>
             <Plus size={16} /> New Customer
           </button>
         </div>
@@ -155,9 +196,14 @@ export default function CustomerMaster() {
                     </span>
                   </td>
                   <td className="col-actions">
-                    <button className="btn btn-ghost btn-sm" title="Edit">
-                      <Edit2 size={14} /> Edit
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                      <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => handleEdit(cust)}>
+                        <Edit2 size={14} />
+                      </button>
+                      <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => handleDelete(cust.id)} style={{ color: 'var(--danger)' }}>
+                        <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&times;</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

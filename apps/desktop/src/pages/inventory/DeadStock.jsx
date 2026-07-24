@@ -7,30 +7,45 @@ export default function DeadStock() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
-      set_products(res_products?.data || []);
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*,
+        (SELECT MAX(s.date) FROM sale_items si JOIN sales s ON si.sale_id = s.id WHERE si.product_id = p.id) as lastSaleDate,
+        json_group_array(json_object(
+          'id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date,
+          'mrp', b.mrp, 'ptr', b.ptr, 'qty', b.current_qty
+        )) as batches
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+        GROUP BY p.id
+      `);
+      
+      const formattedProducts = (res_products?.data || []).map(p => ({
+        ...p,
+        batches: p.batches && typeof p.batches === 'string' 
+          ? JSON.parse(p.batches).filter(b => b.id) 
+          : []
+      }));
+      set_products(formattedProducts);
     };
     fetchData();
   }, []);
 
   const [daysFilter, setDaysFilter] = useState('180');
 
-  // Mock function to determine if a product is Dead Stock
   const deadStockData = useMemo(() => {
     return products.map(p => {
-      const totalQty = p.batches.reduce((acc, b) => acc + b.qty, 0);
+      const totalQty = p.batches.reduce((acc, b) => acc + (b.qty || 0), 0);
       
-      // Mock Last Sale Date (Deterministic based on product ID for demo purposes)
-      // If ID is even, it sold recently. If ID is odd, it hasn't sold in a long time.
-      let daysSinceLastSale = p.id % 2 === 0 ? 15 : 200 + (p.id * 10);
+      let daysSinceLastSale = 9999; // Fallback if never sold
+      let lastSaleDateStr = 'Never Sold';
+      
+      if (p.lastSaleDate) {
+        lastSaleDateStr = p.lastSaleDate;
+        daysSinceLastSale = Math.floor((new Date() - new Date(p.lastSaleDate)) / (1000 * 60 * 60 * 24));
+      }
       
       // Calculate locked capital (PTR * Qty)
-      const lockedCapital = p.batches.reduce((acc, b) => acc + (b.qty * b.mrp * 0.7), 0);
-
-      // Generate a mock past date string based on days
-      const d = new Date();
-      d.setDate(d.getDate() - daysSinceLastSale);
-      const lastSaleDateStr = d.toISOString().split('T')[0];
+      const lockedCapital = p.batches.reduce((acc, b) => acc + ((b.qty || 0) * (b.ptr || 0)), 0);
 
       return {
         ...p,
@@ -41,7 +56,7 @@ export default function DeadStock() {
       };
     }).filter(p => p.totalQty > 0 && p.daysSinceLastSale >= parseInt(daysFilter))
       .sort((a, b) => b.lockedCapital - a.lockedCapital); // Sort by highest locked capital first
-  }, [daysFilter]);
+  }, [daysFilter, products]);
 
   const totalLockedCapital = deadStockData.reduce((sum, p) => sum + p.lockedCapital, 0);
 
@@ -111,7 +126,7 @@ export default function DeadStock() {
                     fontSize: '0.75rem',
                     fontWeight: 600
                   }}>
-                    {p.daysSinceLastSale} days
+                    {p.daysSinceLastSale === 9999 ? 'No Sales' : `${p.daysSinceLastSale} days`}
                   </span>
                 </td>
                 <td style={{ textAlign: 'right', fontWeight: 600, color: '#374151' }}>
@@ -121,6 +136,7 @@ export default function DeadStock() {
                   <button 
                     className="btn btn-outline btn-sm" 
                     title="Apply Discount / Push Sale"
+                    onClick={() => alert(`Pushing sale for ${p.name}`)}
                   >
                     <ArrowDownToLine size={14} /> Push Sale
                   </button>

@@ -15,25 +15,53 @@ export default function SupplierLedger() {
 
   const [supplierId, setSupplierId] = useState('');
   
-  // Mock Ledger Entries for a specific supplier
-  const ledgerEntries = useMemo(() => {
-    if (!supplierId) return [];
-    
-    // Simulate some mock data for Payables
-    const entries = [
-      { id: 1, date: '2025-07-01', vchType: 'Opening Balance', vchNo: '-', particulars: 'By Opening Balance', debit: 0, credit: 50000 },
-      { id: 2, date: '2025-07-05', vchType: 'Purchase', vchNo: 'PUR-101', particulars: 'By Purchase A/c', debit: 0, credit: 25000 },
-      { id: 3, date: '2025-07-10', vchType: 'Payment', vchNo: 'PAY-055', particulars: 'To Bank A/c (Cheque #4455)', debit: 30000, credit: 0 },
-      { id: 4, date: '2025-07-12', vchType: 'Purchase Return', vchNo: 'PR-020', particulars: 'To Purchase Return A/c', debit: 2000, credit: 0 }
-    ];
+  const [ledgerEntries, setLedgerEntries] = useState([]);
 
-    let currentBalance = 0;
-    return entries.map(entry => {
-      // For suppliers (Creditors), Credit increases balance, Debit decreases
-      currentBalance += entry.credit - entry.debit;
-      return { ...entry, balance: Math.abs(currentBalance), balType: currentBalance >= 0 ? 'Cr' : 'Dr' };
-    });
-  }, [supplierId]);
+  useEffect(() => {
+    const fetchLedger = async () => {
+      if (!supplierId) {
+        setLedgerEntries([]);
+        return;
+      }
+      
+      const sup = suppliers.find(s => s.id === supplierId);
+      const opening = sup?.opening_balance || 0;
+      
+      const purRes = await window.pharmaAPI.db.query("SELECT * FROM purchases WHERE supplier_id = ?", [supplierId]);
+      const payRes = await window.pharmaAPI.db.query("SELECT * FROM payments WHERE supplier_id = ?", [supplierId]);
+      const retRes = await window.pharmaAPI.db.query("SELECT * FROM purchase_returns WHERE supplier_id = ?", [supplierId]);
+      
+      const entries = [];
+      entries.push({ id: 'op', date: '2025-04-01', vchType: 'Opening Balance', vchNo: '-', particulars: 'By Opening Balance', debit: 0, credit: opening, timestamp: 0 });
+      
+      (purRes?.data || []).forEach(p => {
+        entries.push({ id: p.id, date: p.invoice_date, vchType: 'Purchase', vchNo: p.invoice_no, particulars: 'By Purchase A/c', debit: 0, credit: p.net_amount, timestamp: new Date(p.invoice_date).getTime() });
+      });
+      
+      (payRes?.data || []).forEach(p => {
+        entries.push({ id: p.id, date: p.date, vchType: 'Payment', vchNo: p.payment_no, particulars: `To Bank A/c (${p.payment_mode})`, debit: p.amount, credit: 0, timestamp: new Date(p.date).getTime() });
+      });
+      
+      (retRes?.data || []).forEach(r => {
+        entries.push({ id: r.id, date: r.return_date, vchType: 'Purchase Return', vchNo: r.entry_no, particulars: 'To Purchase Return A/c', debit: r.net_amount, credit: 0, timestamp: new Date(r.return_date).getTime() });
+      });
+      
+      entries.sort((a, b) => {
+        if (a.id === 'op') return -1;
+        if (b.id === 'op') return 1;
+        return a.timestamp - b.timestamp;
+      });
+      
+      let currentBalance = 0;
+      const computedEntries = entries.map(entry => {
+        currentBalance += entry.credit - entry.debit;
+        return { ...entry, balance: Math.abs(currentBalance), balType: currentBalance >= 0 ? 'Cr' : 'Dr' };
+      });
+      
+      setLedgerEntries(computedEntries);
+    };
+    fetchLedger();
+  }, [supplierId, suppliers]);
 
   const totals = ledgerEntries.reduce((acc, curr) => {
     acc.debit += curr.debit;

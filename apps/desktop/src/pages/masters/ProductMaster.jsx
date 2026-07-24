@@ -8,6 +8,12 @@ export default function ProductMaster() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState('basic');
 
+  const [isBatchesModalOpen, setIsBatchesModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productBatches, setProductBatches] = useState([]);
+  const [productHistory, setProductHistory] = useState([]);
+
   const [productsList, setProductsList] = useState([]);
   const [categories, setCategories] = useState([]);
   const [manufacturers, setManufacturers] = useState([]);
@@ -15,6 +21,7 @@ export default function ProductMaster() {
 
   // Form State
   const [formData, setFormData] = useState({
+    id: null,
     name: '', generic_name: '', manufacturer_id: '', category_id: '',
     code: '', barcode: '', packing: '',
     hsn_code: '', gst_rate: 12, schedule: 'Not Scheduled (OTC)',
@@ -26,11 +33,18 @@ export default function ProductMaster() {
   const fetchData = async () => {
     try {
       const prodsRes = await window.pharmaAPI.db.query(`
-        SELECT p.*, c.name as category_name, m.name as mfg_name, r.code as rack_code 
+        SELECT p.*, c.name as category_name, m.name as mfg_name, r.code as rack_code,
+               IFNULL(b_agg.totalQty, 0) as totalQty
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
         LEFT JOIN racks r ON p.rack_id = r.id
+        LEFT JOIN (
+           SELECT product_id, SUM(current_qty) as totalQty
+           FROM batches
+           WHERE current_qty > 0
+           GROUP BY product_id
+        ) b_agg ON b_agg.product_id = p.id
         ORDER BY p.name ASC
       `);
       setProductsList(prodsRes?.data || []);
@@ -62,31 +76,45 @@ export default function ProductMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      const id = 'PROD-' + Date.now();
       const code = formData.code || ('ITM' + Math.floor(Math.random() * 100000));
 
-      const res = await window.pharmaAPI.db.run(`
-        INSERT INTO products (
-          id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id,
-          rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate,
-          schedule, min_stock, max_stock, status, created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
-        )
-      `, [
-        id, companyId, code, formData.barcode, formData.name, formData.generic_name, 
-        formData.manufacturer_id || null, formData.category_id || null, formData.rack_id || null, 
-        formData.packing, formData.purchase_unit, formData.sale_unit, formData.conversion_factor, 
-        formData.hsn_code, formData.gst_rate, formData.schedule, formData.min_stock, formData.max_stock
-      ]);
-
-      if (!res.success) {
-        setErrorMsg("Database error: " + res.error);
-        return;
+      if (formData.id) {
+        const res = await window.pharmaAPI.db.run(`
+          UPDATE products SET
+            code = ?, barcode = ?, name = ?, generic_name = ?, manufacturer_id = ?, category_id = ?,
+            rack_id = ?, packing = ?, purchase_unit = ?, sale_unit = ?, conversion_factor = ?,
+            hsn_code = ?, gst_rate = ?, schedule = ?, min_stock = ?, max_stock = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `, [
+          code, formData.barcode, formData.name, formData.generic_name, 
+          formData.manufacturer_id || null, formData.category_id || null, formData.rack_id || null, 
+          formData.packing, formData.purchase_unit, formData.sale_unit, formData.conversion_factor, 
+          formData.hsn_code, formData.gst_rate, formData.schedule, formData.min_stock, formData.max_stock,
+          formData.id
+        ]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
+      } else {
+        const id = 'PROD-' + Date.now();
+        const res = await window.pharmaAPI.db.run(`
+          INSERT INTO products (
+            id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id,
+            rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate,
+            schedule, min_stock, max_stock, status, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+          )
+        `, [
+          id, companyId, code, formData.barcode, formData.name, formData.generic_name, 
+          formData.manufacturer_id || null, formData.category_id || null, formData.rack_id || null, 
+          formData.packing, formData.purchase_unit, formData.sale_unit, formData.conversion_factor, 
+          formData.hsn_code, formData.gst_rate, formData.schedule, formData.min_stock, formData.max_stock
+        ]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
 
       setIsModalOpen(false);
       setFormData({
+        id: null,
         name: '', generic_name: '', manufacturer_id: '', category_id: '',
         code: '', barcode: '', packing: '',
         hsn_code: '', gst_rate: 12, schedule: 'Not Scheduled (OTC)',
@@ -97,6 +125,71 @@ export default function ProductMaster() {
     } catch (err) {
       console.error("Save failed", err);
       setErrorMsg("Failed to save product: " + err.message);
+    }
+  };
+
+  const handleEdit = (prod) => {
+    setFormData({
+      id: prod.id,
+      name: prod.name || '', generic_name: prod.generic_name || '', manufacturer_id: prod.manufacturer_id || '', category_id: prod.category_id || '',
+      code: prod.code || '', barcode: prod.barcode || '', packing: prod.packing || '',
+      hsn_code: prod.hsn_code || '', gst_rate: prod.gst_rate || 12, schedule: prod.schedule || 'Not Scheduled (OTC)',
+      purchase_unit: prod.purchase_unit || 'Box', sale_unit: prod.sale_unit || 'Strip', conversion_factor: prod.conversion_factor || 10,
+      rack_id: prod.rack_id || '', min_stock: prod.min_stock || 0, max_stock: prod.max_stock || 0
+    });
+    setModalTab('basic');
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    try {
+      await window.pharmaAPI.db.run("DELETE FROM products WHERE id = ?", [id]);
+      fetchData();
+    } catch (err) {
+      alert("Failed to delete product: " + err.message);
+    }
+  };
+
+  const handleViewBatches = async (prod) => {
+    setSelectedProduct(prod);
+    try {
+      const res = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE product_id = ? ORDER BY expiry_date ASC", [prod.id]);
+      setProductBatches(res?.data || []);
+      setIsBatchesModalOpen(true);
+    } catch (err) {
+      alert("Failed to load batches: " + err.message);
+    }
+  };
+
+  const handleStockHistory = async (prod) => {
+    setSelectedProduct(prod);
+    try {
+      // Fetch Purchases
+      const purRes = await window.pharmaAPI.db.query(`
+        SELECT p.invoice_date as date, 'Purchase' as type, p.invoice_no as ref_no, pi.qty, pi.free_qty, b.batch_no
+        FROM purchase_items pi
+        JOIN purchases p ON pi.purchase_id = p.id
+        JOIN batches b ON pi.batch_id = b.id
+        WHERE pi.product_id = ?
+        ORDER BY p.invoice_date DESC
+      `, [prod.id]);
+      
+      // Fetch Sales
+      const saleRes = await window.pharmaAPI.db.query(`
+        SELECT s.date as date, 'Sale' as type, s.invoice_no as ref_no, si.qty, 0 as free_qty, b.batch_no
+        FROM sale_items si
+        JOIN sales s ON si.sale_id = s.id
+        JOIN batches b ON si.batch_id = b.id
+        WHERE si.product_id = ?
+        ORDER BY s.date DESC
+      `, [prod.id]);
+
+      const history = [...(purRes?.data || []), ...(saleRes?.data || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
+      setProductHistory(history);
+      setIsHistoryModalOpen(true);
+    } catch (err) {
+      alert("Failed to load history: " + err.message);
     }
   };
 
@@ -123,7 +216,18 @@ export default function ProductMaster() {
               style={{ width: '250px' }}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => { setModalTab('basic'); setIsModalOpen(true); }}>
+          <button className="btn btn-primary" onClick={() => { 
+            setFormData({
+              id: null,
+              name: '', generic_name: '', manufacturer_id: '', category_id: '',
+              code: '', barcode: '', packing: '',
+              hsn_code: '', gst_rate: 12, schedule: 'Not Scheduled (OTC)',
+              purchase_unit: 'Box', sale_unit: 'Strip', conversion_factor: 10,
+              rack_id: '', min_stock: 0, max_stock: 0
+            });
+            setModalTab('basic'); 
+            setIsModalOpen(true); 
+          }}>
             <Plus size={16} /> New Product
           </button>
         </div>
@@ -165,7 +269,7 @@ export default function ProductMaster() {
           </thead>
           <tbody>
             {filtered.map(prod => {
-              const totalStock = 0; // TODO: Join with batches table to get actual stock
+              const totalStock = prod.totalQty || 0;
               const isLow = totalStock < prod.min_stock;
               return (
                 <tr key={prod.id}>
@@ -192,14 +296,17 @@ export default function ProductMaster() {
                   </td>
                   <td className="col-actions">
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <button className="btn btn-outline btn-sm" title="View Batches" style={{ color: 'var(--purple)', borderColor: 'var(--purple)' }}>
+                      <button className="btn btn-outline btn-sm" title="View Batches" style={{ color: 'var(--purple)', borderColor: 'var(--purple)' }} onClick={() => handleViewBatches(prod)}>
                         <Package size={14} />
                       </button>
-                      <button className="btn btn-outline btn-sm" title="Stock History" style={{ color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }}>
+                      <button className="btn btn-outline btn-sm" title="Stock History" style={{ color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }} onClick={() => handleStockHistory(prod)}>
                         <History size={14} />
                       </button>
-                      <button className="btn btn-ghost btn-sm" title="Edit">
+                      <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => handleEdit(prod)}>
                         <Edit2 size={14} />
+                      </button>
+                      <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => handleDelete(prod.id)} style={{ color: 'var(--danger)' }}>
+                        <X size={14} />
                       </button>
                     </div>
                   </td>
@@ -371,6 +478,114 @@ export default function ProductMaster() {
               <button className="btn btn-primary" onClick={handleSave}>
                 <Save size={16} /> Save Product
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batches Modal */}
+      {isBatchesModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ width: '800px', maxWidth: '95vw' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Batches - {selectedProduct?.name}</h3>
+              <button className="modal-close" onClick={() => setIsBatchesModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body no-pad" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              {productBatches.length > 0 ? (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Batch No</th>
+                      <th>Expiry</th>
+                      <th style={{ textAlign: 'right' }}>MRP</th>
+                      <th style={{ textAlign: 'right' }}>PTR</th>
+                      <th style={{ textAlign: 'right' }}>Current Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productBatches.map(b => (
+                      <tr key={b.id}>
+                        <td style={{ fontWeight: 600 }}>{b.batch_no}</td>
+                        <td style={{ color: new Date(b.expiry_date) < new Date() ? 'var(--danger)' : 'inherit' }}>
+                          {b.expiry_date}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>₹{b.mrp.toFixed(2)}</td>
+                        <td style={{ textAlign: 'right' }}>₹{b.ptr.toFixed(2)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: b.current_qty > 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                          {b.current_qty} {selectedProduct?.sale_unit}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No batches found for this product.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setIsBatchesModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock History Modal */}
+      {isHistoryModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ width: '800px', maxWidth: '95vw' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Stock History - {selectedProduct?.name}</h3>
+              <button className="modal-close" onClick={() => setIsHistoryModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body no-pad" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              {productHistory.length > 0 ? (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Ref No</th>
+                      <th>Batch No</th>
+                      <th style={{ textAlign: 'right' }}>Qty In</th>
+                      <th style={{ textAlign: 'right' }}>Qty Out</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productHistory.map((h, i) => (
+                      <tr key={i}>
+                        <td>{h.date}</td>
+                        <td>
+                          <span className={`badge ${h.type === 'Purchase' ? 'badge-success' : 'badge-primary'}`}>
+                            {h.type}
+                          </span>
+                        </td>
+                        <td>{h.ref_no}</td>
+                        <td>{h.batch_no}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--success)' }}>
+                          {h.type === 'Purchase' ? `+${h.qty + h.free_qty}` : '-'}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>
+                          {h.type === 'Sale' ? `-${h.qty}` : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No transaction history found for this product.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setIsHistoryModalOpen(false)}>Close</button>
             </div>
           </div>
         </div>

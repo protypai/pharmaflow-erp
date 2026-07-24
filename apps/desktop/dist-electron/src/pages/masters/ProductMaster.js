@@ -49,6 +49,7 @@ function ProductMaster() {
     const [racks, setRacks] = (0, react_1.useState)([]);
     // Form State
     const [formData, setFormData] = (0, react_1.useState)({
+        id: null,
         name: '', generic_name: '', manufacturer_id: '', category_id: '',
         code: '', barcode: '', packing: '',
         hsn_code: '', gst_rate: 12, schedule: 'Not Scheduled (OTC)',
@@ -59,11 +60,18 @@ function ProductMaster() {
     const fetchData = async () => {
         try {
             const prodsRes = await window.pharmaAPI.db.query(`
-        SELECT p.*, c.name as category_name, m.name as mfg_name, r.code as rack_code 
+        SELECT p.*, c.name as category_name, m.name as mfg_name, r.code as rack_code,
+               IFNULL(b_agg.totalQty, 0) as totalQty
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
         LEFT JOIN racks r ON p.rack_id = r.id
+        LEFT JOIN (
+           SELECT product_id, SUM(current_qty) as totalQty
+           FROM batches
+           WHERE current_qty > 0
+           GROUP BY product_id
+        ) b_agg ON b_agg.product_id = p.id
         ORDER BY p.name ASC
       `);
             setProductsList(prodsRes?.data || []);
@@ -90,28 +98,50 @@ function ProductMaster() {
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             const companyId = user.companyId || 'COMP-DEMO-001';
-            const id = 'PROD-' + Date.now();
             const code = formData.code || ('ITM' + Math.floor(Math.random() * 100000));
-            const res = await window.pharmaAPI.db.run(`
-        INSERT INTO products (
-          id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id,
-          rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate,
-          schedule, min_stock, max_stock, status, created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
-        )
-      `, [
-                id, companyId, code, formData.barcode, formData.name, formData.generic_name,
-                formData.manufacturer_id || null, formData.category_id || null, formData.rack_id || null,
-                formData.packing, formData.purchase_unit, formData.sale_unit, formData.conversion_factor,
-                formData.hsn_code, formData.gst_rate, formData.schedule, formData.min_stock, formData.max_stock
-            ]);
-            if (!res.success) {
-                setErrorMsg("Database error: " + res.error);
-                return;
+            if (formData.id) {
+                const res = await window.pharmaAPI.db.run(`
+          UPDATE products SET
+            code = ?, barcode = ?, name = ?, generic_name = ?, manufacturer_id = ?, category_id = ?,
+            rack_id = ?, packing = ?, purchase_unit = ?, sale_unit = ?, conversion_factor = ?,
+            hsn_code = ?, gst_rate = ?, schedule = ?, min_stock = ?, max_stock = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `, [
+                    code, formData.barcode, formData.name, formData.generic_name,
+                    formData.manufacturer_id || null, formData.category_id || null, formData.rack_id || null,
+                    formData.packing, formData.purchase_unit, formData.sale_unit, formData.conversion_factor,
+                    formData.hsn_code, formData.gst_rate, formData.schedule, formData.min_stock, formData.max_stock,
+                    formData.id
+                ]);
+                if (!res.success) {
+                    setErrorMsg("Database error: " + res.error);
+                    return;
+                }
+            }
+            else {
+                const id = 'PROD-' + Date.now();
+                const res = await window.pharmaAPI.db.run(`
+          INSERT INTO products (
+            id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id,
+            rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate,
+            schedule, min_stock, max_stock, status, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+          )
+        `, [
+                    id, companyId, code, formData.barcode, formData.name, formData.generic_name,
+                    formData.manufacturer_id || null, formData.category_id || null, formData.rack_id || null,
+                    formData.packing, formData.purchase_unit, formData.sale_unit, formData.conversion_factor,
+                    formData.hsn_code, formData.gst_rate, formData.schedule, formData.min_stock, formData.max_stock
+                ]);
+                if (!res.success) {
+                    setErrorMsg("Database error: " + res.error);
+                    return;
+                }
             }
             setIsModalOpen(false);
             setFormData({
+                id: null,
                 name: '', generic_name: '', manufacturer_id: '', category_id: '',
                 code: '', barcode: '', packing: '',
                 hsn_code: '', gst_rate: 12, schedule: 'Not Scheduled (OTC)',
@@ -125,6 +155,29 @@ function ProductMaster() {
             setErrorMsg("Failed to save product: " + err.message);
         }
     };
+    const handleEdit = (prod) => {
+        setFormData({
+            id: prod.id,
+            name: prod.name || '', generic_name: prod.generic_name || '', manufacturer_id: prod.manufacturer_id || '', category_id: prod.category_id || '',
+            code: prod.code || '', barcode: prod.barcode || '', packing: prod.packing || '',
+            hsn_code: prod.hsn_code || '', gst_rate: prod.gst_rate || 12, schedule: prod.schedule || 'Not Scheduled (OTC)',
+            purchase_unit: prod.purchase_unit || 'Box', sale_unit: prod.sale_unit || 'Strip', conversion_factor: prod.conversion_factor || 10,
+            rack_id: prod.rack_id || '', min_stock: prod.min_stock || 0, max_stock: prod.max_stock || 0
+        });
+        setModalTab('basic');
+        setIsModalOpen(true);
+    };
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this product?"))
+            return;
+        try {
+            await window.pharmaAPI.db.run("DELETE FROM products WHERE id = ?", [id]);
+            fetchData();
+        }
+        catch (err) {
+            alert("Failed to delete product: " + err.message);
+        }
+    };
     const filtered = productsList.filter(p => {
         if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.generic_name?.toLowerCase().includes(search.toLowerCase()) && !p.code.toLowerCase().includes(search.toLowerCase()))
             return false;
@@ -134,9 +187,20 @@ function ProductMaster() {
             return false;
         return true;
     });
-    return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", children: "Product Master" }), (0, jsx_runtime_1.jsxs)("div", { className: "search-bar", children: [(0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search product name or generic...", value: search, onChange: e => setSearch(e.target.value), style: { width: '250px' } })] }), (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary", onClick: () => { setModalTab('basic'); setIsModalOpen(true); }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Plus, { size: 16 }), " New Product"] })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "filter-bar", children: [(0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Filter, { size: 16 }), " Filters:"] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: catFilter, onChange: e => setCatFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Categories" }), categories.map(c => (0, jsx_runtime_1.jsx)("option", { value: c.id, children: c.name }, c.id))] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: mfgFilter, onChange: e => setMfgFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Manufacturers" }), manufacturers.map(m => (0, jsx_runtime_1.jsx)("option", { value: m.id, children: m.name }, m.id))] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { children: "Item Code" }), (0, jsx_runtime_1.jsx)("th", { children: "Product Details" }), (0, jsx_runtime_1.jsx)("th", { children: "Category / Mfg" }), (0, jsx_runtime_1.jsx)("th", { children: "Stock Status" }), (0, jsx_runtime_1.jsx)("th", { children: "Tax Info" }), (0, jsx_runtime_1.jsx)("th", { className: "col-actions", children: "Actions" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filtered.map(prod => {
-                                const totalStock = 0; // TODO: Join with batches table to get actual stock
+    return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", children: "Product Master" }), (0, jsx_runtime_1.jsxs)("div", { className: "search-bar", children: [(0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search product name or generic...", value: search, onChange: e => setSearch(e.target.value), style: { width: '250px' } })] }), (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary", onClick: () => {
+                                    setFormData({
+                                        id: null,
+                                        name: '', generic_name: '', manufacturer_id: '', category_id: '',
+                                        code: '', barcode: '', packing: '',
+                                        hsn_code: '', gst_rate: 12, schedule: 'Not Scheduled (OTC)',
+                                        purchase_unit: 'Box', sale_unit: 'Strip', conversion_factor: 10,
+                                        rack_id: '', min_stock: 0, max_stock: 0
+                                    });
+                                    setModalTab('basic');
+                                    setIsModalOpen(true);
+                                }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Plus, { size: 16 }), " New Product"] })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "filter-bar", children: [(0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Filter, { size: 16 }), " Filters:"] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: catFilter, onChange: e => setCatFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Categories" }), categories.map(c => (0, jsx_runtime_1.jsx)("option", { value: c.id, children: c.name }, c.id))] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: mfgFilter, onChange: e => setMfgFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Manufacturers" }), manufacturers.map(m => (0, jsx_runtime_1.jsx)("option", { value: m.id, children: m.name }, m.id))] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { children: "Item Code" }), (0, jsx_runtime_1.jsx)("th", { children: "Product Details" }), (0, jsx_runtime_1.jsx)("th", { children: "Category / Mfg" }), (0, jsx_runtime_1.jsx)("th", { children: "Stock Status" }), (0, jsx_runtime_1.jsx)("th", { children: "Tax Info" }), (0, jsx_runtime_1.jsx)("th", { className: "col-actions", children: "Actions" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filtered.map(prod => {
+                                const totalStock = prod.totalQty || 0;
                                 const isLow = totalStock < prod.min_stock;
-                                return ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("td", { style: { color: 'var(--text-secondary)', fontWeight: 500 }, children: prod.code }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 600, color: 'var(--text-primary)' }, children: prod.name }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: [prod.generic_name, " \u2022 ", prod.packing] })] }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.8rem' }, children: prod.category_name || 'N/A' }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: prod.mfg_name || 'N/A' })] }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsxs)("div", { style: { fontWeight: 600, color: isLow ? 'var(--danger)' : 'var(--text-primary)' }, children: [totalStock, " ", prod.sale_unit] }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: ["Rack: ", prod.rack_code || 'None'] })] }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.8rem' }, children: ["GST: ", prod.gst_rate, "%"] }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: ["HSN: ", prod.hsn_code] })] }), (0, jsx_runtime_1.jsx)("td", { className: "col-actions", children: (0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }, children: [(0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", title: "View Batches", style: { color: 'var(--purple)', borderColor: 'var(--purple)' }, children: (0, jsx_runtime_1.jsx)(lucide_react_1.Package, { size: 14 }) }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", title: "Stock History", style: { color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }, children: (0, jsx_runtime_1.jsx)(lucide_react_1.History, { size: 14 }) }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-ghost btn-sm", title: "Edit", children: (0, jsx_runtime_1.jsx)(lucide_react_1.Edit2, { size: 14 }) })] }) })] }, prod.id));
+                                return ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("td", { style: { color: 'var(--text-secondary)', fontWeight: 500 }, children: prod.code }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 600, color: 'var(--text-primary)' }, children: prod.name }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: [prod.generic_name, " \u2022 ", prod.packing] })] }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.8rem' }, children: prod.category_name || 'N/A' }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: prod.mfg_name || 'N/A' })] }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsxs)("div", { style: { fontWeight: 600, color: isLow ? 'var(--danger)' : 'var(--text-primary)' }, children: [totalStock, " ", prod.sale_unit] }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: ["Rack: ", prod.rack_code || 'None'] })] }), (0, jsx_runtime_1.jsxs)("td", { children: [(0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.8rem' }, children: ["GST: ", prod.gst_rate, "%"] }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: ["HSN: ", prod.hsn_code] })] }), (0, jsx_runtime_1.jsx)("td", { className: "col-actions", children: (0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }, children: [(0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", title: "View Batches", style: { color: 'var(--purple)', borderColor: 'var(--purple)' }, children: (0, jsx_runtime_1.jsx)(lucide_react_1.Package, { size: 14 }) }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", title: "Stock History", style: { color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }, children: (0, jsx_runtime_1.jsx)(lucide_react_1.History, { size: 14 }) }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-ghost btn-sm", title: "Edit", onClick: () => handleEdit(prod), children: (0, jsx_runtime_1.jsx)(lucide_react_1.Edit2, { size: 14 }) }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-ghost btn-sm", title: "Delete", onClick: () => handleDelete(prod.id), style: { color: 'var(--danger)' }, children: (0, jsx_runtime_1.jsx)(lucide_react_1.X, { size: 14 }) })] }) })] }, prod.id));
                             }) })] }) }), isModalOpen && ((0, jsx_runtime_1.jsx)("div", { style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }, children: (0, jsx_runtime_1.jsxs)("div", { className: "card", style: { width: '800px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", style: { borderBottom: '1px solid var(--border)', background: '#F8FAFC' }, children: [(0, jsx_runtime_1.jsx)("h3", { className: "card-title", children: "Add New Product" }), (0, jsx_runtime_1.jsx)("button", { className: "btn btn-ghost", onClick: () => setIsModalOpen(false), style: { padding: '0.25rem' }, children: (0, jsx_runtime_1.jsx)(lucide_react_1.X, { size: 20 }) })] }), (0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', borderBottom: '1px solid var(--border)' }, children: [(0, jsx_runtime_1.jsx)("button", { className: `btn btn-ghost`, style: { borderRadius: 0, borderBottom: modalTab === 'basic' ? '2px solid var(--primary)' : '2px solid transparent', color: modalTab === 'basic' ? 'var(--primary)' : 'inherit', padding: '1rem 1.5rem' }, onClick: () => setModalTab('basic'), children: "1. Basic Details" }), (0, jsx_runtime_1.jsx)("button", { className: `btn btn-ghost`, style: { borderRadius: 0, borderBottom: modalTab === 'tax' ? '2px solid var(--primary)' : '2px solid transparent', color: modalTab === 'tax' ? 'var(--primary)' : 'inherit', padding: '1rem 1.5rem' }, onClick: () => setModalTab('tax'), children: "2. Taxation & Compliance" }), (0, jsx_runtime_1.jsx)("button", { className: `btn btn-ghost`, style: { borderRadius: 0, borderBottom: modalTab === 'inv' ? '2px solid var(--primary)' : '2px solid transparent', color: modalTab === 'inv' ? 'var(--primary)' : 'inherit', padding: '1rem 1.5rem' }, onClick: () => setModalTab('inv'), children: "3. Inventory & Units" })] }), errorMsg && ((0, jsx_runtime_1.jsx)("div", { style: { background: '#fee2e2', color: '#dc2626', padding: '0.75rem', margin: '1rem 1.5rem 0', borderRadius: '4px', border: '1px solid #f87171' }, children: errorMsg })), (0, jsx_runtime_1.jsxs)("div", { className: "card-body", style: { overflowY: 'auto' }, children: [modalTab === 'basic' && ((0, jsx_runtime_1.jsxs)("div", { className: "form-row-2", children: [(0, jsx_runtime_1.jsxs)("div", { className: "form-group", style: { gridColumn: 'span 2' }, children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Product Name (as on pack) ", (0, jsx_runtime_1.jsx)("span", { className: "text-danger", children: "*" })] }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", placeholder: "e.g. Dolo 650mg Tablet", value: formData.name, onChange: e => setFormData({ ...formData, name: e.target.value }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", style: { gridColumn: 'span 2' }, children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Generic Name / Composition ", (0, jsx_runtime_1.jsx)("span", { className: "text-danger", children: "*" })] }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", placeholder: "e.g. Paracetamol 650mg", value: formData.generic_name, onChange: e => setFormData({ ...formData, generic_name: e.target.value }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Manufacturer / Company" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.manufacturer_id, onChange: e => setFormData({ ...formData, manufacturer_id: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "Select Company..." }), manufacturers.map(m => (0, jsx_runtime_1.jsx)("option", { value: m.id, children: m.name }, m.id))] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Category" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.category_id, onChange: e => setFormData({ ...formData, category_id: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "Select Category..." }), categories.map(c => (0, jsx_runtime_1.jsx)("option", { value: c.id, children: c.name }, c.id))] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Item Code / Barcode" }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", placeholder: "Leave empty to auto-generate", value: formData.code, onChange: e => setFormData({ ...formData, code: e.target.value }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Packing Description" }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", placeholder: "e.g. 15x10 (15 strips of 10)", value: formData.packing, onChange: e => setFormData({ ...formData, packing: e.target.value }) })] })] })), modalTab === 'tax' && ((0, jsx_runtime_1.jsxs)("div", { className: "form-row-2", children: [(0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["HSN Code ", (0, jsx_runtime_1.jsx)("span", { className: "text-danger", children: "*" })] }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", placeholder: "e.g. 3004", maxLength: "8", value: formData.hsn_code, onChange: e => setFormData({ ...formData, hsn_code: e.target.value }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["GST Slab % ", (0, jsx_runtime_1.jsx)("span", { className: "text-danger", children: "*" })] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.gst_rate, onChange: e => setFormData({ ...formData, gst_rate: Number(e.target.value) }), children: [(0, jsx_runtime_1.jsx)("option", { value: "12", children: "12% (Common Medicines)" }), (0, jsx_runtime_1.jsx)("option", { value: "5", children: "5% (Life Saving)" }), (0, jsx_runtime_1.jsx)("option", { value: "18", children: "18% (Supplements/Cosmetics)" }), (0, jsx_runtime_1.jsx)("option", { value: "0", children: "0% (Exempt)" }), (0, jsx_runtime_1.jsx)("option", { value: "28", children: "28%" })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Drug Schedule" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.schedule, onChange: e => setFormData({ ...formData, schedule: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { children: "Not Scheduled (OTC)" }), (0, jsx_runtime_1.jsx)("option", { children: "Schedule H (Prescription)" }), (0, jsx_runtime_1.jsx)("option", { children: "Schedule H1 (Strict Rx)" }), (0, jsx_runtime_1.jsx)("option", { children: "Schedule X (Narcotics)" })] })] }), (0, jsx_runtime_1.jsx)("div", { className: "form-group", style: { display: 'flex', alignItems: 'flex-end', paddingBottom: '0.5rem' }, children: (0, jsx_runtime_1.jsxs)("label", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }, children: [(0, jsx_runtime_1.jsx)("input", { type: "checkbox", style: { width: '18px', height: '18px' } }), (0, jsx_runtime_1.jsx)("span", { style: { fontWeight: 600 }, children: "Under DPCO (Price Control)" })] }) })] })), modalTab === 'inv' && ((0, jsx_runtime_1.jsxs)("div", { className: "form-row-2", children: [(0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Purchase Unit" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.purchase_unit, onChange: e => setFormData({ ...formData, purchase_unit: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { children: "Box" }), (0, jsx_runtime_1.jsx)("option", { children: "Case" }), (0, jsx_runtime_1.jsx)("option", { children: "Jar" })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Sale Unit" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.sale_unit, onChange: e => setFormData({ ...formData, sale_unit: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { children: "Strip" }), (0, jsx_runtime_1.jsx)("option", { children: "Bottle" }), (0, jsx_runtime_1.jsx)("option", { children: "Tube" }), (0, jsx_runtime_1.jsx)("option", { children: "Box" })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Conversion Factor ", (0, jsx_runtime_1.jsx)("span", { className: "text-danger", children: "*" })] }), (0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem' }, children: [(0, jsx_runtime_1.jsxs)("span", { children: ["1 ", formData.purchase_unit, " ="] }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", type: "number", placeholder: "Qty", style: { width: '80px' }, value: formData.conversion_factor, onChange: e => setFormData({ ...formData, conversion_factor: Number(e.target.value) }) }), (0, jsx_runtime_1.jsxs)("span", { children: [formData.sale_unit, "s"] })] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsx)("label", { className: "form-label", children: "Default Rack / Location" }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: formData.rack_id, onChange: e => setFormData({ ...formData, rack_id: e.target.value }), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "No Rack Assigned" }), racks.map(r => (0, jsx_runtime_1.jsxs)("option", { value: r.id, children: [r.code, " - ", r.description] }, r.id))] })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Min Stock Level (", formData.sale_unit, "s)"] }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", type: "number", placeholder: "Alert below this", value: formData.min_stock, onChange: e => setFormData({ ...formData, min_stock: Number(e.target.value) }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "form-group", children: [(0, jsx_runtime_1.jsxs)("label", { className: "form-label", children: ["Max Stock Level (", formData.sale_unit, "s)"] }), (0, jsx_runtime_1.jsx)("input", { className: "form-input", type: "number", placeholder: "Stop over-ordering", value: formData.max_stock, onChange: e => setFormData({ ...formData, max_stock: Number(e.target.value) }) })] })] }))] }), (0, jsx_runtime_1.jsxs)("div", { className: "card-header", style: { borderTop: '1px solid var(--border)', justifyContent: 'flex-end', background: '#F8FAFC' }, children: [(0, jsx_runtime_1.jsx)("button", { className: "btn btn-ghost", onClick: () => setIsModalOpen(false), children: "Cancel" }), (0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary", onClick: handleSave, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Save, { size: 16 }), " Save Product"] })] })] }) }))] }));
 }

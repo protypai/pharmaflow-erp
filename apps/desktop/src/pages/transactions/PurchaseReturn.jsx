@@ -10,11 +10,26 @@ export default function PurchaseReturn() {
     const fetchData = async () => {
       const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
       set_suppliers(res_suppliers?.data || []);
-      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
-      set_products(res_products?.data || []);
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*, json_group_array(json_object('id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date, 'mrp', b.mrp, 'ptr', b.ptr, 'current_qty', b.current_qty)) as batches
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+        GROUP BY p.id
+      `);
+      set_products(res_products?.data?.map(p => ({
+        ...p,
+        batches: p.batches ? JSON.parse(p.batches).filter(b => b.id) : []
+      })) || []);
     };
     fetchData();
   }, []);
+
+  const [lookupInvoiceNo, setLookupInvoiceNo] = useState('');
+  const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
+  const [returnReason, setReturnReason] = useState('Expiry / Near Expiry');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [originalPurchaseId, setOriginalPurchaseId] = useState(null);
 
   const [supplierId, setSupplierId] = useState('');
   
@@ -62,17 +77,17 @@ export default function PurchaseReturn() {
         updated.batch = '';
         updated.expiry = '';
         updated.ptr = 0;
-        const prod = products.find(p => p.id === parseInt(value));
+        const prod = products.find(p => p.id.toString() === value.toString());
         if (prod) updated.gst = prod.gst;
       }
       
       if (field === 'batch' && r.product) {
-        const prod = products.find(p => p.id === parseInt(r.product));
+        const prod = products.find(p => p.id.toString() === r.product.toString());
         if (prod) {
           const batchData = prod.batches.find(b => b.batch === value);
           if (batchData) {
             updated.expiry = batchData.expiry;
-            updated.ptr = batchData.mrp * 0.7; // Mock PTR logic
+            updated.ptr = batchData.ptr || 0; 
           }
         }
       }
@@ -86,6 +101,95 @@ export default function PurchaseReturn() {
     }
   };
 
+  const handleFetchInvoice = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!lookupInvoiceNo) return;
+    try {
+      const purRes = await window.pharmaAPI.db.query("SELECT * FROM purchases WHERE invoice_no = ?", [lookupInvoiceNo]);
+      if (!purRes.success || purRes.data.length === 0) {
+        setErrorMsg("Invoice not found.");
+        return;
+      }
+      const purchase = purRes.data[0];
+      setSupplierId(purchase.supplier_id);
+      setOriginalPurchaseId(purchase.id);
+
+      const itemsRes = await window.pharmaAPI.db.query(`
+        SELECT pi.*, b.batch_no, b.expiry_date, p.gst_rate as prod_gst
+        FROM purchase_items pi
+        JOIN batches b ON pi.batch_id = b.id
+        JOIN products p ON pi.product_id = p.id
+        WHERE pi.purchase_id = ?
+      `, [purchase.id]);
+
+      if (itemsRes.success && itemsRes.data.length > 0) {
+        const newRows = itemsRes.data.map(item => ({
+          id: Date.now() + Math.random(),
+          product: item.product_id.toString(),
+          batch_id: item.batch_id,
+          batch: item.batch_no,
+          expiry: item.expiry_date,
+          qty: item.qty,
+          ptr: item.ptr,
+          gst: item.prod_gst || 12,
+          amount: 0 // Will be calculated by useEffect
+        }));
+        setRows(newRows);
+        setSuccessMsg("Invoice loaded successfully. Adjust quantities to return.");
+      } else {
+        setErrorMsg("No items found for this invoice.");
+      }
+    } catch (err) {
+      setErrorMsg("Error fetching invoice: " + err.message);
+    }
+  };
+
+  const handleSave = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!supplierId) { setErrorMsg("Please select a supplier."); return; }
+    if (rows.length === 0 || !rows[0].product) { setErrorMsg("Please add at least one product to return."); return; }
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const returnId = 'PR-' + Date.now();
+      const entryNo = 'RET-' + Date.now();
+
+      const res = await window.pharmaAPI.db.run(`
+        INSERT INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, net_amount, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))
+      `, [returnId, companyId, entryNo, originalPurchaseId, supplierId, returnDate, returnReason, totals.net]);
+
+      if (!res.success) throw new Error(res.error);
+
+      for (const row of rows) {
+        if (!row.product || !row.qty) continue;
+        const prod = products.find(p => p.id.toString() === row.product.toString());
+        const batchData = prod?.batches.find(b => b.batch === row.batch);
+        if (!batchData) throw new Error("Batch not found for product.");
+
+        await window.pharmaAPI.db.run(`
+          INSERT INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, ['PRI-' + Date.now() + Math.random(), returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, returnReason]);
+
+        // Decrease stock
+        await window.pharmaAPI.db.run(`
+          UPDATE batches SET current_qty = current_qty - ? WHERE id = ?
+        `, [row.qty, batchData.id]);
+      }
+
+      setSuccessMsg("Purchase Return saved successfully!");
+      setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, ptr: 0, gst: 12, amount: 0 }]);
+      setLookupInvoiceNo('');
+      setOriginalPurchaseId(null);
+    } catch (err) {
+      setErrorMsg("Failed to save return: " + err.message);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
@@ -95,12 +199,23 @@ export default function PurchaseReturn() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Debit Note</button>
-          <button className="btn btn-primary"><Save size={16} /> Save Return</button>
+          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> Save Return</button>
         </div>
       </div>
 
       <div className="card">
         <div className="card-body">
+          {errorMsg && (
+            <div style={{ background: '#fee2e2', color: '#dc2626', padding: '0.75rem', marginBottom: '1rem', borderRadius: '4px', border: '1px solid #f87171' }}>
+              {errorMsg}
+            </div>
+          )}
+          {successMsg && (
+            <div style={{ background: '#dcfce7', color: '#166534', padding: '0.75rem', marginBottom: '1rem', borderRadius: '4px', border: '1px solid #86efac' }}>
+              {successMsg}
+            </div>
+          )}
+          
           <div className="form-row-2">
             <div className="form-group">
               <label className="form-label">Supplier <span className="text-danger">*</span></label>
@@ -111,22 +226,32 @@ export default function PurchaseReturn() {
             </div>
             <div className="form-group">
               <label className="form-label">Return Date <span className="text-danger">*</span></label>
-              <input type="date" className="form-input" defaultValue={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="form-input" value={returnDate} onChange={e => setReturnDate(e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Original Invoice No (Lookup)</label>
-              <div className="search-input-wrap" style={{ width: '100%' }}>
-                <Search size={16} className="search-icon" />
-                <input type="text" className="form-input" placeholder="Search old invoice to auto-fill..." />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="search-input-wrap" style={{ flex: 1 }}>
+                  <Search size={16} className="search-icon" />
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Enter invoice to auto-fill..." 
+                    value={lookupInvoiceNo}
+                    onChange={e => setLookupInvoiceNo(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleFetchInvoice()}
+                  />
+                </div>
+                <button className="btn btn-secondary" onClick={handleFetchInvoice}>Fetch</button>
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Reason for Return</label>
-              <select className="form-select">
-                <option>Expiry / Near Expiry</option>
-                <option>Damaged Goods</option>
-                <option>Rate Difference</option>
-                <option>Excess Supply</option>
+              <select className="form-select" value={returnReason} onChange={e => setReturnReason(e.target.value)}>
+                <option value="Expiry / Near Expiry">Expiry / Near Expiry</option>
+                <option value="Damaged Goods">Damaged Goods</option>
+                <option value="Rate Difference">Rate Difference</option>
+                <option value="Excess Supply">Excess Supply</option>
               </select>
             </div>
           </div>
@@ -150,7 +275,7 @@ export default function PurchaseReturn() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const prod = products.find(p => p.id === parseInt(r.product));
+                const prod = products.find(p => p.id.toString() === r.product.toString());
                 return (
                   <tr key={r.id}>
                     <td>

@@ -10,11 +10,26 @@ export default function SalesReturn() {
     const fetchData = async () => {
       const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
       set_customers(res_customers?.data || []);
-      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
-      set_products(res_products?.data || []);
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*, json_group_array(json_object('id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date, 'mrp', b.mrp, 'ptr', b.ptr, 'current_qty', b.current_qty)) as batches
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+        GROUP BY p.id
+      `);
+      set_products(res_products?.data?.map(p => ({
+        ...p,
+        batches: p.batches ? JSON.parse(p.batches).filter(b => b.id) : []
+      })) || []);
     };
     fetchData();
   }, []);
+
+  const [lookupInvoiceNo, setLookupInvoiceNo] = useState('');
+  const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
+  const [returnReason, setReturnReason] = useState('Salable Return (Add back to active stock)');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [originalSaleId, setOriginalSaleId] = useState(null);
 
   const [customerId, setCustomerId] = useState('');
   
@@ -67,17 +82,17 @@ export default function SalesReturn() {
         updated.batch = '';
         updated.expiry = '';
         updated.rate = 0;
-        const prod = products.find(p => p.id === parseInt(value));
+        const prod = products.find(p => p.id.toString() === value.toString());
         if (prod) updated.gst = prod.gst;
       }
       
       if (field === 'batch' && r.product) {
-        const prod = products.find(p => p.id === parseInt(r.product));
+        const prod = products.find(p => p.id.toString() === r.product.toString());
         if (prod) {
           const batchData = prod.batches.find(b => b.batch === value);
           if (batchData) {
             updated.expiry = batchData.expiry;
-            updated.rate = batchData.mrp * 0.8; // Mock PTS logic
+            updated.rate = batchData.mrp; 
           }
         }
       }
@@ -91,6 +106,98 @@ export default function SalesReturn() {
     }
   };
 
+  const handleFetchInvoice = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!lookupInvoiceNo) return;
+    try {
+      const saleRes = await window.pharmaAPI.db.query("SELECT * FROM sales WHERE invoice_no = ?", [lookupInvoiceNo]);
+      if (!saleRes.success || saleRes.data.length === 0) {
+        setErrorMsg("Invoice not found.");
+        return;
+      }
+      const sale = saleRes.data[0];
+      setCustomerId(sale.customer_id);
+      setOriginalSaleId(sale.id);
+
+      const itemsRes = await window.pharmaAPI.db.query(`
+        SELECT si.*, b.batch_no, b.expiry_date, p.gst_rate as prod_gst
+        FROM sale_items si
+        JOIN batches b ON si.batch_id = b.id
+        JOIN products p ON si.product_id = p.id
+        WHERE si.sale_id = ?
+      `, [sale.id]);
+
+      if (itemsRes.success && itemsRes.data.length > 0) {
+        const newRows = itemsRes.data.map(item => ({
+          id: Date.now() + Math.random(),
+          product: item.product_id.toString(),
+          batch_id: item.batch_id,
+          batch: item.batch_no,
+          expiry: item.expiry_date,
+          qty: item.qty,
+          rate: item.mrp, 
+          disc: item.disc_percent || 0,
+          gst: item.gst_rate || item.prod_gst || 12,
+          amount: 0 // Will be calculated by useEffect
+        }));
+        setRows(newRows);
+        setSuccessMsg("Invoice loaded successfully. Adjust quantities to return.");
+      } else {
+        setErrorMsg("No items found for this invoice.");
+      }
+    } catch (err) {
+      setErrorMsg("Error fetching invoice: " + err.message);
+    }
+  };
+
+  const handleSave = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!customerId) { setErrorMsg("Please select a customer."); return; }
+    if (rows.length === 0 || !rows[0].product) { setErrorMsg("Please add at least one product to return."); return; }
+
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const returnId = 'SR-' + Date.now();
+      const entryNo = 'SRET-' + Date.now();
+
+      const res = await window.pharmaAPI.db.run(`
+        INSERT INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, net_amount, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))
+      `, [returnId, companyId, entryNo, originalSaleId, customerId, returnDate, returnReason, totals.net]);
+
+      if (!res.success) throw new Error(res.error);
+
+      for (const row of rows) {
+        if (!row.product || !row.qty) continue;
+        const prod = products.find(p => p.id.toString() === row.product.toString());
+        const batchData = prod?.batches.find(b => b.batch === row.batch);
+        if (!batchData) throw new Error("Batch not found for product.");
+
+        await window.pharmaAPI.db.run(`
+          INSERT INTO sale_return_items (id, return_id, product_id, batch_id, qty, rate, disc_percent, gst_rate, net_amount, reason)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, ['SRI-' + Date.now() + Math.random(), returnId, row.product, batchData.id, row.qty, row.rate, row.disc, row.gst, row.amount, returnReason]);
+
+        // Increase stock if salable return
+        if (returnReason.includes("Salable")) {
+          await window.pharmaAPI.db.run(`
+            UPDATE batches SET current_qty = current_qty + ? WHERE id = ?
+          `, [row.qty, batchData.id]);
+        }
+      }
+
+      setSuccessMsg("Sales Return saved successfully!");
+      setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }]);
+      setLookupInvoiceNo('');
+      setOriginalSaleId(null);
+    } catch (err) {
+      setErrorMsg("Failed to save return: " + err.message);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
@@ -100,12 +207,22 @@ export default function SalesReturn() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Credit Note</button>
-          <button className="btn btn-primary"><Save size={16} /> Save Return</button>
+          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> Save Return</button>
         </div>
       </div>
 
       <div className="card">
         <div className="card-body">
+          {errorMsg && (
+            <div style={{ background: '#fee2e2', color: '#dc2626', padding: '0.75rem', marginBottom: '1rem', borderRadius: '4px', border: '1px solid #f87171' }}>
+              {errorMsg}
+            </div>
+          )}
+          {successMsg && (
+            <div style={{ background: '#dcfce7', color: '#166534', padding: '0.75rem', marginBottom: '1rem', borderRadius: '4px', border: '1px solid #86efac' }}>
+              {successMsg}
+            </div>
+          )}
           <div className="form-row-2">
             <div className="form-group">
               <label className="form-label">Customer <span className="text-danger">*</span></label>
@@ -116,21 +233,31 @@ export default function SalesReturn() {
             </div>
             <div className="form-group">
               <label className="form-label">Return Date <span className="text-danger">*</span></label>
-              <input type="date" className="form-input" defaultValue={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="form-input" value={returnDate} onChange={e => setReturnDate(e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Original Sales Bill No (Lookup)</label>
-              <div className="search-input-wrap" style={{ width: '100%' }}>
-                <Search size={16} className="search-icon" />
-                <input type="text" className="form-input" placeholder="Search bill to auto-fill..." />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="search-input-wrap" style={{ flex: 1 }}>
+                  <Search size={16} className="search-icon" />
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Enter bill to auto-fill..." 
+                    value={lookupInvoiceNo}
+                    onChange={e => setLookupInvoiceNo(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleFetchInvoice()}
+                  />
+                </div>
+                <button className="btn btn-secondary" onClick={handleFetchInvoice}>Fetch</button>
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Stock Status / Reason</label>
-              <select className="form-select">
-                <option>Salable Return (Add back to active stock)</option>
-                <option>Expired Return (Move to damage Godown)</option>
-                <option>Breakage / Damaged (Write-off)</option>
+              <select className="form-select" value={returnReason} onChange={e => setReturnReason(e.target.value)}>
+                <option value="Salable Return (Add back to active stock)">Salable Return (Add back to active stock)</option>
+                <option value="Expired Return (Move to damage Godown)">Expired Return (Move to damage Godown)</option>
+                <option value="Breakage / Damaged (Write-off)">Breakage / Damaged (Write-off)</option>
               </select>
             </div>
           </div>
@@ -155,7 +282,7 @@ export default function SalesReturn() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const prod = products.find(p => p.id === parseInt(r.product));
+                const prod = products.find(p => p.id.toString() === r.product.toString());
                 return (
                   <tr key={r.id}>
                     <td>

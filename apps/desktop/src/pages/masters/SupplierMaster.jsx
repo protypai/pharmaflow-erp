@@ -8,6 +8,7 @@ export default function SupplierMaster() {
   
   // Form State
   const [formData, setFormData] = useState({
+    id: null,
     name: '', contact_person: '', phone: '', email: '', city: '',
     address: '', pincode: '', drug_license: '', gstin: '',
     credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
@@ -37,29 +38,42 @@ export default function SupplierMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      const id = 'SUPP-' + Date.now();
 
-      const res = await window.pharmaAPI.db.run(`
-        INSERT INTO suppliers (
-          id, company_id, name, phone, email, address, city, pincode, 
-          drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
-          status, created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
-        )
-      `, [
-        id, companyId, formData.name, formData.phone, formData.email,
-        formData.address, formData.city, formData.pincode, formData.drug_license, formData.gstin,
-        formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
-      ]);
-
-      if (!res.success) {
-        setErrorMsg("Database error: " + res.error);
-        return;
+      if (formData.id) {
+        const res = await window.pharmaAPI.db.run(`
+          UPDATE suppliers SET
+            name = ?, phone = ?, email = ?, address = ?, city = ?, pincode = ?, 
+            drug_license = ?, gstin = ?, credit_limit = ?, credit_days = ?, opening_balance = ?, opening_balance_type = ?,
+            updated_at = datetime('now')
+          WHERE id = ?
+        `, [
+          formData.name, formData.phone, formData.email,
+          formData.address, formData.city, formData.pincode, formData.drug_license, formData.gstin,
+          formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type,
+          formData.id
+        ]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
+      } else {
+        const id = 'SUPP-' + Date.now();
+        const res = await window.pharmaAPI.db.run(`
+          INSERT INTO suppliers (
+            id, company_id, name, phone, email, address, city, pincode, 
+            drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
+            status, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+          )
+        `, [
+          id, companyId, formData.name, formData.phone, formData.email,
+          formData.address, formData.city, formData.pincode, formData.drug_license, formData.gstin,
+          formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
+        ]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
 
       setIsModalOpen(false);
       setFormData({
+        id: null,
         name: '', contact_person: '', phone: '', email: '', city: '',
         address: '', pincode: '', drug_license: '', gstin: '',
         credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
@@ -68,6 +82,26 @@ export default function SupplierMaster() {
     } catch (err) {
       console.error("Save failed", err);
       setErrorMsg("Failed to save supplier: " + err.message);
+    }
+  };
+
+  const handleEdit = (supp) => {
+    setFormData({
+      id: supp.id,
+      name: supp.name || '', contact_person: supp.contact_person || '', phone: supp.phone || '', email: supp.email || '', city: supp.city || '',
+      address: supp.address || '', pincode: supp.pincode || '', drug_license: supp.drug_license || '', gstin: supp.gstin || '',
+      credit_limit: supp.credit_limit || 500000, credit_days: supp.credit_days || 45, opening_balance: supp.opening_balance || 0, opening_balance_type: supp.opening_balance_type || 'credit'
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this supplier?")) return;
+    try {
+      await window.pharmaAPI.db.run("DELETE FROM suppliers WHERE id = ?", [id]);
+      fetchSuppliers();
+    } catch (err) {
+      alert("Failed to delete supplier: " + err.message);
     }
   };
 
@@ -94,7 +128,15 @@ export default function SupplierMaster() {
               style={{ width: '250px' }}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+          <button className="btn btn-primary" onClick={() => {
+            setFormData({
+              id: null,
+              name: '', contact_person: '', phone: '', email: '', city: '',
+              address: '', pincode: '', drug_license: '', gstin: '',
+              credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
+            });
+            setIsModalOpen(true);
+          }}>
             <Plus size={16} /> New Supplier
           </button>
         </div>
@@ -145,9 +187,14 @@ export default function SupplierMaster() {
                   </span>
                 </td>
                 <td className="col-actions">
-                  <button className="btn btn-ghost btn-sm" title="Edit">
-                    <Edit2 size={14} /> Edit
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => handleEdit(supp)}>
+                      <Edit2 size={14} />
+                    </button>
+                    <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => handleDelete(supp.id)} style={{ color: 'var(--danger)' }}>
+                      <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&times;</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

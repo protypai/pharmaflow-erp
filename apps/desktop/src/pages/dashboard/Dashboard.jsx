@@ -29,19 +29,80 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const salesRes = await window.pharmaAPI.db.query("SELECT COUNT(*) as count, SUM(netAmount) as total FROM Sale WHERE date = date('now')");
-        const customersRes = await window.pharmaAPI.db.query("SELECT COUNT(*) as count FROM Customer");
-        const outstandingRes = await window.pharmaAPI.db.query("SELECT SUM(outstanding) as total FROM Customer");
+        const today = new Date().toISOString().split('T')[0];
+        
+        const salesRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(net_amount) as total FROM sales WHERE date LIKE '${today}%'`);
+        const purchRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(net_amount) as total FROM purchases WHERE invoice_date LIKE '${today}%'`);
+        const collRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(amount) as total FROM receipts WHERE date LIKE '${today}%'`);
+        const payRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(amount) as total FROM payments WHERE date LIKE '${today}%'`);
+        const customersRes = await window.pharmaAPI.db.query("SELECT COUNT(*) as count FROM customers");
+        
+        const recRes = await window.pharmaAPI.db.query(`
+          SELECT 
+            COALESCE((SELECT SUM(opening_balance) FROM customers), 0) +
+            COALESCE((SELECT SUM(net_amount) FROM sales), 0) -
+            COALESCE((SELECT SUM(amount) FROM receipts), 0) as total
+        `);
+
+        const paybleRes = await window.pharmaAPI.db.query(`
+          SELECT 
+            COALESCE((SELECT SUM(opening_balance) FROM suppliers), 0) +
+            COALESCE((SELECT SUM(net_amount) FROM purchases), 0) -
+            COALESCE((SELECT SUM(amount) FROM payments), 0) as total
+        `);
+
+        const batchRes = await window.pharmaAPI.db.query("SELECT expiry_date, current_qty FROM batches");
+        const batches = batchRes?.data || [];
+        let nearExpiryCount = 0, expiredStockCount = 0;
+        const now = new Date();
+        batches.forEach(b => {
+          if (!b.expiry_date || b.current_qty <= 0) return;
+          let expDate;
+          if (b.expiry_date.includes('/') && b.expiry_date.length === 5) {
+            const [m, y] = b.expiry_date.split('/');
+            expDate = new Date(2000 + parseInt(y), parseInt(m) - 1, 1);
+          } else {
+            expDate = new Date(b.expiry_date);
+          }
+          if (isNaN(expDate)) return;
+          const daysDiff = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
+          if (daysDiff <= 0) expiredStockCount++;
+          else if (daysDiff <= 90) nearExpiryCount++;
+        });
+
+        const prodRes = await window.pharmaAPI.db.query(`
+          SELECT p.min_stock, COALESCE(SUM(b.current_qty), 0) as totalQty
+          FROM products p
+          LEFT JOIN batches b ON p.id = b.product_id
+          GROUP BY p.id
+        `);
+        let lowStockCount = 0, outOfStockCount = 0;
+        (prodRes?.data || []).forEach(p => {
+          if (p.totalQty <= 0) outOfStockCount++;
+          else if (p.totalQty < (p.min_stock || 10)) lowStockCount++;
+        });
 
         const sales = salesRes?.data || [];
+        const purch = purchRes?.data || [];
+        const coll = collRes?.data || [];
+        const paym = payRes?.data || [];
         const customers = customersRes?.data || [];
-        const outstanding = outstandingRes?.data || [];
 
         setStats(prev => ({
           ...prev,
           todaySales: { amount: sales[0]?.total || 0, count: sales[0]?.count || 0 },
+          todayPurchase: { amount: purch[0]?.total || 0, count: purch[0]?.count || 0 },
+          todayCollections: { amount: coll[0]?.total || 0, count: coll[0]?.count || 0 },
+          todayPayments: { amount: paym[0]?.total || 0, count: paym[0]?.count || 0 },
           newCustomers: customers[0]?.count || 0,
-          outstandingReceivable: outstanding[0]?.total || 0,
+          outstandingReceivable: recRes?.data?.[0]?.total || 0,
+          outstandingPayable: paybleRes?.data?.[0]?.total || 0,
+          nearExpiry: nearExpiryCount,
+          expiredStock: expiredStockCount,
+          lowStock: lowStockCount,
+          outOfStock: outOfStockCount,
+          deadStock: 0,
+          pendingReturns: 0
         }));
       } catch (err) {
         console.error('Failed to load DB stats', err);

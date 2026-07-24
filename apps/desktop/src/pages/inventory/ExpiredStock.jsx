@@ -9,8 +9,24 @@ export default function ExpiredStock() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
-      set_products(res_products?.data || []);
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*,
+        json_group_array(json_object(
+          'id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date,
+          'mrp', b.mrp, 'ptr', b.ptr, 'qty', b.current_qty
+        )) as batches
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+        GROUP BY p.id
+      `);
+      
+      const formattedProducts = (res_products?.data || []).map(p => ({
+        ...p,
+        batches: p.batches && typeof p.batches === 'string' 
+          ? JSON.parse(p.batches).filter(b => b.id) 
+          : []
+      }));
+      set_products(formattedProducts);
       const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
       set_suppliers(res_suppliers?.data || []);
     };
@@ -31,22 +47,28 @@ export default function ExpiredStock() {
       p.batches.forEach(b => {
         if (!b.expiry || b.qty <= 0) return;
         
-        // Parse MM/YY
-        const [mStr, yStr] = b.expiry.split('/');
-        const expMonth = parseInt(mStr);
-        const expYear = parseInt(yStr);
+        // Parse expiry
+        let expDate;
+        if (b.expiry.includes('/') && b.expiry.length === 5) {
+          const [m, y] = b.expiry.split('/');
+          expDate = new Date(2000 + parseInt(y), parseInt(m) - 1, 1);
+        } else {
+          expDate = new Date(b.expiry);
+        }
+        if (isNaN(expDate)) return;
         
-        // Calculate months difference
-        const monthsDiff = ((expYear - currentYear) * 12) + (expMonth - currentMonth);
+        // Calculate days difference
+        const daysDiff = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
         
-        // If it expired in the past (monthsDiff < 0) or expires this exact month (monthsDiff === 0)
-        if (monthsDiff <= 0) {
+        // If it expired in the past or today
+        if (daysDiff <= 0) {
+          const numId = parseInt(b.id.replace(/\D/g, '') || '0') || Math.floor(Math.random() * 100);
           expired.push({
             ...b,
             productName: p.name,
             productCode: p.code,
-            stockValue: b.qty * b.mrp * 0.7, // Mock PTR value
-            supplierName: suppliers[b.id % suppliers.length].name // Mock supplier
+            stockValue: b.qty * b.ptr,
+            supplierName: suppliers.length > 0 ? suppliers[numId % suppliers.length].name : 'Unknown Supplier'
           });
         }
       });

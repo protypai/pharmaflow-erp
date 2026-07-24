@@ -16,6 +16,9 @@ export default function Payments() {
   const [supplierId, setSupplierId] = useState('');
   const [amountPaid, setAmountPaid] = useState(0);
   const [payMode, setPayMode] = useState('bank');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [chequeNo, setChequeNo] = useState('');
+  const [utrNo, setUtrNo] = useState('');
   
   // Mock pending bills for a selected supplier
   const [bills, setBills] = useState([]);
@@ -24,14 +27,24 @@ export default function Payments() {
   const [allocatedTotal, setAllocatedTotal] = useState(0);
 
   useEffect(() => {
-    if (supplierId) {
-      setBills([
-        { id: 'PUR-2024-551', date: '2025-07-02', amount: 45000, pending: 45000, allocated: 0, discount: 0 },
-        { id: 'PUR-2024-602', date: '2025-07-15', amount: 12000, pending: 12000, allocated: 0, discount: 0 }
-      ]);
-    } else {
-      setBills([]);
-    }
+    const fetchPendingBills = async () => {
+      if (supplierId) {
+        const res = await window.pharmaAPI.db.query("SELECT * FROM purchases WHERE supplier_id = ? AND (net_amount - paid_amount) > 0 ORDER BY invoice_date ASC", [supplierId]);
+        const dbBills = (res?.data || []).map(p => ({
+          id: p.invoice_no,
+          dbId: p.id,
+          date: p.invoice_date,
+          amount: p.net_amount,
+          pending: p.net_amount - p.paid_amount,
+          allocated: 0,
+          discount: 0
+        }));
+        setBills(dbBills);
+      } else {
+        setBills([]);
+      }
+    };
+    fetchPendingBills();
   }, [supplierId]);
 
   useEffect(() => {
@@ -56,6 +69,50 @@ export default function Payments() {
     setBills(newBills);
   };
 
+  const handleSave = async () => {
+    try {
+      if (!supplierId) throw new Error("Please select a supplier.");
+      if (!amountPaid || Number(amountPaid) <= 0) throw new Error("Amount must be greater than 0.");
+      if (allocatedTotal > Number(amountPaid)) throw new Error("Allocation exceeds paid amount!");
+      
+      const paymentNo = "PAY-" + Date.now().toString().slice(-6);
+      
+      await window.pharmaAPI.db.run(
+        `INSERT INTO payments (
+          id, company_id, payment_no, supplier_id, date, amount, payment_mode, cheque_no, utr_no
+        ) VALUES (
+          ?, 'COMP-DEMO-001', ?, ?, ?, ?, ?, ?, ?
+        )`,
+        [
+          crypto.randomUUID(),
+          paymentNo,
+          supplierId,
+          paymentDate,
+          Number(amountPaid),
+          payMode,
+          chequeNo,
+          utrNo
+        ]
+      );
+      for (const b of bills) {
+        if (b.allocated > 0 || b.discount > 0) {
+          await window.pharmaAPI.db.run(
+            "UPDATE purchases SET paid_amount = paid_amount + ? WHERE id = ?", 
+            [Number(b.allocated || 0) + Number(b.discount || 0), b.dbId]
+          );
+        }
+      }
+      setSupplierId('');
+      setAmountPaid(0);
+      setChequeNo('');
+      setUtrNo('');
+      setBills([]);
+      alert(`Payment ${paymentNo} saved successfully!`);
+    } catch (err) {
+      alert(err.message || "Failed to save payment.");
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
@@ -65,7 +122,7 @@ export default function Payments() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Voucher</button>
-          <button className="btn btn-primary" disabled={allocatedTotal > (Number(amountPaid)||0)}><Save size={16} /> Save Payment</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={allocatedTotal > (Number(amountPaid)||0)}><Save size={16} /> Save Payment</button>
         </div>
       </div>
 
@@ -81,7 +138,7 @@ export default function Payments() {
             </div>
             <div className="form-group">
               <label className="form-label">Payment Date <span className="text-danger">*</span></label>
-              <input type="date" className="form-input" defaultValue={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="form-input" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
             </div>
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <div style={{ display: 'flex', gap: '1rem' }}>
@@ -107,11 +164,11 @@ export default function Payments() {
               <>
                 <div className="form-group">
                   <label className="form-label">Instrument / Cheque No.</label>
-                  <input type="text" className="form-input" placeholder="e.g. 998877" />
+                  <input type="text" className="form-input" placeholder="e.g. 998877" value={chequeNo} onChange={e => setChequeNo(e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Reference / UTR</label>
-                  <input type="text" className="form-input" placeholder="e.g. HDFC000ABC" />
+                  <input type="text" className="form-input" placeholder="e.g. HDFC000ABC" value={utrNo} onChange={e => setUtrNo(e.target.value)} />
                 </div>
               </>
             )}

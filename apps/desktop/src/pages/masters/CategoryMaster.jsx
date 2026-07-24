@@ -6,7 +6,7 @@ export default function CategoryMaster() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [categoriesList, setCategoriesList] = useState([]);
   
-  const [formData, setFormData] = useState({ name: '', status: 'active' });
+  const [formData, setFormData] = useState({ id: null, name: '', status: 'active' });
   const [errorMsg, setErrorMsg] = useState('');
 
   const fetchCategories = async () => {
@@ -32,24 +32,41 @@ export default function CategoryMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      const id = 'CAT-' + Date.now();
-
-      const res = await window.pharmaAPI.db.run(`
-        INSERT INTO categories (id, company_id, name, status, created_at, updated_at) 
-        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
-      `, [id, companyId, formData.name, formData.status]);
-
-      if (!res.success) {
-        setErrorMsg("Database error: " + res.error);
-        return;
+      if (formData.id) {
+        const res = await window.pharmaAPI.db.run(`
+          UPDATE categories SET name = ?, status = ?, updated_at = datetime('now') WHERE id = ?
+        `, [formData.name, formData.status, formData.id]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
+      } else {
+        const id = 'CAT-' + Date.now();
+        const res = await window.pharmaAPI.db.run(`
+          INSERT INTO categories (id, company_id, name, status, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+        `, [id, companyId, formData.name, formData.status]);
+        if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
 
       setIsModalOpen(false);
-      setFormData({ name: '', status: 'active' });
+      setFormData({ id: null, name: '', status: 'active' });
       fetchCategories();
     } catch (err) {
       console.error("Save failed", err);
       setErrorMsg("Failed to save category: " + err.message);
+    }
+  };
+
+  const handleEdit = (cat) => {
+    setFormData({ id: cat.id, name: cat.name, status: cat.status });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this category?")) return;
+    try {
+      await window.pharmaAPI.db.run("DELETE FROM categories WHERE id = ?", [id]);
+      fetchCategories();
+    } catch (err) {
+      alert("Failed to delete category: " + err.message);
     }
   };
 
@@ -70,7 +87,7 @@ export default function CategoryMaster() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => { setErrorMsg(''); setIsModalOpen(true); }}>
+          <button className="btn btn-primary" onClick={() => { setErrorMsg(''); setFormData({ id: null, name: '', status: 'active' }); setIsModalOpen(true); }}>
             <Plus size={16} /> Add Category
           </button>
         </div>
@@ -97,9 +114,14 @@ export default function CategoryMaster() {
                   </span>
                 </td>
                 <td className="col-actions">
-                  <button className="btn btn-ghost btn-sm" title="Edit">
-                    <Edit2 size={14} /> Edit
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => handleEdit(cat)}>
+                      <Edit2 size={14} />
+                    </button>
+                    <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => handleDelete(cat.id)} style={{ color: 'var(--danger)' }}>
+                      <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&times;</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

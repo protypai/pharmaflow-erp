@@ -16,6 +16,9 @@ export default function Receipts() {
   const [customerId, setCustomerId] = useState('');
   const [amountReceived, setAmountReceived] = useState(0);
   const [payMode, setPayMode] = useState('bank');
+  const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split('T')[0]);
+  const [chequeNo, setChequeNo] = useState('');
+  const [bankName, setBankName] = useState('');
   
   // Mock pending bills for a selected customer
   const [bills, setBills] = useState([]);
@@ -24,15 +27,24 @@ export default function Receipts() {
   const [allocatedTotal, setAllocatedTotal] = useState(0);
 
   useEffect(() => {
-    if (customerId) {
-      // Mock fetching pending bills when customer is selected
-      setBills([
-        { id: 'INV-1001', date: '2025-07-01', amount: 15000, pending: 15000, allocated: 0, discount: 0 },
-        { id: 'INV-1005', date: '2025-07-10', amount: 25000, pending: 25000, allocated: 0, discount: 0 }
-      ]);
-    } else {
-      setBills([]);
-    }
+    const fetchPendingBills = async () => {
+      if (customerId) {
+        const res = await window.pharmaAPI.db.query("SELECT * FROM sales WHERE customer_id = ? AND (net_amount - paid_amount) > 0 ORDER BY date ASC", [customerId]);
+        const dbBills = (res?.data || []).map(s => ({
+          id: s.invoice_no,
+          dbId: s.id,
+          date: s.date,
+          amount: s.net_amount,
+          pending: s.net_amount - s.paid_amount,
+          allocated: 0,
+          discount: 0
+        }));
+        setBills(dbBills);
+      } else {
+        setBills([]);
+      }
+    };
+    fetchPendingBills();
   }, [customerId]);
 
   useEffect(() => {
@@ -57,6 +69,51 @@ export default function Receipts() {
     setBills(newBills);
   };
 
+  const handleSave = async () => {
+    try {
+      if (!customerId) throw new Error("Please select a customer.");
+      if (!amountReceived || Number(amountReceived) <= 0) throw new Error("Amount must be greater than 0.");
+      if (allocatedTotal > Number(amountReceived)) throw new Error("Allocation exceeds received amount!");
+      
+      const receiptNo = "REC-" + Date.now().toString().slice(-6);
+      
+      await window.pharmaAPI.db.run(
+        `INSERT INTO receipts (
+          id, company_id, receipt_no, customer_id, date, amount, payment_mode, cheque_no, bank_name
+        ) VALUES (
+          ?, 'COMP-DEMO-001', ?, ?, ?, ?, ?, ?, ?
+        )`,
+        [
+          crypto.randomUUID(),
+          receiptNo,
+          customerId,
+          receiptDate,
+          Number(amountReceived),
+          payMode,
+          chequeNo,
+          bankName
+        ]
+      );
+      
+      for (const b of bills) {
+        if (b.allocated > 0 || b.discount > 0) {
+          await window.pharmaAPI.db.run(
+            "UPDATE sales SET paid_amount = paid_amount + ? WHERE id = ?", 
+            [Number(b.allocated || 0) + Number(b.discount || 0), b.dbId]
+          );
+        }
+      }
+      setCustomerId('');
+      setAmountReceived(0);
+      setChequeNo('');
+      setBankName('');
+      setBills([]);
+      alert(`Receipt ${receiptNo} saved successfully!`);
+    } catch (err) {
+      alert(err.message || "Failed to save receipt.");
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
@@ -66,7 +123,7 @@ export default function Receipts() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Receipt</button>
-          <button className="btn btn-primary" disabled={allocatedTotal > (Number(amountReceived)||0)}><Save size={16} /> Save Receipt</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={allocatedTotal > (Number(amountReceived)||0)}><Save size={16} /> Save Receipt</button>
         </div>
       </div>
 
@@ -82,7 +139,7 @@ export default function Receipts() {
             </div>
             <div className="form-group">
               <label className="form-label">Receipt Date <span className="text-danger">*</span></label>
-              <input type="date" className="form-input" defaultValue={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="form-input" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} />
             </div>
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <div style={{ display: 'flex', gap: '1rem' }}>
@@ -108,11 +165,11 @@ export default function Receipts() {
               <>
                 <div className="form-group">
                   <label className="form-label">Instrument / Cheque No.</label>
-                  <input type="text" className="form-input" placeholder="e.g. 123456" />
+                  <input type="text" className="form-input" placeholder="e.g. 123456" value={chequeNo} onChange={e => setChequeNo(e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Bank Name</label>
-                  <input type="text" className="form-input" placeholder="e.g. HDFC Bank" />
+                  <input type="text" className="form-input" placeholder="e.g. HDFC Bank" value={bankName} onChange={e => setBankName(e.target.value)} />
                 </div>
               </>
             )}
