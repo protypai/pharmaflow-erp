@@ -7,6 +7,10 @@ on:
 
 jobs:
   build-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ia32, x64, arm64]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -46,7 +50,7 @@ jobs:
         working-directory: apps/desktop
 
       - name: Build Electron .exe Installer
-        run: npx electron-builder --config electron-builder.config.js --win nsis --publish never
+        run: npx electron-builder --config electron-builder.config.js --win nsis --${{ matrix.arch }} --publish never
         working-directory: apps/desktop
 
       - name: Locate compiled installer files
@@ -58,17 +62,20 @@ jobs:
           $exeFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
           $metadataFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
 
-          if ($exeFiles.Count -lt 3) { throw "Expected 3 installer EXEs (ia32, x64, arm64) but found $($exeFiles.Count)" }
-          if ($metadataFiles.Count -lt 1) { throw "Expected update metadata file but none was found" }
+          if ($exeFiles.Count -lt 1) { throw "Expected 1 installer EXE for ${{ matrix.arch }} but found none" }
+          if ($metadataFiles.Count -lt 1) { throw "Expected update metadata file for ${{ matrix.arch }} but none was found" }
+
+          $archMetadata = Join-Path "release" "latest-${{ matrix.arch }}.yml"
+          Copy-Item $metadataFiles[0].FullName $archMetadata -Force
         working-directory: apps/desktop
 
       - name: Upload Installer Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-installers
+          name: desktop-installer-${{ matrix.arch }}
           path: |
             apps/desktop/release/*.exe
-            apps/desktop/release/latest*.yml
+            apps/desktop/release/latest-${{ matrix.arch }}.yml
           if-no-files-found: error
 
   publish-release:
