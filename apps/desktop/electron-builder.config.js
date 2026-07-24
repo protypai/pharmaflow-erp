@@ -22,7 +22,7 @@ module.exports = {
     'node_modules/keytar/**/*'
   ],
   win: {
-    target: [{ target: 'nsis', arch: ['x64'] }],
+    target: [{ target: 'nsis', arch: ['ia32', 'x64', 'arm64'] }],
     icon: 'assets/icon.png',
   },
   nsis: {
@@ -31,7 +31,7 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'PharmaFlow ERP',
-    artifactName: '${productName} ${version}.${ext}',
+    artifactName: '${productName} ${version} ${arch}.${ext}',
   },
   publish: {
     provider: 'github',

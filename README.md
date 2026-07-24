@@ -57,7 +57,7 @@ npm run dev
 Push to `main` branch → GitHub Actions builds Docker image → deploys to server automatically.
 
 ### Desktop App (.exe)
-Create a git tag → GitHub Actions builds .exe on Windows VM → uploads to public releases repo.
+Create a git tag → GitHub Actions builds Windows x64 and ARM64 installers on a Windows VM → uploads to the public releases repo.
 
 ```bash
 git tag v1.0.0

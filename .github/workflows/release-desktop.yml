@@ -28,10 +28,6 @@ jobs:
         run: npm ci
         working-directory: apps/desktop
 
-      - name: Rebuild Native SQLite Module for Electron
-        run: npx @electron/rebuild -f -w better-sqlite3
-        working-directory: apps/desktop
-
       - name: Build React UI & Compile TypeScript
         run: npm run build
         working-directory: apps/desktop
@@ -56,11 +52,41 @@ jobs:
       - name: Locate compiled installer files
         run: |
           Write-Host "Looking for .exe files..."
-          Get-ChildItem -Path "release" -Filter "*.exe" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-          Get-ChildItem -Path "release" -Filter "latest.yml" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+          $exeFiles = Get-ChildItem -Path "release" -Filter "*.exe" -ErrorAction SilentlyContinue
+          $metadataFiles = Get-ChildItem -Path "release" -Filter "latest*.yml" -ErrorAction SilentlyContinue
+
+          $exeFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+          $metadataFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+
+          if ($exeFiles.Count -lt 3) { throw "Expected 3 installer EXEs (ia32, x64, arm64) but found $($exeFiles.Count)" }
+          if ($metadataFiles.Count -lt 1) { throw "Expected update metadata file but none was found" }
         working-directory: apps/desktop
 
-      - name: Upload .exe Installer to GitHub Releases
+      - name: Upload Installer Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-installers
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/latest*.yml
+          if-no-files-found: error
+
+  publish-release:
+    needs: build-windows
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Installer Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: List Release Assets
+        run: |
+          Get-ChildItem -Recurse -Path release-assets | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+
+      - name: Upload .exe Installers to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -75,8 +101,8 @@ jobs:
             - **Improved:** Build validation
 
             ### Installation Instructions
-            1. Download `PharmaFlow ERP Setup *.exe`
-            2. Double click to run the installer on your Windows laptop
+            1. Download the installer that matches your Windows architecture
+            2. Double click to run the installer
             3. Follow the quick setup wizard
             4. Launch from your Desktop shortcut
 
@@ -86,9 +112,10 @@ jobs:
 
             ### System Requirements
             - Windows 10 or newer
+            - 32-bit, 64-bit, or ARM64 Windows depending on the installer you download
             - 4GB RAM minimum
             - 500MB free disk space
 
           files: |
-            apps/desktop/release/PharmaFlow ERP *.exe
-            apps/desktop/release/latest.yml
+            release-assets/**/PharmaFlow ERP *.exe
+            release-assets/**/latest*.yml
