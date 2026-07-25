@@ -58,7 +58,11 @@ jobs:
           command_timeout: 60m
           script: |
             set -e
-            cd ~/pharmaflow-erp
+            if [ ! -d "$HOME/pharmaflow-erp" ]; then
+              echo "Directory ~/pharmaflow-erp does not exist. Cloning repository for first-time setup..."
+              git clone https://github.com/protypai/pharmaflow-erp.git "$HOME/pharmaflow-erp"
+            fi
+            cd "$HOME/pharmaflow-erp"
 
             echo "Pulling latest code..."
             git pull origin main
