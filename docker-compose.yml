@@ -31,10 +31,6 @@ services:
 
   backend:
     image: ghcr.io/protypai/pharmaflow-backend:latest
-    build:
-      context: ./apps/cloud-backend
-      dockerfile: Dockerfile
-      network: host
     container_name: pharmaflow-backend
     restart: unless-stopped
     networks: [pharmaflow-network]
