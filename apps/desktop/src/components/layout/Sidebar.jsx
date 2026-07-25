@@ -91,6 +91,24 @@ const navConfig = [
 
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
+  const [companyInfo, setCompanyInfo] = useState({ name: 'Company Name', shortName: 'CN' });
+  const [userInfo, setUserInfo] = useState({ name: 'User', role: 'admin' });
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const compRes = await window.pharmaAPI.db.query("SELECT * FROM Company LIMIT 1");
+        if (compRes?.data?.length > 0) setCompanyInfo(compRes.data[0]);
+
+        const userRes = await window.pharmaAPI.db.query("SELECT * FROM User LIMIT 1");
+        if (userRes?.data?.length > 0) setUserInfo(userRes.data[0]);
+      } catch (err) {
+        console.error("Failed to load profile data", err);
+      }
+    };
+    fetchProfile();
+  }, []);
+
   const [openGroups, setOpenGroups] = useState(() => {
     // Auto-open the group that contains the active route
     const active = {};
@@ -192,7 +210,6 @@ export default function Sidebar({ collapsed, onToggle }) {
         })}
       </nav>
 
-      {/* Footer */}
       <div 
         className="sidebar-footer" 
         onClick={() => {
@@ -202,11 +219,11 @@ export default function Sidebar({ collapsed, onToggle }) {
         }}
         style={{ cursor: 'pointer' }}
       >
-        <div className="sidebar-footer-avatar">SM</div>
+        <div className="sidebar-footer-avatar">{(companyInfo.shortName || companyInfo.name || 'CN').substring(0, 2).toUpperCase()}</div>
         {!collapsed && (
           <div className="sidebar-footer-info">
-            <div className="sidebar-footer-name">Sharma Medicals</div>
-            <div className="sidebar-footer-role">Admin</div>
+            <div className="sidebar-footer-name">{companyInfo.name}</div>
+            <div className="sidebar-footer-role">{userInfo.role}</div>
           </div>
         )}
       </div>

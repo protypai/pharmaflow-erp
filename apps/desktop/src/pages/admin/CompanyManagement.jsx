@@ -8,6 +8,7 @@ export default function CompanyManagement() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'pending' | 'active'
+  const [selectedCompany, setSelectedCompany] = useState(null);
 
   const fetchCompanies = async () => {
     setLoading(true);
@@ -244,6 +245,13 @@ export default function CompanyManagement() {
                             {company.isActive ? ' Deactivate' : ' Activate'}
                           </button>
                         )}
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setSelectedCompany(company)}
+                          style={{ fontSize: '0.78rem' }}
+                        >
+                          <Building2 size={14} /> Profile
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -253,6 +261,60 @@ export default function CompanyManagement() {
           </table>
         )}
       </div>
+
+      {/* Company Details Modal */}
+      {selectedCompany && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div className="card" style={{ width: '600px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Company Profile Details</h3>
+              <button onClick={() => setSelectedCompany(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><XCircle size={20} /></button>
+            </div>
+            <div className="card-body">
+              <h4 style={{ color: 'var(--primary)', marginBottom: '1rem', marginTop: 0 }}>Basic Info</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div><strong>Legal Name:</strong> {selectedCompany.name}</div>
+                <div><strong>Trade Name:</strong> {selectedCompany.shortName || 'N/A'}</div>
+                <div><strong>Est. Year:</strong> {selectedCompany.estYear || 'N/A'}</div>
+                <div><strong>Authorized Signatory:</strong> {selectedCompany.authorizedSign || 'N/A'}</div>
+              </div>
+
+              <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Contact & Address</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div><strong>Address:</strong> {selectedCompany.address || 'N/A'}, {selectedCompany.city || 'N/A'}, {selectedCompany.state || 'N/A'} - {selectedCompany.pincode || 'N/A'}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div><strong>Phone:</strong> {selectedCompany.phone || 'N/A'}</div>
+                  <div><strong>Email:</strong> {selectedCompany.email || 'N/A'}</div>
+                </div>
+              </div>
+
+              <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Licenses & Tax</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div><strong>GSTIN:</strong> {selectedCompany.gstin || 'N/A'}</div>
+                <div><strong>PAN:</strong> {selectedCompany.pan || 'N/A'}</div>
+                <div><strong>Drug License (20B):</strong> {selectedCompany.drugLicense20B || 'N/A'}</div>
+                <div><strong>Drug License (21B):</strong> {selectedCompany.drugLicense21B || 'N/A'}</div>
+                <div><strong>FSSAI License:</strong> {selectedCompany.fssaiLicense || 'N/A'}</div>
+              </div>
+
+              <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Bank Details</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div><strong>Bank Name:</strong> {selectedCompany.bankName || 'N/A'}</div>
+                <div><strong>Account No:</strong> {selectedCompany.bankAccount || 'N/A'}</div>
+                <div><strong>IFSC Code:</strong> {selectedCompany.bankIfsc || 'N/A'}</div>
+                <div><strong>UPI ID:</strong> {selectedCompany.upiId || 'N/A'}</div>
+              </div>
+            </div>
+            <div className="card-footer" style={{ textAlign: 'right' }}>
+              <button className="btn btn-outline" onClick={() => setSelectedCompany(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

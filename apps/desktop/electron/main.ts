@@ -41,6 +41,9 @@ async function createWindow() {
     backgroundColor: '#F1F5F9',
   });
 
+  // CRITICAL FIX: Destroy the native Windows menu bar so it cannot steal keyboard focus when ALT is pressed
+  mainWindow.setMenu(null);
+
   // Load URL - use app.getAppPath() so it works in packaged .exe too
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');

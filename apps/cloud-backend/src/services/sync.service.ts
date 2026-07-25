@@ -41,6 +41,8 @@ export const processSyncQueue = async (companyId: string, items: any[]) => {
 
 async function applyRecord(tableName: string, operation: string, payload: any, companyId: string) {
   const tableMap: Record<string, any> = {
+    Company: db.company,
+    User: db.user,
     Sale: db.sale,
     Purchase: db.purchase,
     Receipt: db.receipt,
@@ -58,10 +60,15 @@ async function applyRecord(tableName: string, operation: string, payload: any, c
   const model = tableMap[tableName];
   if (!model) throw new Error(`Unknown table: ${tableName}`);
 
+  // Special case for Company table: it doesn't have a companyId foreign key (its id IS the companyId)
+  const createPayload = tableName === 'Company' 
+    ? { ...payload } 
+    : { ...payload, companyId };
+
   if (operation === 'create') {
     await model.upsert({
       where: { id: payload.id },
-      create: { ...payload, companyId },
+      create: createPayload,
       update: payload,
     });
   } else if (operation === 'update') {

@@ -51,6 +51,27 @@ export default function Header({ collapsed, onToggle, pathname }) {
   const [newVersion, setNewVersion] = useState(currentAppVersion);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
+  
+  const [companyInfo, setCompanyInfo] = useState({ name: 'Company Name', shortName: 'CN' });
+  const [userInfo, setUserInfo] = useState({ name: 'User', role: 'admin' });
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const compRes = await window.pharmaAPI.db.query("SELECT * FROM Company LIMIT 1");
+        if (compRes?.data?.length > 0) {
+          setCompanyInfo(compRes.data[0]);
+        }
+        const userRes = await window.pharmaAPI.db.query("SELECT * FROM User LIMIT 1");
+        if (userRes?.data?.length > 0) {
+          setUserInfo(userRes.data[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load profile data", err);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   useEffect(() => {
     if (window.pharmaAPI?.update) {
@@ -242,7 +263,7 @@ export default function Header({ collapsed, onToggle, pathname }) {
               onClick={() => setProfileOpen(!profileOpen)}
               id="profile-avatar"
             >
-              SM
+              {(companyInfo.shortName || companyInfo.name || 'CN').substring(0, 2).toUpperCase()}
             </div>
             {profileOpen && (
               <div style={{
@@ -253,8 +274,8 @@ export default function Header({ collapsed, onToggle, pathname }) {
                 overflow: 'hidden',
               }}>
                 <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>Sharma Medicals</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>FY 2025-26 • Admin</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{companyInfo.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>FY 2025-26 • {userInfo.role}</div>
                 </div>
                 <div style={{ padding: '0.25rem 0' }}>
                   {[
