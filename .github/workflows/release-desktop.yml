@@ -39,7 +39,7 @@ jobs:
         env:
           VITE_CLOUD_API_URL: ${{ secrets.VITE_CLOUD_API_URL != '' && secrets.VITE_CLOUD_API_URL || format('http://{0}', secrets.SSH_HOST) }}
           VITE_APP_VERSION: ${{ github.ref_name }}
-          VITE_UPDATER_REPO: protypai/pharmaflow-releases
+          VITE_UPDATER_REPO: protypai/pharmaflow-erp
 
       - name: Verify Build Output
         run: |

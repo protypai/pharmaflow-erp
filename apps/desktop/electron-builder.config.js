@@ -36,7 +36,7 @@ module.exports = {
   publish: {
     provider: 'github',
     owner: 'protypai',
-    repo: 'pharmaflow-releases',
+    repo: 'pharmaflow-erp',
     private: false,
   },
 };
