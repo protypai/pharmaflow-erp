@@ -8,6 +8,7 @@ on:
       - 'apps/cloud-backend/**'
       - 'docker-compose.yml'
       - 'nginx/**'
+      - '.github/workflows/**'
 
 concurrency:
   group: production-deploy
