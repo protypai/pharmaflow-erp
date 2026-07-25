@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pill, Eye, EyeOff, Lock, User, ArrowRight, Shield } from 'lucide-react';
+import { Pill, Eye, EyeOff, Lock, User, ArrowRight, Shield, Sparkles, Download } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 
 export default function Login() {
@@ -10,6 +10,7 @@ export default function Login() {
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasUpdate, setHasUpdate] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -182,6 +183,33 @@ export default function Login() {
         boxShadow: '-8px 0 40px rgba(0,0,0,0.06)',
       }}>
         <div style={{ width: '100%', maxWidth: 380 }}>
+          {/* Software Update Notification Banner */}
+          <div style={{
+            background: '#EFF6FF', border: '1px solid #BFDBFE',
+            borderRadius: '8px', padding: '0.75rem 1rem',
+            marginBottom: '1.5rem', display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: '0.75rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Sparkles size={16} color="#2563EB" />
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1E40AF' }}>Update Available</div>
+                <div style={{ fontSize: '0.72rem', color: '#3B82F6' }}>v1.0.30 is ready to install</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                alert('Installing latest update...');
+                window.location.reload();
+              }}
+              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+            >
+              <Download size={12} /> Update
+            </button>
+          </div>
+
           <div style={{ marginBottom: '2.5rem' }}>
             <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
               Welcome back

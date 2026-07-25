@@ -123,11 +123,13 @@ export default function AdminDashboard() {
                 <tbody>
                   {adminActivityLogs.slice(0, 6).map(log => (
                     <tr key={log.id}>
-                      <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{log.time}</td>
-                      <td style={{ fontWeight: 500 }}>{log.company}</td>
+                      <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {log.time || (log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : 'N/A')}
+                      </td>
+                      <td style={{ fontWeight: 500 }}>{log.company || log.companyId || 'System'}</td>
                       <td>
-                        <span style={{ fontSize: '0.8rem' }}>{log.action}</span>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{log.details}</div>
+                        <span style={{ fontSize: '0.8rem' }}>{log.action || log.operation || 'Activity Log'}</span>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{log.details || log.tableName || ''}</div>
                       </td>
                     </tr>
                   ))}
@@ -155,13 +157,13 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {adminCompanies.map(c => {
-                    const isOverdue = c.lastBackup.includes('2025-06') || c.lastBackup.includes('2025-07-18');
+                    const isOverdue = c.lastBackup ? (c.lastBackup.includes('2025-06') || c.lastBackup.includes('2025-07-18')) : false;
                     return (
                       <tr key={c.id}>
                         <td style={{ fontWeight: 500 }}>{c.name}</td>
                         <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Clock size={12} /> {c.lastBackup}
+                            <Clock size={12} /> {c.lastBackup || 'No backup yet'}
                           </div>
                         </td>
                         <td>
