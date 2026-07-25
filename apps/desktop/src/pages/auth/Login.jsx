@@ -286,15 +286,6 @@ export default function Login() {
               )}
             </button>
 
-            {/* Demo credentials hint */}
-            <div style={{
-              background: 'var(--primary-50)', border: '1px solid var(--primary-light)',
-              borderRadius: 'var(--radius-sm)', padding: '0.625rem 0.875rem',
-              fontSize: '0.75rem', color: 'var(--primary-darker)',
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-            }}>
-              <span><strong>Demo:</strong> Store Admin: demo@pharmaflow.in / Password@123</span>
-            </div>
           </form>
 
           {/* Register & Admin Links */}

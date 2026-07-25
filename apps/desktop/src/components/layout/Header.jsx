@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, Menu, X, ChevronDown, LogOut, Settings, User, Pill, Users, Truck, Package, FileText } from 'lucide-react';
+import { Search, Bell, Menu, X, ChevronDown, LogOut, Settings, User, Pill, Users, Truck, Package, FileText, Download, Sparkles } from 'lucide-react';
 
 const pageTitles = {
   '/dashboard': { title: 'Dashboard', sub: 'Overview of today\'s business' },
@@ -47,6 +47,9 @@ export default function Header({ collapsed, onToggle, pathname }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [newVersion, setNewVersion] = useState('v1.0.28');
   const [highlighted, setHighlighted] = useState(0);
   const searchRef = useRef(null);
   const navigate = useNavigate();
@@ -138,6 +141,73 @@ export default function Header({ collapsed, onToggle, pathname }) {
 
         {/* Actions */}
         <div className="header-actions">
+          {/* Persistent Round Update Icon */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className="header-icon-btn"
+              onClick={() => setUpdateOpen(!updateOpen)}
+              title="Software Updates"
+              style={{
+                background: updateAvailable ? '#EFF6FF' : 'transparent',
+                borderColor: updateAvailable ? '#3B82F6' : 'transparent',
+                color: updateAvailable ? '#2563EB' : 'var(--text-secondary)',
+                position: 'relative',
+              }}
+            >
+              <Download size={17} />
+              {updateAvailable && (
+                <span style={{
+                  position: 'absolute', top: 2, right: 2,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: '#2563EB', boxShadow: '0 0 8px #2563EB',
+                  animation: 'pulse 1.5s infinite'
+                }} />
+              )}
+            </button>
+
+            {updateOpen && (
+              <div style={{
+                position: 'absolute', top: '40px', right: 0,
+                background: 'white', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',
+                minWidth: '280px', padding: '1rem', zIndex: 210,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.88rem' }}>
+                  <Sparkles size={16} color="#2563EB" />
+                  Software Updates
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: '0.75rem' }}>
+                  {updateAvailable
+                    ? `New version ${newVersion} is ready to install!`
+                    : 'Your PharmaFlow ERP is up to date (v1.0.28).'}
+                </div>
+                {updateAvailable ? (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => {
+                      alert('Installing latest update...');
+                      window.location.reload();
+                    }}
+                  >
+                    <Download size={14} /> Install Update Now
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => {
+                      setUpdateAvailable(true);
+                      setNewVersion('v1.0.28');
+                    }}
+                  >
+                    Check for Updates
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           <button className="header-icon-btn" id="notifications-btn">
             <Bell size={17} />
             <span className="header-badge" />

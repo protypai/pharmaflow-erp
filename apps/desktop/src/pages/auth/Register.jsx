@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pill, User, Lock, Mail, Building, Phone, MapPin, ArrowRight, CheckCircle } from 'lucide-react';
+import { Pill, User, Lock, Mail, Building, Phone, MapPin, ArrowRight, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 
 export default function Register() {
@@ -16,6 +16,7 @@ export default function Register() {
     gstin: '',
   });
 
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -229,13 +230,25 @@ export default function Register() {
                   <span className="input-icon"><Lock size={15} /></span>
                   <input
                     className="form-input"
-                    type="password"
+                    type={showPass ? 'text' : 'password'}
                     name="password"
                     placeholder="Create a strong password"
                     value={formData.password}
                     onChange={handleChange}
+                    style={{ paddingRight: '2.5rem' }}
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    style={{
+                      position: 'absolute', right: '0.625rem',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
                 </div>
               </div>
 

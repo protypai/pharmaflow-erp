@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, Users, Database, ShieldAlert, Activity, CheckCircle2, Clock } from 'lucide-react';
-
+import { API_BASE_URL } from '../../config/api';
 
 export default function AdminDashboard() {
   const [adminCompanies, set_adminCompanies] = useState([]);
@@ -8,15 +8,34 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
-      set_adminCompanies([]);
-      set_adminActivityLogs([]);
+      try {
+        const token = localStorage.getItem('adminToken');
+        if (!token) return;
+        const res = await fetch(`${API_BASE_URL}/api/v1/admin/companies`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          set_adminCompanies(data.data);
+        }
+        
+        const logsRes = await fetch(`${API_BASE_URL}/api/v1/admin/activity-logs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const logsData = await logsRes.json();
+        if (logsData.success && logsData.data) {
+          set_adminActivityLogs(logsData.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch admin dashboard data:', err);
+      }
     };
     fetchData();
   }, []);
 
-  const activeCompanies = adminCompanies.filter(c => c.status === 'active').length;
-  const inactiveCompanies = adminCompanies.filter(c => c.status === 'inactive').length;
-  const trialCompanies = adminCompanies.filter(c => c.plan === 'Trial').length;
+  const activeCompanies = adminCompanies.filter(c => c.isActive || c.subscriptionStatus === 'active').length;
+  const inactiveCompanies = adminCompanies.filter(c => !c.isActive || c.subscriptionStatus === 'inactive').length;
+  const trialCompanies = adminCompanies.filter(c => c.subscriptionStatus === 'trial').length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

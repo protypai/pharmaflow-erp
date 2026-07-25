@@ -35,7 +35,7 @@ export const registerCompany = async (data: RegisterPayload) => {
         phone: data.phone,
         city: data.city,
         state: data.state,
-        subscriptionStatus: 'pending',
+        subscriptionStatus: 'trial',
         subscriptionExpiry: trialExpiry,
         isActive: false, // Requires Super Admin approval
       },
