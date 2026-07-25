@@ -45,7 +45,8 @@ function CustomerReport() {
         SELECT c.*, 
                COUNT(s.id) as totalOrders,
                SUM(s.net_amount) as totalRevenue,
-               SUM(s.net_amount - s.paid_amount) as outstandingBalance
+               (SELECT SUM(amount) FROM receipts WHERE customer_id = c.id) as totalReceipts,
+               (SELECT SUM(net_amount) FROM sale_returns WHERE customer_id = c.id) as totalReturns
         FROM customers c
         LEFT JOIN sales s ON c.id = s.customer_id
         GROUP BY c.id
@@ -61,11 +62,12 @@ function CustomerReport() {
             const totalOrders = c.totalOrders || 0;
             const totalRevenue = c.totalRevenue || 0;
             const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
-            const outstandingBalance = (c.opening_balance || 0) + (c.outstandingBalance || 0);
+            const netRevenue = totalRevenue - (c.totalReturns || 0);
+            const outstandingBalance = (c.opening_balance || 0) + netRevenue - (c.totalReceipts || 0);
             return {
                 ...c,
                 totalOrders,
-                totalRevenue,
+                totalRevenue: netRevenue,
                 avgOrderValue,
                 outstandingBalance
             };

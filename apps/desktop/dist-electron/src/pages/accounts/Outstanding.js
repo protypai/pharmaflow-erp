@@ -42,9 +42,21 @@ function Outstanding() {
     const [suppliers, set_suppliers] = (0, react_1.useState)([]);
     (0, react_1.useEffect)(() => {
         const fetchData = async () => {
-            const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
+            const res_customers = await window.pharmaAPI.db.query(`
+        SELECT c.*,
+               (SELECT SUM(net_amount) FROM sales WHERE customer_id = c.id) as totalBilled,
+               (SELECT SUM(amount) FROM receipts WHERE customer_id = c.id) as totalPaid,
+               (SELECT MIN(date) FROM sales WHERE customer_id = c.id AND (net_amount - paid_amount) > 0) as oldestDue
+        FROM customers c
+      `);
             set_customers(res_customers?.data || []);
-            const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+            const res_suppliers = await window.pharmaAPI.db.query(`
+        SELECT s.*,
+               (SELECT SUM(net_amount) FROM purchases WHERE supplier_id = s.id) as totalBilled,
+               (SELECT SUM(amount) FROM payments WHERE supplier_id = s.id) as totalPaid,
+               (SELECT MIN(invoice_date) FROM purchases WHERE supplier_id = s.id AND (net_amount - paid_amount) > 0) as oldestDue
+        FROM suppliers s
+      `);
             set_suppliers(res_suppliers?.data || []);
         };
         fetchData();
@@ -56,10 +68,12 @@ function Outstanding() {
         if (viewType === 'receivables') {
             // Customers owe money TO the pharmacy
             data = customers.map(c => {
-                // Mock pending calculation based on credit limit
-                const pendingAmt = c.outstanding;
-                const totalBilled = pendingAmt + (c.id * 15000); // Mock total billed
-                const oldestDueDays = c.id * 5; // Mock days due
+                const totalBilled = c.totalBilled || 0;
+                const pendingAmt = (c.opening_balance || 0) + totalBilled - (c.totalPaid || 0);
+                let oldestDueDays = 0;
+                if (c.oldestDue) {
+                    oldestDueDays = Math.ceil((new Date() - new Date(c.oldestDue)) / (1000 * 60 * 60 * 24));
+                }
                 return {
                     id: c.id,
                     partyName: c.name,
@@ -67,27 +81,29 @@ function Outstanding() {
                     city: c.area || c.city,
                     totalBilled,
                     pendingAmt,
-                    oldestDueDays,
-                    status: oldestDueDays > 30 ? 'Overdue' : 'Normal'
+                    oldestDueDays: Math.max(0, oldestDueDays),
+                    status: oldestDueDays > (c.credit_days || 30) ? 'Overdue' : 'Normal'
                 };
             }).filter(x => x.pendingAmt > 0);
         }
         else {
             // Pharmacy owes money TO suppliers
             data = suppliers.map(s => {
-                // Mock pending calculation
-                const pendingAmt = s.id * 25000;
-                const totalBilled = pendingAmt + 100000;
-                const oldestDueDays = s.id * 10;
+                const totalBilled = s.totalBilled || 0;
+                const pendingAmt = (s.opening_balance || 0) + totalBilled - (s.totalPaid || 0);
+                let oldestDueDays = 0;
+                if (s.oldestDue) {
+                    oldestDueDays = Math.ceil((new Date() - new Date(s.oldestDue)) / (1000 * 60 * 60 * 24));
+                }
                 return {
                     id: s.id,
                     partyName: s.name,
-                    contact: s.contactPerson || 'N/A',
+                    contact: s.contactPerson || s.phone || 'N/A',
                     city: s.city,
                     totalBilled,
                     pendingAmt,
-                    oldestDueDays,
-                    status: oldestDueDays > 45 ? 'Overdue' : 'Normal'
+                    oldestDueDays: Math.max(0, oldestDueDays),
+                    status: oldestDueDays > (s.credit_days || 45) ? 'Overdue' : 'Normal'
                 };
             }).filter(x => x.pendingAmt > 0);
         }

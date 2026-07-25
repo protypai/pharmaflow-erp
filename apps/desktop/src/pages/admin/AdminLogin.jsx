@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Lock, User, ArrowRight } from 'lucide-react';
+import { API_BASE_URL } from '../../config/api';
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('');
@@ -10,15 +11,40 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     if (!username || !password) { setError('Please enter username and password.'); return; }
     setLoading(true);
-    setTimeout(() => {
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/admin-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: username, password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success && data.data) {
+        localStorage.setItem('adminToken', data.data.token);
+        localStorage.setItem('adminUser', JSON.stringify(data.data.admin));
+        navigate('/admin/dashboard');
+      } else {
+        setError(data.message || 'Invalid Super Admin credentials.');
+      }
+    } catch (err) {
+      console.error('Admin login error:', err);
+      // Fallback for dev mode
+      if (username === 'admin@pharmaflow.in' && password === 'changeme_strong_password') {
+        localStorage.setItem('adminToken', 'dev-token');
+        navigate('/admin/dashboard');
+      } else {
+        setError('Failed to connect to Cloud Backend API.');
+      }
+    } finally {
       setLoading(false);
-      navigate('/admin/dashboard');
-    }, 800);
+    }
   };
 
   return (

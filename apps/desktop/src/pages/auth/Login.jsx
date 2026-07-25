@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pill, Eye, EyeOff, Lock, User, ArrowRight, Shield } from 'lucide-react';
+import { API_BASE_URL } from '../../config/api';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -16,26 +17,78 @@ export default function Login() {
     setError('');
     if (!username || !password) { setError('Please enter username and password.'); return; }
     setLoading(true);
-    
-    try {
-      // Query the local SQLite database via IPC
-      const response = await window.pharmaAPI.db.query(
-        'SELECT id, name, companyId, role FROM User WHERE email = ? AND passwordHash = ? AND isActive = 1',
-        [username, password]
-      );
-      
-      const users = response?.data;
 
-      if (users && users.length > 0) {
-        // Success
-        localStorage.setItem('user', JSON.stringify(users[0]));
-        navigate('/dashboard');
-      } else {
-        setError('Invalid username or password.');
+    try {
+      // 1. Try Cloud Backend Auth first
+      let cloudSuccess = false;
+      try {
+        const cloudRes = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: username, password }),
+        });
+
+        const cloudData = await cloudRes.json();
+
+        if (cloudRes.status === 403 || (cloudData.message && cloudData.message.includes('pending'))) {
+          setError('Your account is pending Super Admin approval. Please contact administrator.');
+          setLoading(false);
+          return;
+        }
+
+        if (cloudRes.ok && cloudData.success && cloudData.data) {
+          const { accessToken, refreshToken, user } = cloudData.data;
+          localStorage.setItem('user', JSON.stringify(user));
+          localStorage.setItem('accessToken', accessToken);
+          localStorage.setItem('refreshToken', refreshToken);
+
+          // Sync into local SQLite if window.pharmaAPI exists
+          if (window.pharmaAPI?.db) {
+            try {
+              if (user.company) {
+                await window.pharmaAPI.db.query(
+                  'INSERT OR REPLACE INTO Company (id, name, shortName, email) VALUES (?, ?, ?, ?)',
+                  [user.company.id, user.company.name, user.company.shortName || user.company.name, user.email]
+                );
+              }
+              await window.pharmaAPI.db.query(
+                'INSERT OR REPLACE INTO User (id, companyId, name, email, passwordHash, role, isActive) VALUES (?, ?, ?, ?, ?, ?, 1)',
+                [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, password, user.role || 'admin']
+              );
+            } catch (sqErr) {
+              console.warn('Local SQLite sync warning:', sqErr);
+            }
+          }
+
+          cloudSuccess = true;
+          navigate('/dashboard');
+          return;
+        }
+      } catch (cloudErr) {
+        console.warn('Cloud Backend unreachable, attempting local authentication...', cloudErr);
       }
+
+      if (cloudSuccess) return;
+
+      // 2. Fallback to local SQLite DB if cloud unavailable
+      if (window.pharmaAPI?.db) {
+        const response = await window.pharmaAPI.db.query(
+          'SELECT id, name, companyId, role FROM User WHERE email = ? AND passwordHash = ? AND isActive = 1',
+          [username, password]
+        );
+
+        const users = response?.data;
+        if (users && users.length > 0) {
+          localStorage.setItem('user', JSON.stringify(users[0]));
+          navigate('/dashboard');
+          return;
+        }
+      }
+
+      setError('Invalid username or password, or account is pending approval.');
     } catch (err) {
       console.error('Login error:', err);
-      setError('Database error: ' + (err.message || 'Failed to query'));
+      setError('Login error: ' + (err.message || 'Failed to authenticate'));
     } finally {
       setLoading(false);
     }
@@ -244,8 +297,15 @@ export default function Login() {
             </div>
           </form>
 
-          {/* Admin Link */}
-          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+          {/* Register & Admin Links */}
+          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <a
+              href="/register"
+              style={{ fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 600 }}
+              onClick={(e) => { e.preventDefault(); navigate('/register'); }}
+            >
+              Register New Company
+            </a>
             <a
               href="/admin/login"
               style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}

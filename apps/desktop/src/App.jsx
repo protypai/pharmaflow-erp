@@ -4,6 +4,7 @@ import AppLayout from './components/layout/AppLayout';
 
 // Auth
 import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
 
 // Dashboard
 import Dashboard from './pages/dashboard/Dashboard';
@@ -79,6 +80,7 @@ export default function App() {
       <Routes>
         {/* Auth */}
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
         {/* Admin Portal */}
         <Route path="/admin/login" element={<AdminLogin />} />

@@ -28,6 +28,32 @@ export const toggleCompany = asyncHandler(async (req: Request, res: Response) =>
   sendSuccess(res, updated, `Company ${updated.isActive ? 'activated' : 'deactivated'}`);
 });
 
+export const approveCompany = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const company = await db.company.findUnique({ where: { id } });
+  if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
+
+  const trialExpiry = new Date();
+  trialExpiry.setDate(trialExpiry.getDate() + 14);
+
+  const updatedCompany = await db.company.update({
+    where: { id },
+    data: {
+      isActive: true,
+      subscriptionStatus: 'active',
+      subscriptionExpiry: trialExpiry,
+    },
+  });
+
+  // Activate all users under this company
+  await db.user.updateMany({
+    where: { companyId: id },
+    data: { isActive: true },
+  });
+
+  sendSuccess(res, updatedCompany, 'Company and users approved and activated successfully');
+});
+
 export const updateSubscription = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const { subscriptionStatus, expiryDays } = req.body;

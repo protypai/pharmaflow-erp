@@ -36,7 +36,7 @@ jobs:
         run: npm run build
         working-directory: apps/desktop
         env:
-          VITE_CLOUD_API_URL: https://api.pharmaflow.in
+          VITE_CLOUD_API_URL: ${{ secrets.VITE_CLOUD_API_URL != '' && secrets.VITE_CLOUD_API_URL || format('http://{0}:5000', secrets.SSH_HOST) }}
           VITE_APP_VERSION: ${{ github.ref_name }}
           VITE_UPDATER_REPO: protypai/pharmaflow-releases
 
@@ -113,9 +113,8 @@ jobs:
             3. Follow the quick setup wizard
             4. Launch from your Desktop shortcut
 
-            ### Default Team Credentials
-            - **Store Admin**: `demo@pharmaflow.in` / `Password@123`
-            - **Super Admin**: `admin@pharmaflow.in` / `Admin@123`
+            ### Default Access
+            - Configure the store admin and super admin accounts from your deployment secrets before first use.
 
             ### System Requirements
             - Windows 10 or newer

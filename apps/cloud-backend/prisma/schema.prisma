@@ -16,6 +16,7 @@ enum UserRole {
 }
 
 enum SubscriptionStatus {
+  pending
   trial
   active
   inactive

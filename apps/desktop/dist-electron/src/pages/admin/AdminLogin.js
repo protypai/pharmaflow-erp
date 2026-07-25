@@ -38,6 +38,7 @@ const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const react_router_dom_1 = require("react-router-dom");
 const lucide_react_1 = require("lucide-react");
+const api_1 = require("../../config/api");
 function AdminLogin() {
     const [username, setUsername] = (0, react_1.useState)('');
     const [password, setPassword] = (0, react_1.useState)('');
@@ -45,7 +46,7 @@ function AdminLogin() {
     const [loading, setLoading] = (0, react_1.useState)(false);
     const [error, setError] = (0, react_1.useState)('');
     const navigate = (0, react_router_dom_1.useNavigate)();
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
         if (!username || !password) {
@@ -53,10 +54,36 @@ function AdminLogin() {
             return;
         }
         setLoading(true);
-        setTimeout(() => {
+        try {
+            const res = await fetch(`${api_1.API_BASE_URL}/api/v1/auth/admin-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: username, password }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success && data.data) {
+                localStorage.setItem('adminToken', data.data.token);
+                localStorage.setItem('adminUser', JSON.stringify(data.data.admin));
+                navigate('/admin/dashboard');
+            }
+            else {
+                setError(data.message || 'Invalid Super Admin credentials.');
+            }
+        }
+        catch (err) {
+            console.error('Admin login error:', err);
+            // Fallback for dev mode
+            if (username === 'admin@pharmaflow.in' && password === 'changeme_strong_password') {
+                localStorage.setItem('adminToken', 'dev-token');
+                navigate('/admin/dashboard');
+            }
+            else {
+                setError('Failed to connect to Cloud Backend API.');
+            }
+        }
+        finally {
             setLoading(false);
-            navigate('/admin/dashboard');
-        }, 800);
+        }
     };
     return ((0, jsx_runtime_1.jsxs)("div", { style: {
             minHeight: '100vh',

@@ -42,7 +42,16 @@ function ProfitReport() {
     const [categories, set_categories] = (0, react_1.useState)([]);
     (0, react_1.useEffect)(() => {
         const fetchData = async () => {
-            const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
+            const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*, c.name as categoryName,
+               SUM(si.qty) as qtySold,
+               SUM(si.net_amount) as salesRevenue,
+               SUM(si.qty * si.ptr) as cogs
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN sale_items si ON p.id = si.product_id
+        GROUP BY p.id
+      `);
             set_products(res_products?.data || []);
             const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
             set_categories(res_categories?.data || []);
@@ -56,13 +65,9 @@ function ProfitReport() {
         let data = [];
         if (groupBy === 'product') {
             data = products.map(p => {
-                // Mock sales volume for this period
-                const qtySold = (p.id * 15) + 10;
-                // Revenue is qty * MRP
-                const salesRevenue = qtySold * p.mrp;
-                // COGS (Cost of Goods Sold) is qty * PTR (we mocked PTR as 70% of MRP earlier)
-                const ptr = p.mrp * 0.7;
-                const cogs = qtySold * ptr;
+                const qtySold = p.qtySold || 0;
+                const salesRevenue = p.salesRevenue || 0;
+                const cogs = p.cogs || 0;
                 const grossProfit = salesRevenue - cogs;
                 const marginPercent = salesRevenue > 0 ? (grossProfit / salesRevenue) * 100 : 0;
                 return {
@@ -80,15 +85,14 @@ function ProfitReport() {
         else if (groupBy === 'category') {
             data = categories.map(c => {
                 // Find all products in this category to aggregate
-                const catProducts = products.filter(p => p.categoryId === c.id);
+                const catProducts = products.filter(p => p.category_id === c.id);
                 let totalQty = 0;
                 let totalRevenue = 0;
                 let totalCogs = 0;
                 catProducts.forEach(p => {
-                    const qty = (p.id * 15) + 10;
-                    totalQty += qty;
-                    totalRevenue += qty * p.mrp;
-                    totalCogs += qty * (p.mrp * 0.7);
+                    totalQty += (p.qtySold || 0);
+                    totalRevenue += (p.salesRevenue || 0);
+                    totalCogs += (p.cogs || 0);
                 });
                 const grossProfit = totalRevenue - totalCogs;
                 const marginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;

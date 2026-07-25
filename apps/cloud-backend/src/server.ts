@@ -7,6 +7,15 @@ const PORT = parseInt(env.PORT);
 
 async function start() {
   await connectDb();
+  if (process.env.RUN_SEEDING === 'true') {
+    try {
+      logger.info('RUN_SEEDING is true, running seed script...');
+      const { execSync } = await import('child_process');
+      execSync('npx prisma db seed', { stdio: 'inherit' });
+    } catch (seedErr) {
+      logger.warn('Seed execution warning:', seedErr);
+    }
+  }
   const server = app.listen(PORT, () => {
     logger.info(`PharmaFlow Cloud Backend running on port ${PORT}`);
     logger.info(`Environment: ${env.NODE_ENV}`);

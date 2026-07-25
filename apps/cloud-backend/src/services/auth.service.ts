@@ -22,7 +22,7 @@ export const registerCompany = async (data: RegisterPayload) => {
   }
 
   const trialExpiry = new Date();
-  trialExpiry.setDate(trialExpiry.getDate() + 14); // 14-day trial
+  trialExpiry.setDate(trialExpiry.getDate() + 14); // 14-day trial after approval
 
   const passwordHash = await bcrypt.hash(data.password, 12);
 
@@ -35,9 +35,9 @@ export const registerCompany = async (data: RegisterPayload) => {
         phone: data.phone,
         city: data.city,
         state: data.state,
-        subscriptionStatus: 'trial',
+        subscriptionStatus: 'pending',
         subscriptionExpiry: trialExpiry,
-        isActive: true,
+        isActive: false, // Requires Super Admin approval
       },
     });
 
@@ -48,25 +48,12 @@ export const registerCompany = async (data: RegisterPayload) => {
         email: data.email,
         passwordHash,
         role: 'admin',
-        isActive: true,
-      },
-    });
-
-    const payload = { userId: user.id, companyId: company.id, role: user.role };
-    const accessToken = signAccessToken(payload);
-    const refreshToken = signRefreshToken(payload);
-
-    await tx.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: refreshToken,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        isActive: false, // Requires Super Admin approval
       },
     });
 
     return {
-      accessToken,
-      refreshToken,
+      message: 'Registration successful. Account is pending Super Admin approval.',
       user: {
         id: user.id,
         name: user.name,
@@ -80,9 +67,14 @@ export const registerCompany = async (data: RegisterPayload) => {
 
 export const loginUser = async (email: string, password: string) => {
   const user = await db.user.findUnique({ where: { email }, include: { company: true } });
-  if (!user || !user.isActive) throw new AppError('Invalid credentials', 401);
+  if (!user) throw new AppError('Invalid credentials', 401);
+
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw new AppError('Invalid credentials', 401);
+
+  if (!user.isActive || !user.company.isActive || user.company.subscriptionStatus === 'pending') {
+    throw new AppError('Your account is pending Super Admin approval. Please contact administrator.', 403);
+  }
 
   const payload = { userId: user.id, companyId: user.companyId, role: user.role };
   const accessToken = signAccessToken(payload);

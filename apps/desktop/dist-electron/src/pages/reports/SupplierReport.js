@@ -41,7 +41,16 @@ function SupplierReport() {
     const [suppliers, set_suppliers] = (0, react_1.useState)([]);
     (0, react_1.useEffect)(() => {
         const fetchData = async () => {
-            const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+            const res_suppliers = await window.pharmaAPI.db.query(`
+        SELECT s.*, 
+               COUNT(p.id) as totalInvoices,
+               SUM(p.net_amount) as totalProcurement,
+               (SELECT SUM(amount) FROM payments WHERE supplier_id = s.id) as totalPaid,
+               (SELECT SUM(net_amount) FROM purchase_returns WHERE supplier_id = s.id) as totalReturns
+        FROM suppliers s
+        LEFT JOIN purchases p ON s.id = p.supplier_id
+        GROUP BY s.id
+      `);
             set_suppliers(res_suppliers?.data || []);
         };
         fetchData();
@@ -50,13 +59,11 @@ function SupplierReport() {
     // Mock Supplier Analysis Data
     const supplierData = (0, react_1.useMemo)(() => {
         return suppliers.map(s => {
-            // Mock metrics for demo
-            const totalInvoices = s.id * 12;
-            const totalProcurement = totalInvoices * 45000;
-            // Assume 5% of volume is returned (Purchase Returns / Debit Notes)
-            const returnVolume = totalProcurement * 0.05;
+            const totalInvoices = s.totalInvoices || 0;
+            const totalProcurement = s.totalProcurement || 0;
+            const returnVolume = s.totalReturns || 0;
             const netProcurement = totalProcurement - returnVolume;
-            const outstandingBalance = (s.id % 2 === 0) ? s.id * 25000 : 0;
+            const outstandingBalance = (s.opening_balance || 0) + netProcurement - (s.totalPaid || 0);
             return {
                 ...s,
                 totalInvoices,
