@@ -1,21 +1,8 @@
 #!/bin/sh
 set -e
 
-if [ -n "$DATABASE_URL" ]; then
-  _rest="${DATABASE_URL#postgresql://}"
-  _rest="${_rest#postgres://}"
-  _userpass="${_rest%%@*}"
-  _hostdb="${_rest#*@}"
-  PG_USER="${_userpass%%:*}"
-  PG_HOST="${_hostdb%%:*}"
-  PG_HOST="${PG_HOST%%/*}"
-  PG_DB="${_hostdb##*/}"
-  PG_DB="${PG_DB%%\?*}"
-else
-  PG_USER="${POSTGRES_USER:-postgres}"
-  PG_HOST="${PGHOST:-postgres}"
-  PG_DB="${POSTGRES_DB:-postgres}"
-fi
+PG_USER="${POSTGRES_USER:-pharmaflow}"
+PG_HOST="${POSTGRES_HOST:-postgres}"
 
 echo "Waiting for PostgreSQL at ${PG_HOST}..."
 MAX=60
