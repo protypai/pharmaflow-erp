@@ -1,3 +1,4 @@
+// PharmaFlow Cloud Backend App Entrypoint
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
