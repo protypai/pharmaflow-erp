@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { pushSync, getSyncStatus } from '../controllers/sync.controller';
+import { pushSync, getSyncStatus, getInitialSyncData } from '../controllers/sync.controller';
 import { protect } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -7,5 +7,6 @@ const router = Router();
 router.use(protect);
 router.post('/push', pushSync);
 router.get('/status', getSyncStatus);
+router.get('/initial', getInitialSyncData);
 
 export default router;

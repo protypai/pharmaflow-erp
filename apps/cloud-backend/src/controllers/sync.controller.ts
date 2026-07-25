@@ -20,3 +20,37 @@ export const getSyncStatus = asyncHandler(async (req: Request, res: Response) =>
   }) ?? 0);
   sendSuccess(res, { pending }, 'Sync status');
 });
+
+export const getInitialSyncData = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
+  const db = req.app.locals.db;
+  
+  if (!db) {
+    return res.status(500).json({ success: false, message: 'Database not initialized' });
+  }
+
+  // Fetch all related records for the company
+  const [
+    customers, suppliers, products, batches,
+    manufacturers, categories, racks,
+    sales, saleItems, purchases, purchaseItems
+  ] = await Promise.all([
+    db.customer.findMany({ where: { companyId } }),
+    db.supplier.findMany({ where: { companyId } }),
+    db.product.findMany({ where: { companyId } }),
+    db.batch.findMany({ where: { product: { companyId } } }),
+    db.manufacturer.findMany({ where: { companyId } }),
+    db.category.findMany({ where: { companyId } }),
+    db.rack.findMany({ where: { companyId } }),
+    db.sale.findMany({ where: { companyId } }),
+    db.saleItem.findMany({ where: { sale: { companyId } } }),
+    db.purchase.findMany({ where: { companyId } }),
+    db.purchaseItem.findMany({ where: { purchase: { companyId } } })
+  ]);
+
+  sendSuccess(res, {
+    customers, suppliers, products, batches,
+    manufacturers, categories, racks,
+    sales, saleItems, purchases, purchaseItems
+  }, 'Initial sync data fetched successfully');
+});

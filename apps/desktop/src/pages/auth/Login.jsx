@@ -11,7 +11,44 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasUpdate, setHasUpdate] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
+
+  const performInitialSync = async (data) => {
+    const ops = [];
+    
+    (data.customers || []).forEach(c => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO Customer (id, companyId, code, name, type, gstin, drugLicense, phone, email, address, area, city, state, pincode, salesman, creditLimit, creditDays, openingBalance, openingBalanceType, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status]
+      });
+    });
+
+    (data.suppliers || []).forEach(s => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO Supplier (id, companyId, code, name, gstin, drugLicense, phone, email, address, city, state, pincode, creditDays, creditLimit, openingBalance, openingBalanceType, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status]
+      });
+    });
+
+    (data.products || []).forEach(p => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO Product (id, companyId, code, barcode, name, genericName, manufacturerId, categoryId, rackId, packing, purchaseUnit, saleUnit, conversionFactor, hsnCode, gstRate, minStock, maxStock, reorderQty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [p.id, p.companyId, p.code, p.barcode, p.name, p.genericName, p.manufacturerId, p.categoryId, p.rackId, p.packing, p.purchaseUnit, p.saleUnit, p.conversionFactor, p.hsnCode, p.gstRate, p.minStock, p.maxStock, p.reorderQty, p.discontinued ? 1 : 0, p.status]
+      });
+    });
+
+    (data.batches || []).forEach(b => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO Batch (id, productId, batchNo, expiryDate, mrp, ptr, pts, purchasePrice, gstRate, currentQty, freeQty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [b.id, b.productId, b.batchNo, b.expiryDate, b.mrp, b.ptr, b.pts, b.purchasePrice, b.gstRate, b.currentQty, b.freeQty]
+      });
+    });
+
+    if (ops.length > 0) {
+      await window.pharmaAPI.db.transaction(ops);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -56,6 +93,22 @@ export default function Login() {
                 'INSERT OR REPLACE INTO User (id, companyId, name, email, passwordHash, role, isActive) VALUES (?, ?, ?, ?, ?, ?, 1)',
                 [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, password, user.role || 'admin']
               );
+
+              // Initial Cloud Restore check
+              const custRes = await window.pharmaAPI.db.query('SELECT COUNT(*) as c FROM Customer');
+              if (custRes?.data && custRes.data[0]?.c === 0) {
+                setSyncing(true);
+                const syncRes = await fetch(`${API_BASE_URL}/api/v1/sync/initial`, {
+                  headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                if (syncRes.ok) {
+                  const syncData = await syncRes.json();
+                  if (syncData.success && syncData.data) {
+                    await performInitialSync(syncData.data);
+                  }
+                }
+                setSyncing(false);
+              }
             } catch (sqErr) {
               console.warn('Local SQLite sync warning:', sqErr);
             }
@@ -314,8 +367,8 @@ export default function Login() {
                 </>
               ) : (
                 <>
-                  Sign In
-                  <ArrowRight size={16} />
+                  {syncing ? 'Syncing device data...' : 'Sign In'}
+                  {!syncing && <ArrowRight size={16} />}
                 </>
               )}
             </button>
