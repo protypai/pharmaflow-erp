@@ -8,10 +8,6 @@ on:
 
 jobs:
   build-windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [ia32, x64, arm64]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -57,33 +53,27 @@ jobs:
           npm version $tag --no-git-tag-version
         working-directory: apps/desktop
 
-      - name: Build Electron .exe Installer
-        run: npx electron-builder --config electron-builder.config.js --win nsis --${{ matrix.arch }} --publish never
+      - name: Build Electron .exe Installers (x64, ia32, arm64)
+        run: npx electron-builder --config electron-builder.config.js --win nsis --publish never
         working-directory: apps/desktop
 
-      - name: Locate compiled installer files
+      - name: Create latest.yml for Auto-Updater
         run: |
-          Write-Host "Looking for .exe files..."
-          $exeFiles = Get-ChildItem -Path "release" -Filter "*.exe" -ErrorAction SilentlyContinue
-          $metadataFiles = Get-ChildItem -Path "release" -Filter "latest*.yml" -ErrorAction SilentlyContinue
-
-          $exeFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-          $metadataFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-
-          if ($exeFiles.Count -lt 1) { throw "Expected 1 installer EXE for ${{ matrix.arch }} but found none" }
-          if ($metadataFiles.Count -lt 1) { throw "Expected update metadata file for ${{ matrix.arch }} but none was found" }
-
-          $archMetadata = Join-Path "release" "latest-${{ matrix.arch }}.yml"
-          Copy-Item $metadataFiles[0].FullName $archMetadata -Force
+          if (Test-Path "release/latest-x64.yml") {
+            Copy-Item "release/latest-x64.yml" "release/latest.yml" -Force
+            Write-Host "Created latest.yml from latest-x64.yml"
+          } else {
+            throw "latest-x64.yml not found, cannot create latest.yml"
+          }
         working-directory: apps/desktop
 
       - name: Upload Installer Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-installer-${{ matrix.arch }}
+          name: desktop-installers
           path: |
             apps/desktop/release/*.exe
-            apps/desktop/release/latest-${{ matrix.arch }}.yml
+            apps/desktop/release/latest*.yml
           if-no-files-found: error
 
   publish-release:
