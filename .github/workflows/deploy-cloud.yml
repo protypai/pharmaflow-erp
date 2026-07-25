@@ -1,6 +1,7 @@
 name: Deploy Cloud Backend
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -10,7 +11,7 @@ on:
 
 concurrency:
   group: production-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-push:

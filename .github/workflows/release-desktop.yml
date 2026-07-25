@@ -1,6 +1,7 @@
 name: Release Desktop App (.exe)
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*.*.*'
