@@ -31,7 +31,7 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'PharmaFlow ERP',
-    artifactName: '${productName} ${version} ${arch}.${ext}',
+    artifactName: '${name}-${version}-${arch}.${ext}',
   },
   publish: {
     provider: 'github',
