@@ -17,7 +17,7 @@ async function start() {
       logger.warn('Seed execution warning:', seedErr);
     }
   }
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`PharmaFlow Cloud Backend running on port ${PORT}`);
     logger.info(`Environment: ${env.NODE_ENV}`);
   });
