@@ -20,7 +20,7 @@ fi
 echo "Waiting for PostgreSQL at ${PG_HOST}..."
 MAX=60
 WAITED=0
-until pg_isready -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -q; do
+until pg_isready -h "$PG_HOST" -U "$PG_USER" -q; do
   if [ "$WAITED" -ge "$MAX" ]; then
     echo "PostgreSQL not ready after ${MAX}s"
     exit 1
