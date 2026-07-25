@@ -37,23 +37,50 @@ exports.default = ActivityLogs;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const api_1 = require("../../config/api");
 function ActivityLogs() {
     const [adminActivityLogs, set_adminActivityLogs] = (0, react_1.useState)([]);
     const [adminCompanies, set_adminCompanies] = (0, react_1.useState)([]);
+    const [loading, setLoading] = (0, react_1.useState)(true);
     (0, react_1.useEffect)(() => {
         const fetchData = async () => {
-            set_adminActivityLogs([]);
-            set_adminCompanies([]);
+            try {
+                const token = localStorage.getItem('adminToken');
+                const [logsRes, compRes] = await Promise.all([
+                    fetch(`${api_1.API_BASE_URL}/api/v1/admin/activity-logs`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${api_1.API_BASE_URL}/api/v1/admin/companies`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                ]);
+                const logsData = await logsRes.json();
+                const compData = await compRes.json();
+                if (logsData.success && logsData.data)
+                    set_adminActivityLogs(logsData.data);
+                if (compData.success && compData.data)
+                    set_adminCompanies(compData.data);
+            }
+            catch (err) {
+                console.error('Failed to fetch activity logs:', err);
+            }
+            finally {
+                setLoading(false);
+            }
         };
         fetchData();
     }, []);
     const [companyFilter, setCompanyFilter] = (0, react_1.useState)('');
     const [typeFilter, setTypeFilter] = (0, react_1.useState)('');
+    const [searchQuery, setSearchQuery] = (0, react_1.useState)('');
     const filteredLogs = adminActivityLogs.filter(log => {
-        if (companyFilter && log.company !== companyFilter)
+        const compName = log.company || log.companyId || '';
+        const actName = log.action || log.operation || '';
+        const detName = log.details || log.tableName || '';
+        if (companyFilter && compName !== companyFilter)
             return false;
         if (typeFilter && log.type !== typeFilter)
             return false;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            return compName.toLowerCase().includes(q) || actName.toLowerCase().includes(q) || detName.toLowerCase().includes(q);
+        }
         return true;
     });
     const getBadgeColor = (type) => {

@@ -1,25 +1,47 @@
 import React, { useState, useEffect } from 'react';
-
 import { Search, Filter, Calendar } from 'lucide-react';
+import { API_BASE_URL } from '../../config/api';
 
 export default function ActivityLogs() {
   const [adminActivityLogs, set_adminActivityLogs] = useState([]);
   const [adminCompanies, set_adminCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
-      set_adminActivityLogs([]);
-      set_adminCompanies([]);
+      try {
+        const token = localStorage.getItem('adminToken');
+        const [logsRes, compRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/v1/admin/activity-logs`, { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API_BASE_URL}/api/v1/admin/companies`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        ]);
+        const logsData = await logsRes.json();
+        const compData = await compRes.json();
+        if (logsData.success && logsData.data) set_adminActivityLogs(logsData.data);
+        if (compData.success && compData.data) set_adminCompanies(compData.data);
+      } catch (err) {
+        console.error('Failed to fetch activity logs:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchData();
   }, []);
 
   const [companyFilter, setCompanyFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const filteredLogs = adminActivityLogs.filter(log => {
-    if (companyFilter && log.company !== companyFilter) return false;
+    const compName = log.company || log.companyId || '';
+    const actName = log.action || log.operation || '';
+    const detName = log.details || log.tableName || '';
+    if (companyFilter && compName !== companyFilter) return false;
     if (typeFilter && log.type !== typeFilter) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return compName.toLowerCase().includes(q) || actName.toLowerCase().includes(q) || detName.toLowerCase().includes(q);
+    }
     return true;
   });
 

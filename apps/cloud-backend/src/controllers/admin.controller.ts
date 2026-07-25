@@ -8,6 +8,7 @@ export const getCompanies = asyncHandler(async (_req: Request, res: Response) =>
   const companies = await db.company.findMany({
     select: {
       id: true, name: true, city: true, state: true,
+      gstin: true, phone: true, email: true, address: true,
       subscriptionStatus: true, subscriptionExpiry: true,
       isActive: true, createdAt: true,
       _count: { select: { sales: true, purchases: true } },

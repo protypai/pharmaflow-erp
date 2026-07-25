@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const url_1 = require("url");
 const db_handler_1 = require("./ipc/db.handler");
 const sync_handler_1 = require("./ipc/sync.handler");
@@ -106,14 +107,20 @@ electron_1.app.whenReady().then(() => {
             if (!requestUrl || requestUrl === 'index.html') {
                 requestUrl = 'index.html';
             }
-            const filePath = getDistPath(requestUrl);
+            let filePath = getDistPath(requestUrl);
+            if (!fs_1.default.existsSync(filePath) && (!requestUrl.includes('.') || requestUrl === 'index.html')) {
+                filePath = getDistPath('index.html');
+            }
             // Convert to proper file:// URL for Windows and Unix
             const fileUrl = (0, url_1.pathToFileURL)(filePath).toString();
             console.log(`Loading: ${fileUrl}`);
             const response = await electron_1.net.fetch(fileUrl);
             if (!response.ok) {
                 console.error(`File fetch error for ${requestUrl}: ${response.status}`);
-                // Return a fallback for missing files (e.g., sourcemaps)
+                if (!requestUrl.includes('.')) {
+                    const fallbackUrl = (0, url_1.pathToFileURL)(getDistPath('index.html')).toString();
+                    return electron_1.net.fetch(fallbackUrl);
+                }
                 if (response.status === 404 && requestUrl.endsWith('.map')) {
                     return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
                 }

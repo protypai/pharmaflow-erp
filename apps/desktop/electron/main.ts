@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, protocol, net } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
+import fs from 'fs';
 import { pathToFileURL } from 'url';
 import { setupDbHandlers } from './ipc/db.handler';
 import { setupSyncHandlers } from './ipc/sync.handler';
@@ -119,7 +120,10 @@ app.whenReady().then(() => {
         requestUrl = 'index.html';
       }
       
-      const filePath = getDistPath(requestUrl);
+      let filePath = getDistPath(requestUrl);
+      if (!fs.existsSync(filePath) && (!requestUrl.includes('.') || requestUrl === 'index.html')) {
+        filePath = getDistPath('index.html');
+      }
       
       // Convert to proper file:// URL for Windows and Unix
       const fileUrl = pathToFileURL(filePath).toString();
@@ -128,7 +132,10 @@ app.whenReady().then(() => {
       const response = await net.fetch(fileUrl);
       if (!response.ok) {
         console.error(`File fetch error for ${requestUrl}: ${response.status}`);
-        // Return a fallback for missing files (e.g., sourcemaps)
+        if (!requestUrl.includes('.')) {
+          const fallbackUrl = pathToFileURL(getDistPath('index.html')).toString();
+          return net.fetch(fallbackUrl);
+        }
         if (response.status === 404 && requestUrl.endsWith('.map')) {
           return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
         }

@@ -1,38 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { Key, ShieldAlert } from 'lucide-react';
-
+import { API_BASE_URL } from '../../config/api';
 
 export default function ResetPassword() {
   const [adminCompanies, set_adminCompanies] = useState([]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      set_adminCompanies([]);
-    };
-    fetchData();
-  }, []);
-
   const [companyId, setCompanyId] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('adminToken');
+        const res = await fetch(`${API_BASE_URL}/api/v1/admin/companies`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          set_adminCompanies(data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch admin companies for reset password:', err);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg('');
+    setSuccess(false);
+
     if (newPassword !== confirmPassword) {
-      alert("Passwords don't match");
+      setErrorMsg("Passwords don't match");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ companyId, newPassword })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSuccess(true);
+        setNewPassword('');
+        setConfirmPassword('');
+        setCompanyId('');
+      } else {
+        setErrorMsg(data.message || 'Password reset failed.');
+      }
+    } catch (err) {
+      console.error('Password reset error:', err);
+      setErrorMsg('Network error while resetting password.');
+    } finally {
       setLoading(false);
-      setSuccess(true);
-      setNewPassword('');
-      setConfirmPassword('');
-      setCompanyId('');
-      setTimeout(() => setSuccess(false), 3000);
-    }, 1000);
+    }
   };
 
   return (

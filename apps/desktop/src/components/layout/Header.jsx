@@ -47,9 +47,17 @@ export default function Header({ collapsed, onToggle, pathname }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
-  const [updateOpen, setUpdateOpen] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [newVersion, setNewVersion] = useState('v1.0.28');
+  const currentAppVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.30';
+  const [newVersion, setNewVersion] = useState(currentAppVersion);
+
+  const handleTriggerUpdate = () => {
+    if (window.pharmaAPI?.update?.check) {
+      window.pharmaAPI.update.check();
+      alert('Checking for latest software updates...');
+    } else {
+      alert(`You are running PharmaFlow ERP ${currentAppVersion}. Checking GitHub Releases for updates...`);
+    }
+  };
   const [highlighted, setHighlighted] = useState(0);
   const searchRef = useRef(null);
   const navigate = useNavigate();
@@ -179,15 +187,19 @@ export default function Header({ collapsed, onToggle, pathname }) {
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: '0.75rem' }}>
                   {updateAvailable
                     ? `New version ${newVersion} is ready to install!`
-                    : 'Your PharmaFlow ERP is up to date (v1.0.28).'}
+                    : `Your PharmaFlow ERP is up to date (${currentAppVersion}).`}
                 </div>
                 {updateAvailable ? (
                   <button
                     className="btn btn-primary btn-sm"
                     style={{ width: '100%', justifyContent: 'center' }}
                     onClick={() => {
-                      alert('Installing latest update...');
-                      window.location.reload();
+                      if (window.pharmaAPI?.update?.quitAndInstall) {
+                        window.pharmaAPI.update.quitAndInstall();
+                      } else {
+                        alert('Installing latest update...');
+                        window.location.reload();
+                      }
                     }}
                   >
                     <Download size={14} /> Install Update Now
@@ -196,10 +208,7 @@ export default function Header({ collapsed, onToggle, pathname }) {
                   <button
                     className="btn btn-outline btn-sm"
                     style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={() => {
-                      setUpdateAvailable(true);
-                      setNewVersion('v1.0.28');
-                    }}
+                    onClick={handleTriggerUpdate}
                   >
                     Check for Updates
                   </button>

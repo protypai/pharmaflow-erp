@@ -80,9 +80,17 @@ function Header({ collapsed, onToggle, pathname }) {
     const [searchOpen, setSearchOpen] = (0, react_1.useState)(false);
     const [searchQuery, setSearchQuery] = (0, react_1.useState)('');
     const [profileOpen, setProfileOpen] = (0, react_1.useState)(false);
-    const [updateOpen, setUpdateOpen] = (0, react_1.useState)(false);
-    const [updateAvailable, setUpdateAvailable] = (0, react_1.useState)(false);
-    const [newVersion, setNewVersion] = (0, react_1.useState)('v1.0.28');
+    const currentAppVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.30';
+    const [newVersion, setNewVersion] = (0, react_1.useState)(currentAppVersion);
+    const handleTriggerUpdate = () => {
+        if (window.pharmaAPI?.update?.check) {
+            window.pharmaAPI.update.check();
+            alert('Checking for latest software updates...');
+        }
+        else {
+            alert(`You are running PharmaFlow ERP ${currentAppVersion}. Checking GitHub Releases for updates...`);
+        }
+    };
     const [highlighted, setHighlighted] = (0, react_1.useState)(0);
     const searchRef = (0, react_1.useRef)(null);
     const navigate = (0, react_router_dom_1.useNavigate)();
@@ -155,13 +163,15 @@ function Header({ collapsed, onToggle, pathname }) {
                                             minWidth: '280px', padding: '1rem', zIndex: 210,
                                         }, children: [(0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.88rem' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Sparkles, { size: 16, color: "#2563EB" }), "Software Updates"] }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: '0.75rem' }, children: updateAvailable
                                                     ? `New version ${newVersion} is ready to install!`
-                                                    : 'Your PharmaFlow ERP is up to date (v1.0.28).' }), updateAvailable ? ((0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary btn-sm", style: { width: '100%', justifyContent: 'center' }, onClick: () => {
-                                                    alert('Installing latest update...');
-                                                    window.location.reload();
-                                                }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Download, { size: 14 }), " Install Update Now"] })) : ((0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", style: { width: '100%', justifyContent: 'center' }, onClick: () => {
-                                                    setUpdateAvailable(true);
-                                                    setNewVersion('v1.0.28');
-                                                }, children: "Check for Updates" }))] }))] }), (0, jsx_runtime_1.jsxs)("button", { className: "header-icon-btn", id: "notifications-btn", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Bell, { size: 17 }), (0, jsx_runtime_1.jsx)("span", { className: "header-badge" })] }), (0, jsx_runtime_1.jsxs)("div", { style: { position: 'relative' }, children: [(0, jsx_runtime_1.jsx)("div", { className: "header-avatar", onClick: () => setProfileOpen(!profileOpen), id: "profile-avatar", children: "SM" }), profileOpen && ((0, jsx_runtime_1.jsxs)("div", { style: {
+                                                    : `Your PharmaFlow ERP is up to date (${currentAppVersion}).` }), updateAvailable ? ((0, jsx_runtime_1.jsxs)("button", { className: "btn btn-primary btn-sm", style: { width: '100%', justifyContent: 'center' }, onClick: () => {
+                                                    if (window.pharmaAPI?.update?.quitAndInstall) {
+                                                        window.pharmaAPI.update.quitAndInstall();
+                                                    }
+                                                    else {
+                                                        alert('Installing latest update...');
+                                                        window.location.reload();
+                                                    }
+                                                }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Download, { size: 14 }), " Install Update Now"] })) : ((0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", style: { width: '100%', justifyContent: 'center' }, onClick: handleTriggerUpdate, children: "Check for Updates" }))] }))] }), (0, jsx_runtime_1.jsxs)("button", { className: "header-icon-btn", id: "notifications-btn", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Bell, { size: 17 }), (0, jsx_runtime_1.jsx)("span", { className: "header-badge" })] }), (0, jsx_runtime_1.jsxs)("div", { style: { position: 'relative' }, children: [(0, jsx_runtime_1.jsx)("div", { className: "header-avatar", onClick: () => setProfileOpen(!profileOpen), id: "profile-avatar", children: "SM" }), profileOpen && ((0, jsx_runtime_1.jsxs)("div", { style: {
                                             position: 'absolute', top: '40px', right: 0,
                                             background: 'white', border: '1px solid var(--border)',
                                             borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',

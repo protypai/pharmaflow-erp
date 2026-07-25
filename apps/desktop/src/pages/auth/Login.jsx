@@ -184,31 +184,37 @@ export default function Login() {
       }}>
         <div style={{ width: '100%', maxWidth: 380 }}>
           {/* Software Update Notification Banner */}
-          <div style={{
-            background: '#EFF6FF', border: '1px solid #BFDBFE',
-            borderRadius: '8px', padding: '0.75rem 1rem',
-            marginBottom: '1.5rem', display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', gap: '0.75rem',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Sparkles size={16} color="#2563EB" />
-              <div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1E40AF' }}>Update Available</div>
-                <div style={{ fontSize: '0.72rem', color: '#3B82F6' }}>v1.0.30 is ready to install</div>
+          {hasUpdate && (
+            <div style={{
+              background: '#EFF6FF', border: '1px solid #BFDBFE',
+              borderRadius: '8px', padding: '0.75rem 1rem',
+              marginBottom: '1.5rem', display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', gap: '0.75rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Sparkles size={16} color="#2563EB" />
+                <div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1E40AF' }}>Update Available</div>
+                  <div style={{ fontSize: '0.72rem', color: '#3B82F6' }}>A new version is ready to install</div>
+                </div>
               </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  if (window.pharmaAPI?.update?.quitAndInstall) {
+                    window.pharmaAPI.update.quitAndInstall();
+                  } else {
+                    alert('Installing latest update...');
+                    window.location.reload();
+                  }
+                }}
+                style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+              >
+                <Download size={12} /> Update Now
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                alert('Installing latest update...');
-                window.location.reload();
-              }}
-              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
-            >
-              <Download size={12} /> Update
-            </button>
-          </div>
+          )}
 
           <div style={{ marginBottom: '2.5rem' }}>
             <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
