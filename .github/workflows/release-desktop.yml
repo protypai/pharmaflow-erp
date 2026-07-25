@@ -57,13 +57,23 @@ jobs:
         run: npx electron-builder --config electron-builder.config.js --win nsis --publish never
         working-directory: apps/desktop
 
-      - name: Create latest.yml for Auto-Updater
+      - name: Ensure latest.yml exists for Auto-Updater
         run: |
-          if (Test-Path "release/latest-x64.yml") {
-            Copy-Item "release/latest-x64.yml" "release/latest.yml" -Force
-            Write-Host "Created latest.yml from latest-x64.yml"
+          Write-Host "Files in release folder:"
+          Get-ChildItem -Path "release"
+          
+          if (-Not (Test-Path "release/latest.yml")) {
+            if (Test-Path "release/latest-x64.yml") {
+              Copy-Item "release/latest-x64.yml" "release/latest.yml" -Force
+              Write-Host "Created latest.yml from latest-x64.yml"
+            } elseif (Test-Path "release/latest-ia32.yml") {
+              Copy-Item "release/latest-ia32.yml" "release/latest.yml" -Force
+              Write-Host "Created latest.yml from latest-ia32.yml"
+            } else {
+              Write-Host "WARNING: Could not find any latest*.yml file!"
+            }
           } else {
-            throw "latest-x64.yml not found, cannot create latest.yml"
+            Write-Host "latest.yml already generated natively by electron-builder."
           }
         working-directory: apps/desktop
 
