@@ -48,7 +48,13 @@ async function createWindow() {
     mainWindow.loadURL('app://index.html');
   }
 
-  // Always open DevTools during local runs (unpackaged) for easy debugging
+  // Enable DevTools via F12 or Ctrl+Shift+I for debugging network API calls
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+      mainWindow?.webContents.toggleDevTools();
+    }
+  });
+
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
