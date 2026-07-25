@@ -97,10 +97,10 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             echo "Pulling pre-built images..."
-            docker compose pull backend || true
+            docker compose pull backend
 
             echo "Starting services..."
-            docker compose up -d --build --force-recreate --remove-orphans
+            docker compose up -d --force-recreate --remove-orphans
 
             echo "Restarting nginx..."
             docker compose restart nginx
