@@ -49,6 +49,20 @@ export default function Header({ collapsed, onToggle, pathname }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const currentAppVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.30';
   const [newVersion, setNewVersion] = useState(currentAppVersion);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+
+  useEffect(() => {
+    if (window.pharmaAPI?.update) {
+      window.pharmaAPI.update.onAvailable((info) => {
+        setUpdateAvailable(true);
+        if (info?.version) setNewVersion(info.version);
+      });
+      window.pharmaAPI.update.onDownloaded(() => {
+        setUpdateAvailable(true);
+      });
+    }
+  }, []);
 
   const handleTriggerUpdate = () => {
     if (window.pharmaAPI?.update?.check) {
