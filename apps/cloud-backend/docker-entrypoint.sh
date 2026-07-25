@@ -34,10 +34,4 @@ echo "Running migrations..."
 npx prisma migrate deploy
 echo "Migrations done"
 
-if [ "$RUN_SEEDING" = "true" ]; then
-  echo "Seeding..."
-  node dist/prisma/seed.js || npx prisma db seed
-  echo "Seeding done"
-fi
-
 exec "$@"

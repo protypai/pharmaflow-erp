@@ -52,18 +52,20 @@ app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'PharmaFlow API running', timestamp: new Date().toISOString() });
 });
 
-// Mounted REST API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/sync', syncRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/customers', customerRoutes);
-app.use('/api/suppliers', supplierRoutes);
-app.use('/api/purchases', purchaseRoutes);
-app.use('/api/sales', salesRoutes);
-app.use('/api/accounts', accountRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/returns', returnRoutes);
+// Mounted REST API Routes (supports /api and /api/v1)
+['/api', '/api/v1'].forEach(prefix => {
+  app.use(`${prefix}/auth`, authRoutes);
+  app.use(`${prefix}/sync`, syncRoutes);
+  app.use(`${prefix}/admin`, adminRoutes);
+  app.use(`${prefix}/products`, productRoutes);
+  app.use(`${prefix}/customers`, customerRoutes);
+  app.use(`${prefix}/suppliers`, supplierRoutes);
+  app.use(`${prefix}/purchases`, purchaseRoutes);
+  app.use(`${prefix}/sales`, salesRoutes);
+  app.use(`${prefix}/accounts`, accountRoutes);
+  app.use(`${prefix}/reports`, reportRoutes);
+  app.use(`${prefix}/returns`, returnRoutes);
+});
 
 // 404
 app.use((_req, res) => {

@@ -5,13 +5,14 @@ import { logger } from './utils/logger';
 
 const PORT = parseInt(env.PORT);
 
+import { seedSuperAdmin } from './utils/seedSuperAdmin';
+
 async function start() {
   await connectDb();
   if (process.env.RUN_SEEDING === 'true') {
     try {
-      logger.info('RUN_SEEDING is true, running seed script...');
-      const { execSync } = await import('child_process');
-      execSync('npx prisma db seed', { stdio: 'inherit' });
+      logger.info('RUN_SEEDING is true, running seed helper...');
+      await seedSuperAdmin();
     } catch (seedErr) {
       logger.warn('Seed execution warning:', seedErr);
     }
