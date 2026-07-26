@@ -47,7 +47,140 @@ function Login() {
     const [loading, setLoading] = (0, react_1.useState)(false);
     const [error, setError] = (0, react_1.useState)('');
     const [hasUpdate, setHasUpdate] = (0, react_1.useState)(false);
+    const [syncing, setSyncing] = (0, react_1.useState)(false);
     const navigate = (0, react_router_dom_1.useNavigate)();
+    const performInitialSync = async (data) => {
+        const ops = [];
+        (data.customers || []).forEach(c => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO customers (id, company_id, code, name, type, gstin, drug_license, phone, email, address, area, city, state, pincode, salesman, credit_limit, credit_days, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status]
+            });
+        });
+        (data.suppliers || []).forEach(s => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO suppliers (id, company_id, code, name, gstin, drug_license, phone, email, address, city, state, pincode, credit_days, credit_limit, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status]
+            });
+        });
+        (data.products || []).forEach(p => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO products (id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id, rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate, min_stock, max_stock, reorder_qty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [p.id, p.companyId, p.code, p.barcode, p.name, p.genericName, p.manufacturerId, p.categoryId, p.rackId, p.packing, p.purchaseUnit, p.saleUnit, p.conversionFactor, p.hsnCode, p.gstRate, p.minStock, p.maxStock, p.reorderQty, p.discontinued ? 1 : 0, p.status]
+            });
+        });
+        (data.batches || []).forEach(b => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO batches (id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [b.id, b.productId, b.batchNo, b.expiryDate, b.mrp, b.ptr, b.pts, b.purchasePrice, b.gstRate, b.currentQty, b.freeQty]
+            });
+        });
+        (data.manufacturers || []).forEach(m => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO manufacturers (id, company_id, name, status) VALUES (?, ?, ?, ?)',
+                params: [m.id, m.companyId, m.name, m.status]
+            });
+        });
+        (data.categories || []).forEach(c => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO categories (id, company_id, name, status) VALUES (?, ?, ?, ?)',
+                params: [c.id, c.companyId, c.name, c.status]
+            });
+        });
+        (data.racks || []).forEach(r => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO racks (id, company_id, code, description, status) VALUES (?, ?, ?, ?, ?)',
+                params: [r.id, r.companyId, r.code, r.description, r.status]
+            });
+        });
+        (data.sales || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO sales (id, company_id, invoice_no, customer_id, date, salesman, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.invoiceNo, item.customerId, item.date, item.salesman, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt]
+            });
+        });
+        (data.saleItems || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO sale_items (id, sale_id, product_id, batch_id, qty, mrp, ptr, sale_price, disc_percent, disc_amount, gst_rate, cgst, sgst, igst, taxable_amt, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.saleId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.salePrice, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount]
+            });
+        });
+        (data.purchases || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO purchases (id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.entryNo, item.supplierId, item.invoiceNo, item.invoiceDate, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt]
+            });
+        });
+        (data.purchaseItems || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO purchase_items (id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, disc_amount, gst_rate, cgst, sgst, igst, taxable_amt, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.purchaseId, item.productId, item.batchId, item.qty, item.freeQty, item.purchasePrice, item.ptr, item.mrp, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount]
+            });
+        });
+        (data.purchaseReturns || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, debit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.entryNo, item.purchaseId, item.supplierId, item.returnDate, item.reason, item.debitNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt]
+            });
+        });
+        (data.purchaseReturnItems || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.netAmount, item.reason]
+            });
+        });
+        (data.saleReturns || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, credit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.entryNo, item.saleId, item.customerId, item.returnDate, item.reason, item.creditNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt]
+            });
+        });
+        (data.saleReturnItems || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO sale_return_items (id, return_id, product_id, batch_id, qty, mrp, sale_price, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.salePrice, item.netAmount, item.reason]
+            });
+        });
+        (data.receipts || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO receipts (id, company_id, receipt_no, customer_id, date, amount, payment_mode, cheque_no, cheque_date, bank_name, utr_no, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.receiptNo, item.customerId, item.date, item.amount, item.paymentMode, item.chequeNo, item.chequeDate, item.bankName, item.utrNo, item.notes, item.createdAt, item.updatedAt]
+            });
+        });
+        (data.payments || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO payments (id, company_id, payment_no, supplier_id, date, amount, payment_mode, cheque_no, cheque_date, bank_name, utr_no, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.paymentNo, item.supplierId, item.date, item.amount, item.paymentMode, item.chequeNo, item.chequeDate, item.bankName, item.utrNo, item.notes, item.createdAt, item.updatedAt]
+            });
+        });
+        (data.stockAdjustments || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO stock_adjustments (id, company_id, entry_no, date, reason, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.entryNo, item.date, item.reason, item.notes, item.createdAt]
+            });
+        });
+        (data.stockAdjustmentItems || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO stock_adjustment_items (id, adjustment_id, product_id, batch_id, system_qty, physical_qty, difference_qty, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.adjustmentId, item.productId, item.batchId, item.systemQty, item.physicalQty, item.differenceQty, item.reason]
+            });
+        });
+        (data.journals || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO journals (id, company_id, entry_no, date, narration, debit_amt, credit_amt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                params: [item.id, item.companyId, item.entryNo, item.date, item.narration, item.debitAmt, item.creditAmt, item.createdAt]
+            });
+        });
+        (data.journalEntries || []).forEach(item => {
+            ops.push({
+                sql: 'INSERT OR REPLACE INTO journal_entries (id, journal_id, particular, type, amount) VALUES (?, ?, ?, ?, ?)',
+                params: [item.id, item.journalId, item.particular, item.type, item.amount]
+            });
+        });
+        if (ops.length > 0) {
+            await window.pharmaAPI.db.transaction(ops);
+        }
+    };
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
@@ -76,13 +209,43 @@ function Login() {
                     localStorage.setItem('user', JSON.stringify(user));
                     localStorage.setItem('accessToken', accessToken);
                     localStorage.setItem('refreshToken', refreshToken);
+                    if (window.pharmaAPI?.auth) {
+                        await window.pharmaAPI.auth.setToken(accessToken);
+                    }
                     // Sync into local SQLite if window.pharmaAPI exists
                     if (window.pharmaAPI?.db) {
                         try {
-                            if (user.company) {
-                                await window.pharmaAPI.db.query('INSERT OR REPLACE INTO Company (id, name, shortName, email) VALUES (?, ?, ?, ?)', [user.company.id, user.company.name, user.company.shortName || user.company.name, user.email]);
+                            // Workspace Protection Check
+                            const compRes = await window.pharmaAPI.db.query('SELECT id FROM companies LIMIT 1');
+                            if (compRes?.data && compRes.data.length > 0) {
+                                const existingCompanyId = compRes.data[0].id;
+                                const newCompanyId = user.company?.id || user.companyId || 'comp_001';
+                                if (existingCompanyId !== newCompanyId) {
+                                    console.warn('Workspace change detected! Wiping local database for new company.');
+                                    if (window.pharmaAPI.db.reset) {
+                                        await window.pharmaAPI.db.reset();
+                                    }
+                                }
                             }
-                            await window.pharmaAPI.db.query('INSERT OR REPLACE INTO User (id, companyId, name, email, passwordHash, role, isActive) VALUES (?, ?, ?, ?, ?, ?, 1)', [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, password, user.role || 'admin']);
+                            if (user.company) {
+                                await window.pharmaAPI.db.run('INSERT OR REPLACE INTO companies (id, name, short_name, email) VALUES (?, ?, ?, ?)', [user.company.id, user.company.name, user.company.shortName || user.company.name, user.email]);
+                            }
+                            await window.pharmaAPI.db.run('INSERT OR REPLACE INTO users (id, company_id, name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)', [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, password, user.role || 'admin']);
+                            // Initial Cloud Restore check
+                            const custRes = await window.pharmaAPI.db.query('SELECT COUNT(*) as c FROM customers');
+                            if (custRes?.data && custRes.data[0]?.c === 0) {
+                                setSyncing(true);
+                                const syncRes = await fetch(`${api_1.API_BASE_URL}/api/v1/sync/initial`, {
+                                    headers: { Authorization: `Bearer ${accessToken}` }
+                                });
+                                if (syncRes.ok) {
+                                    const syncData = await syncRes.json();
+                                    if (syncData.success && syncData.data) {
+                                        await performInitialSync(syncData.data);
+                                    }
+                                }
+                                setSyncing(false);
+                            }
                         }
                         catch (sqErr) {
                             console.warn('Local SQLite sync warning:', sqErr);
@@ -100,7 +263,7 @@ function Login() {
                 return;
             // 2. Fallback to local SQLite DB if cloud unavailable
             if (window.pharmaAPI?.db) {
-                const response = await window.pharmaAPI.db.query('SELECT id, name, companyId, role FROM User WHERE email = ? AND passwordHash = ? AND isActive = 1', [username, password]);
+                const response = await window.pharmaAPI.db.query('SELECT id, name, company_id as companyId, role FROM users WHERE email = ? AND password_hash = ? AND is_active = 1', [username, password]);
                 const users = response?.data;
                 if (users && users.length > 0) {
                     localStorage.setItem('user', JSON.stringify(users[0]));
@@ -183,5 +346,5 @@ function Login() {
                                                     width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)',
                                                     borderTopColor: 'white', borderRadius: '50%',
                                                     animation: 'spin 0.8s linear infinite',
-                                                } }), "Signing in\u2026"] })) : ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: ["Sign In", (0, jsx_runtime_1.jsx)(lucide_react_1.ArrowRight, { size: 16 })] })) })] }), (0, jsx_runtime_1.jsxs)("div", { style: { marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, children: [(0, jsx_runtime_1.jsx)("a", { href: "/register", style: { fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 600 }, onClick: (e) => { e.preventDefault(); navigate('/register'); }, children: "Register New Company" }), (0, jsx_runtime_1.jsx)("a", { href: "/admin/login", style: { fontSize: '0.78rem', color: 'var(--text-muted)' }, onClick: (e) => { e.preventDefault(); navigate('/admin/login'); }, children: "Super Admin Portal \u2192" })] })] }) })] }));
+                                                } }), "Signing in\u2026"] })) : ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [syncing ? 'Syncing device data...' : 'Sign In', !syncing && (0, jsx_runtime_1.jsx)(lucide_react_1.ArrowRight, { size: 16 })] })) })] }), (0, jsx_runtime_1.jsxs)("div", { style: { marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, children: [(0, jsx_runtime_1.jsx)("a", { href: "/register", style: { fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 600 }, onClick: (e) => { e.preventDefault(); navigate('/register'); }, children: "Register New Company" }), (0, jsx_runtime_1.jsx)("a", { href: "/admin/login", style: { fontSize: '0.78rem', color: 'var(--text-muted)' }, onClick: (e) => { e.preventDefault(); navigate('/admin/login'); }, children: "Super Admin Portal \u2192" })] })] }) })] }));
 }

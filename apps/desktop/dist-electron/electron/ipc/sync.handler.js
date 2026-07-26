@@ -11,6 +11,26 @@ const keytar_1 = __importDefault(require("keytar"));
 const SERVICE_NAME = 'PharmaFlowERP';
 const ACCOUNT_NAME = 'access_token';
 function setupSyncHandlers(mainWindow) {
+    electron_1.ipcMain.handle('auth:setToken', async (_e, token) => {
+        try {
+            await keytar_1.default.setPassword(SERVICE_NAME, ACCOUNT_NAME, token);
+            return { success: true };
+        }
+        catch (err) {
+            logger_1.logger.error('Failed to set token', { error: err.message });
+            return { success: false };
+        }
+    });
+    electron_1.ipcMain.handle('auth:clearToken', async () => {
+        try {
+            await keytar_1.default.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+            return { success: true };
+        }
+        catch (err) {
+            logger_1.logger.error('Failed to clear token', { error: err.message });
+            return { success: false };
+        }
+    });
     electron_1.ipcMain.handle('sync:push', async () => {
         try {
             const token = await keytar_1.default.getPassword(SERVICE_NAME, ACCOUNT_NAME);

@@ -37,6 +37,7 @@ exports.default = CustomerMaster;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const dataService_1 = require("../../services/dataService");
 function CustomerMaster() {
     const [search, setSearch] = (0, react_1.useState)('');
     const [isModalOpen, setIsModalOpen] = (0, react_1.useState)(false);
@@ -69,8 +70,13 @@ function CustomerMaster() {
         }
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const companyId = user.companyId || 'COMP-DEMO-001';
-            if (formData.id) {
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
+            const isNew = !formData.id;
+            const id = isNew ? 'CUST-' + Date.now() : formData.id;
+            if (!isNew) {
                 const res = await window.pharmaAPI.db.run(`
           UPDATE customers SET
             name = ?, type = ?, salesman = ?, phone = ?, email = ?, address = ?, area = ?, pincode = ?, 
@@ -89,7 +95,6 @@ function CustomerMaster() {
                 }
             }
             else {
-                const id = 'CUST-' + Date.now();
                 const res = await window.pharmaAPI.db.run(`
           INSERT INTO customers (
             id, company_id, name, type, salesman, phone, email, address, area, pincode, 
@@ -108,6 +113,26 @@ function CustomerMaster() {
                     return;
                 }
             }
+            // Sync to cloud
+            await (0, dataService_1.syncEntity)('Customer', isNew ? 'create' : 'update', {
+                id,
+                companyId,
+                name: formData.name,
+                type: formData.type.toLowerCase(),
+                salesman: formData.salesman,
+                phone: formData.phone,
+                email: formData.email,
+                address: formData.address,
+                area: formData.area,
+                pincode: formData.pincode,
+                drugLicense: formData.drug_license,
+                gstin: formData.gstin,
+                creditLimit: formData.credit_limit,
+                creditDays: formData.credit_days,
+                openingBalance: formData.opening_balance,
+                openingBalanceType: formData.opening_balance_type,
+                status: 'active'
+            });
             setIsModalOpen(false);
             // Reset form
             setFormData({
@@ -137,6 +162,8 @@ function CustomerMaster() {
             return;
         try {
             await window.pharmaAPI.db.run("DELETE FROM customers WHERE id = ?", [id]);
+            // Sync to cloud
+            await (0, dataService_1.syncEntity)('Customer', 'delete', { id });
             fetchCustomers();
         }
         catch (err) {

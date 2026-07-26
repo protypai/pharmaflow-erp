@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDb = getDb;
 exports.initLocalDb = initLocalDb;
+exports.resetLocalDb = resetLocalDb;
 exports.queryDb = queryDb;
 exports.runDb = runDb;
 exports.transactionDb = transactionDb;
@@ -30,6 +31,27 @@ async function initLocalDb() {
     // Run migrations
     await (0, migration_service_1.runMigrations)(db);
     logger_1.logger.info('Local database initialized');
+}
+async function resetLocalDb() {
+    const dbPath = path_1.default.join(electron_1.app.getPath('userData'), 'pharmaflow.db');
+    logger_1.logger.info(`Resetting local database at: ${dbPath}`);
+    if (db) {
+        db.close();
+        db = undefined;
+    }
+    const fs = require('fs');
+    if (fs.existsSync(dbPath)) {
+        fs.unlinkSync(dbPath);
+        logger_1.logger.info('Old database file deleted');
+    }
+    if (fs.existsSync(dbPath + '-wal')) {
+        fs.unlinkSync(dbPath + '-wal');
+    }
+    if (fs.existsSync(dbPath + '-shm')) {
+        fs.unlinkSync(dbPath + '-shm');
+    }
+    await initLocalDb();
+    logger_1.logger.info('Database reset complete');
 }
 function queryDb(sql, params = []) {
     return getDb().prepare(sql).all(...params);

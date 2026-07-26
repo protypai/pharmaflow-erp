@@ -7,6 +7,26 @@ const SERVICE_NAME = 'PharmaFlowERP';
 const ACCOUNT_NAME = 'access_token';
 
 export function setupSyncHandlers(mainWindow: BrowserWindow): void {
+  ipcMain.handle('auth:setToken', async (_e, token: string) => {
+    try {
+      await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, token);
+      return { success: true };
+    } catch (err: any) {
+      logger.error('Failed to set token', { error: err.message });
+      return { success: false };
+    }
+  });
+
+  ipcMain.handle('auth:clearToken', async () => {
+    try {
+      await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+      return { success: true };
+    } catch (err: any) {
+      logger.error('Failed to clear token', { error: err.message });
+      return { success: false };
+    }
+  });
+
   ipcMain.handle('sync:push', async () => {
     try {
       const token = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);

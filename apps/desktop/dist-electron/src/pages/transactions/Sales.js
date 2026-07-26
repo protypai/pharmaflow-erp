@@ -38,6 +38,7 @@ const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
 const react_router_dom_1 = require("react-router-dom");
+const dataService_1 = require("../../services/dataService");
 function Sales() {
     const navigate = (0, react_router_dom_1.useNavigate)();
     const [customerId, setCustomerId] = (0, react_1.useState)('');
@@ -208,7 +209,10 @@ function Sales() {
         setIsSaving(true);
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const companyId = user.companyId || 'COMP-DEMO-001';
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
             const saleId = 'SAL-' + Date.now();
             const operations = [];
             // 1. Insert into sales
@@ -223,18 +227,24 @@ function Sales() {
                 ]
             });
             // Insert receipt if not credit
+            let receiptId = null;
+            let pModeNormalized = null;
+            let receiptNo = null;
             if (paymentMode !== 'Credit') {
-                const pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
+                pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
+                receiptId = 'REC-' + Date.now();
+                receiptNo = 'RCT-' + Date.now().toString().slice(-6);
                 operations.push({
                     sql: `INSERT INTO receipts (
             id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
                     params: [
-                        'REC-' + Date.now(), companyId, 'RCT-' + Date.now().toString().slice(-6), customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
+                        receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
                     ]
                 });
             }
             // 2. Insert items and update batches
+            const syncItems = []; // Collect sync payloads to run after db transaction
             for (const row of validRows) {
                 // Deduct from Batch
                 operations.push({
@@ -244,20 +254,84 @@ function Sales() {
             WHERE id = ?`,
                     params: [row.qty, row.batchId]
                 });
+                syncItems.push({
+                    tableName: 'Batch',
+                    operation: 'update',
+                    payload: { id: row.batchId, currentQty: row.available - row.qty }
+                });
                 // Insert Sale Item
+                const saleItemId = 'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
                 operations.push({
                     sql: `INSERT INTO sale_items (
             id, sale_id, product_id, batch_id, qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     params: [
-                        'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                        saleItemId,
                         saleId, row.product, row.batchId, row.qty, row.mrp, row.rate, row.rate, row.disc, row.gst, row.amount
                     ]
+                });
+                syncItems.push({
+                    tableName: 'SaleItem',
+                    operation: 'create',
+                    payload: {
+                        id: saleItemId,
+                        saleId,
+                        productId: row.product,
+                        batchId: row.batchId,
+                        qty: row.qty,
+                        mrp: row.mrp,
+                        ptr: row.rate,
+                        salePrice: row.rate,
+                        discPercent: row.disc,
+                        gstRate: row.gst,
+                        netAmount: row.amount
+                    }
                 });
             }
             const res = await window.pharmaAPI.db.transaction(operations);
             if (!res.success) {
                 throw new Error(res.error || 'Transaction failed');
+            }
+            const mapPaymentMode = (pm) => {
+                if (pm === 'Cash')
+                    return 'cash';
+                if (pm === 'Credit')
+                    return 'credit';
+                return 'upi'; // For Bank / UPI
+            };
+            const mappedPm = mapPaymentMode(paymentMode);
+            // Sync to cloud after successful transaction
+            await (0, dataService_1.syncEntity)('Sale', 'create', {
+                id: saleId,
+                companyId,
+                invoiceNo,
+                customerId,
+                date: new Date(invoiceDate).toISOString(),
+                salesman: user.name || 'Admin',
+                gstType: 'exclusive',
+                subtotal: totals.sub,
+                discountAmount: totals.disc,
+                taxableAmount: totals.sub - totals.disc,
+                netAmount: totals.net,
+                paymentMode: mappedPm,
+                paidAmount: paymentMode === 'Credit' ? 0 : totals.net,
+                notes: doctorName ? 'Doctor: ' + doctorName : null,
+                status: 'completed'
+            });
+            if (paymentMode !== 'Credit') {
+                await (0, dataService_1.syncEntity)('Receipt', 'create', {
+                    id: receiptId,
+                    companyId,
+                    receiptNo,
+                    customerId,
+                    date: new Date(invoiceDate).toISOString(),
+                    amount: totals.net,
+                    paymentMode: mappedPm === 'cash' ? 'cash' : 'upi',
+                    notes: 'Against Sale ' + invoiceNo
+                });
+            }
+            for (const item of syncItems) {
+                await (0, dataService_1.syncEntity)(item.tableName, item.operation, item.payload);
             }
             setSuccessMsg(`Sales Invoice ${invoiceNo} saved successfully!`);
             // Reset form

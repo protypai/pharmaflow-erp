@@ -5,6 +5,16 @@ const electron_1 = require("electron");
 const localDb_service_1 = require("../services/localDb.service");
 const logger_1 = require("../services/logger");
 function setupDbHandlers() {
+    electron_1.ipcMain.handle('db:reset', async () => {
+        try {
+            await (0, localDb_service_1.resetLocalDb)();
+            return { success: true };
+        }
+        catch (err) {
+            logger_1.logger.error('db:reset failed', { error: err.message });
+            return { success: false, error: err.message };
+        }
+    });
     electron_1.ipcMain.handle('db:query', async (_event, sql, params) => {
         try {
             logger_1.logger.info('db:query', { sql, params });

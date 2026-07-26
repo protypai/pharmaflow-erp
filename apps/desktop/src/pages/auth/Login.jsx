@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pill, Eye, EyeOff, Lock, User, ArrowRight, Shield, Sparkles, Download } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
@@ -13,6 +13,14 @@ export default function Login() {
   const [hasUpdate, setHasUpdate] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
+
+  // Auto-login check
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const performInitialSync = async (data) => {
     const ops = [];
@@ -198,6 +206,10 @@ export default function Login() {
           localStorage.setItem('user', JSON.stringify(user));
           localStorage.setItem('accessToken', accessToken);
           localStorage.setItem('refreshToken', refreshToken);
+
+          if (window.pharmaAPI?.auth) {
+            await window.pharmaAPI.auth.setToken(accessToken);
+          }
 
           // Sync into local SQLite if window.pharmaAPI exists
           if (window.pharmaAPI?.db) {

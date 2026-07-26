@@ -300,7 +300,16 @@ export default function Header({ collapsed, onToggle, pathname }) {
                   ))}
                   <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.25rem', paddingTop: '0.25rem' }}>
                     <div
-                      onClick={() => { navigate('/login'); setProfileOpen(false); }}
+                      onClick={async () => { 
+                        if (window.pharmaAPI?.auth) {
+                          await window.pharmaAPI.auth.clearToken();
+                        }
+                        localStorage.removeItem('user');
+                        localStorage.removeItem('accessToken');
+                        localStorage.removeItem('refreshToken');
+                        setProfileOpen(false);
+                        navigate('/login');
+                      }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '0.625rem',
                         padding: '0.5rem 1rem', cursor: 'pointer',

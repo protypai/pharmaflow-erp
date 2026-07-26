@@ -121,6 +121,24 @@ const navConfig = [
 ];
 function Sidebar({ collapsed, onToggle }) {
     const location = (0, react_router_dom_1.useLocation)();
+    const [companyInfo, setCompanyInfo] = (0, react_1.useState)({ name: 'Company Name', shortName: 'CN' });
+    const [userInfo, setUserInfo] = (0, react_1.useState)({ name: 'User', role: 'admin' });
+    (0, react_1.useEffect)(() => {
+        const fetchProfile = async () => {
+            try {
+                const compRes = await window.pharmaAPI.db.query("SELECT * FROM companies LIMIT 1");
+                if (compRes?.data?.length > 0)
+                    setCompanyInfo(compRes.data[0]);
+                const userRes = await window.pharmaAPI.db.query("SELECT * FROM users LIMIT 1");
+                if (userRes?.data?.length > 0)
+                    setUserInfo(userRes.data[0]);
+            }
+            catch (err) {
+                console.error("Failed to load profile data", err);
+            }
+        };
+        fetchProfile();
+    }, []);
     const [openGroups, setOpenGroups] = (0, react_1.useState)(() => {
         // Auto-open the group that contains the active route
         const active = {};
@@ -148,5 +166,5 @@ function Sidebar({ collapsed, onToggle }) {
                     if (typeof window !== 'undefined') {
                         window.location.href = '/profile';
                     }
-                }, style: { cursor: 'pointer' }, children: [(0, jsx_runtime_1.jsx)("div", { className: "sidebar-footer-avatar", children: "SM" }), !collapsed && ((0, jsx_runtime_1.jsxs)("div", { className: "sidebar-footer-info", children: [(0, jsx_runtime_1.jsx)("div", { className: "sidebar-footer-name", children: "Sharma Medicals" }), (0, jsx_runtime_1.jsx)("div", { className: "sidebar-footer-role", children: "Admin" })] }))] })] }));
+                }, style: { cursor: 'pointer' }, children: [(0, jsx_runtime_1.jsx)("div", { className: "sidebar-footer-avatar", children: (companyInfo.shortName || companyInfo.name || 'CN').substring(0, 2).toUpperCase() }), !collapsed && ((0, jsx_runtime_1.jsxs)("div", { className: "sidebar-footer-info", children: [(0, jsx_runtime_1.jsx)("div", { className: "sidebar-footer-name", children: companyInfo.name }), (0, jsx_runtime_1.jsx)("div", { className: "sidebar-footer-role", children: userInfo.role })] }))] })] }));
 }

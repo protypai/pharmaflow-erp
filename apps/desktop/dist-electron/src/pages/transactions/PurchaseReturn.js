@@ -37,6 +37,7 @@ exports.default = PurchaseReturn;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const dataService_1 = require("../../services/dataService");
 function PurchaseReturn() {
     const [suppliers, set_suppliers] = (0, react_1.useState)([]);
     const [products, set_products] = (0, react_1.useState)([]);
@@ -179,7 +180,10 @@ function PurchaseReturn() {
         }
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const companyId = user.companyId || 'COMP-DEMO-001';
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
             const returnId = 'PR-' + Date.now();
             const entryNo = 'RET-' + Date.now();
             const res = await window.pharmaAPI.db.run(`
@@ -188,6 +192,17 @@ function PurchaseReturn() {
       `, [returnId, companyId, entryNo, originalPurchaseId, supplierId, returnDate, returnReason, totals.net]);
             if (!res.success)
                 throw new Error(res.error);
+            await (0, dataService_1.syncEntity)('PurchaseReturn', 'create', {
+                id: returnId,
+                companyId,
+                entryNo,
+                purchaseId: originalPurchaseId,
+                supplierId,
+                returnDate: new Date(returnDate).toISOString(),
+                reason: returnReason,
+                netAmount: totals.net,
+                status: 'saved'
+            });
             for (const row of rows) {
                 if (!row.product || !row.qty)
                     continue;
@@ -195,14 +210,41 @@ function PurchaseReturn() {
                 const batchData = prod?.batches.find(b => b.batch === row.batch);
                 if (!batchData)
                     throw new Error("Batch not found for product.");
+                const returnItemId = 'PRI-' + Date.now() + Math.random();
                 await window.pharmaAPI.db.run(`
           INSERT INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, ['PRI-' + Date.now() + Math.random(), returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, returnReason]);
+        `, [returnItemId, returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, returnReason]);
+                const mapReturnReason = (r) => {
+                    if (r.includes('Expiry'))
+                        return 'expired';
+                    if (r.includes('Damaged'))
+                        return 'damaged';
+                    if (r.includes('Rate'))
+                        return 'quality_issue';
+                    if (r.includes('Excess'))
+                        return 'excess_supply';
+                    return 'quality_issue';
+                };
+                await (0, dataService_1.syncEntity)('PurchaseReturnItem', 'create', {
+                    id: returnItemId,
+                    returnId,
+                    productId: row.product,
+                    batchId: batchData.id,
+                    qty: row.qty,
+                    mrp: batchData.mrp,
+                    ptr: row.ptr,
+                    netAmount: row.amount,
+                    reason: mapReturnReason(returnReason)
+                });
                 // Decrease stock
                 await window.pharmaAPI.db.run(`
           UPDATE batches SET current_qty = current_qty - ? WHERE id = ?
         `, [row.qty, batchData.id]);
+                await (0, dataService_1.syncEntity)('Batch', 'update', {
+                    id: batchData.id,
+                    currentQty: batchData.current_qty - Number(row.qty)
+                });
             }
             setSuccessMsg("Purchase Return saved successfully!");
             setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, ptr: 0, gst: 12, amount: 0 }]);

@@ -37,6 +37,7 @@ exports.default = SalesReturn;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const dataService_1 = require("../../services/dataService");
 function SalesReturn() {
     const [customers, set_customers] = (0, react_1.useState)([]);
     const [products, set_products] = (0, react_1.useState)([]);
@@ -185,7 +186,10 @@ function SalesReturn() {
         }
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const companyId = user.companyId || 'COMP-DEMO-001';
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
             const returnId = 'SR-' + Date.now();
             const entryNo = 'SRET-' + Date.now();
             const res = await window.pharmaAPI.db.run(`
@@ -194,6 +198,17 @@ function SalesReturn() {
       `, [returnId, companyId, entryNo, originalSaleId, customerId, returnDate, returnReason, totals.net]);
             if (!res.success)
                 throw new Error(res.error);
+            await (0, dataService_1.syncEntity)('SaleReturn', 'create', {
+                id: returnId,
+                companyId,
+                entryNo,
+                saleId: originalSaleId,
+                customerId,
+                returnDate: new Date(returnDate).toISOString(),
+                reason: returnReason,
+                netAmount: totals.net,
+                status: 'saved'
+            });
             for (const row of rows) {
                 if (!row.product || !row.qty)
                     continue;
@@ -201,15 +216,40 @@ function SalesReturn() {
                 const batchData = prod?.batches.find(b => b.batch === row.batch);
                 if (!batchData)
                     throw new Error("Batch not found for product.");
+                const returnItemId = 'SRI-' + Date.now() + Math.random();
                 await window.pharmaAPI.db.run(`
           INSERT INTO sale_return_items (id, return_id, product_id, batch_id, qty, rate, disc_percent, gst_rate, net_amount, reason)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, ['SRI-' + Date.now() + Math.random(), returnId, row.product, batchData.id, row.qty, row.rate, row.disc, row.gst, row.amount, returnReason]);
+        `, [returnItemId, returnId, row.product, batchData.id, row.qty, row.rate, row.disc, row.gst, row.amount, returnReason]);
+                const mapReturnReason = (r) => {
+                    if (r.includes('Salable'))
+                        return 'excess_supply';
+                    if (r.includes('Expired'))
+                        return 'expired';
+                    if (r.includes('Breakage'))
+                        return 'damaged';
+                    return 'quality_issue';
+                };
+                await (0, dataService_1.syncEntity)('SaleReturnItem', 'create', {
+                    id: returnItemId,
+                    returnId,
+                    productId: row.product,
+                    batchId: batchData.id,
+                    qty: row.qty,
+                    mrp: row.rate,
+                    salePrice: row.rate,
+                    netAmount: row.amount,
+                    reason: mapReturnReason(returnReason)
+                });
                 // Increase stock if salable return
                 if (returnReason.includes("Salable")) {
                     await window.pharmaAPI.db.run(`
             UPDATE batches SET current_qty = current_qty + ? WHERE id = ?
           `, [row.qty, batchData.id]);
+                    await (0, dataService_1.syncEntity)('Batch', 'update', {
+                        id: batchData.id,
+                        currentQty: batchData.current_qty + Number(row.qty)
+                    });
                 }
             }
             setSuccessMsg("Sales Return saved successfully!");

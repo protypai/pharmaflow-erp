@@ -37,6 +37,7 @@ exports.default = Receipts;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const dataService_1 = require("../../services/dataService");
 function Receipts() {
     const [customers, set_customers] = (0, react_1.useState)([]);
     (0, react_1.useEffect)(() => {
@@ -105,12 +106,19 @@ function Receipts() {
             if (allocatedTotal > Number(amountReceived))
                 throw new Error("Allocation exceeds received amount!");
             const receiptNo = "REC-" + Date.now().toString().slice(-6);
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
+            const receiptId = crypto.randomUUID();
             await window.pharmaAPI.db.run(`INSERT INTO receipts (
           id, company_id, receipt_no, customer_id, date, amount, payment_mode, cheque_no, bank_name
         ) VALUES (
-          ?, 'COMP-DEMO-001', ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
         )`, [
-                crypto.randomUUID(),
+                receiptId,
+                companyId,
                 receiptNo,
                 customerId,
                 receiptDate,
@@ -119,9 +127,33 @@ function Receipts() {
                 chequeNo,
                 bankName
             ]);
+            const mapPayMode = (m) => {
+                if (m === 'cash')
+                    return 'cash';
+                return 'neft_rtgs';
+            };
+            await (0, dataService_1.syncEntity)('Receipt', 'create', {
+                id: receiptId,
+                companyId,
+                receiptNo,
+                customerId,
+                date: new Date(receiptDate).toISOString(),
+                amount: Number(amountReceived),
+                paymentMode: mapPayMode(payMode),
+                chequeNo,
+                bankName
+            });
             for (const b of bills) {
                 if (b.allocated > 0 || b.discount > 0) {
-                    await window.pharmaAPI.db.run("UPDATE sales SET paid_amount = paid_amount + ? WHERE id = ?", [Number(b.allocated || 0) + Number(b.discount || 0), b.dbId]);
+                    const addAmount = Number(b.allocated || 0) + Number(b.discount || 0);
+                    await window.pharmaAPI.db.run("UPDATE sales SET paid_amount = paid_amount + ? WHERE id = ?", [addAmount, b.dbId]);
+                    const saleRes = await window.pharmaAPI.db.query("SELECT paid_amount FROM sales WHERE id = ?", [b.dbId]);
+                    if (saleRes?.data?.length > 0) {
+                        await (0, dataService_1.syncEntity)('Sale', 'update', {
+                            id: b.dbId,
+                            paidAmount: saleRes.data[0].paid_amount
+                        });
+                    }
                 }
             }
             setCustomerId('');

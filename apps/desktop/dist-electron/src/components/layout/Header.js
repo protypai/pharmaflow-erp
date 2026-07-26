@@ -82,6 +82,40 @@ function Header({ collapsed, onToggle, pathname }) {
     const [profileOpen, setProfileOpen] = (0, react_1.useState)(false);
     const currentAppVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.30';
     const [newVersion, setNewVersion] = (0, react_1.useState)(currentAppVersion);
+    const [updateAvailable, setUpdateAvailable] = (0, react_1.useState)(false);
+    const [updateOpen, setUpdateOpen] = (0, react_1.useState)(false);
+    const [companyInfo, setCompanyInfo] = (0, react_1.useState)({ name: 'Company Name', shortName: 'CN' });
+    const [userInfo, setUserInfo] = (0, react_1.useState)({ name: 'User', role: 'admin' });
+    (0, react_1.useEffect)(() => {
+        const fetchProfile = async () => {
+            try {
+                const compRes = await window.pharmaAPI.db.query("SELECT * FROM companies LIMIT 1");
+                if (compRes?.data?.length > 0) {
+                    setCompanyInfo(compRes.data[0]);
+                }
+                const userRes = await window.pharmaAPI.db.query("SELECT * FROM users LIMIT 1");
+                if (userRes?.data?.length > 0) {
+                    setUserInfo(userRes.data[0]);
+                }
+            }
+            catch (err) {
+                console.error("Failed to load profile data", err);
+            }
+        };
+        fetchProfile();
+    }, []);
+    (0, react_1.useEffect)(() => {
+        if (window.pharmaAPI?.update) {
+            window.pharmaAPI.update.onAvailable((info) => {
+                setUpdateAvailable(true);
+                if (info?.version)
+                    setNewVersion(info.version);
+            });
+            window.pharmaAPI.update.onDownloaded(() => {
+                setUpdateAvailable(true);
+            });
+        }
+    }, []);
     const handleTriggerUpdate = () => {
         if (window.pharmaAPI?.update?.check) {
             window.pharmaAPI.update.check();
@@ -171,13 +205,13 @@ function Header({ collapsed, onToggle, pathname }) {
                                                         alert('Installing latest update...');
                                                         window.location.reload();
                                                     }
-                                                }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Download, { size: 14 }), " Install Update Now"] })) : ((0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", style: { width: '100%', justifyContent: 'center' }, onClick: handleTriggerUpdate, children: "Check for Updates" }))] }))] }), (0, jsx_runtime_1.jsxs)("button", { className: "header-icon-btn", id: "notifications-btn", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Bell, { size: 17 }), (0, jsx_runtime_1.jsx)("span", { className: "header-badge" })] }), (0, jsx_runtime_1.jsxs)("div", { style: { position: 'relative' }, children: [(0, jsx_runtime_1.jsx)("div", { className: "header-avatar", onClick: () => setProfileOpen(!profileOpen), id: "profile-avatar", children: "SM" }), profileOpen && ((0, jsx_runtime_1.jsxs)("div", { style: {
+                                                }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Download, { size: 14 }), " Install Update Now"] })) : ((0, jsx_runtime_1.jsx)("button", { className: "btn btn-outline btn-sm", style: { width: '100%', justifyContent: 'center' }, onClick: handleTriggerUpdate, children: "Check for Updates" }))] }))] }), (0, jsx_runtime_1.jsxs)("button", { className: "header-icon-btn", id: "notifications-btn", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Bell, { size: 17 }), (0, jsx_runtime_1.jsx)("span", { className: "header-badge" })] }), (0, jsx_runtime_1.jsxs)("div", { style: { position: 'relative' }, children: [(0, jsx_runtime_1.jsx)("div", { className: "header-avatar", onClick: () => setProfileOpen(!profileOpen), id: "profile-avatar", children: (companyInfo.shortName || companyInfo.name || 'CN').substring(0, 2).toUpperCase() }), profileOpen && ((0, jsx_runtime_1.jsxs)("div", { style: {
                                             position: 'absolute', top: '40px', right: 0,
                                             background: 'white', border: '1px solid var(--border)',
                                             borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',
                                             minWidth: '180px', zIndex: 200,
                                             overflow: 'hidden',
-                                        }, children: [(0, jsx_runtime_1.jsxs)("div", { style: { padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)' }, children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 600, fontSize: '0.82rem' }, children: "Sharma Medicals" }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.72rem', color: 'var(--text-muted)' }, children: "FY 2025-26 \u2022 Admin" })] }), (0, jsx_runtime_1.jsxs)("div", { style: { padding: '0.25rem 0' }, children: [[
+                                        }, children: [(0, jsx_runtime_1.jsxs)("div", { style: { padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)' }, children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 600, fontSize: '0.82rem' }, children: companyInfo.name }), (0, jsx_runtime_1.jsxs)("div", { style: { fontSize: '0.72rem', color: 'var(--text-muted)' }, children: ["FY 2025-26 \u2022 ", userInfo.role] })] }), (0, jsx_runtime_1.jsxs)("div", { style: { padding: '0.25rem 0' }, children: [[
                                                         { icon: lucide_react_1.User, label: 'Profile', path: '/profile' },
                                                         { icon: lucide_react_1.Settings, label: 'Settings', path: '/settings' },
                                                     ].map(({ icon: Icon, label, path }) => ((0, jsx_runtime_1.jsxs)("div", { onClick: () => { if (path)

@@ -116,7 +116,16 @@ function AdminHeader({ collapsed, onToggle, pathname }) {
               </div>
               <div style={{ padding: '0.25rem 0' }}>
                 <div
-                  onClick={() => { navigate('/admin/login'); setProfileOpen(false); }}
+                  onClick={async () => { 
+                    if (window.pharmaAPI?.auth) {
+                      await window.pharmaAPI.auth.clearToken();
+                    }
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                    setProfileOpen(false);
+                    navigate('/admin/login');
+                  }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '0.625rem',
                     padding: '0.5rem 1rem', cursor: 'pointer',

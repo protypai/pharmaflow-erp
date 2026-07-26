@@ -37,6 +37,7 @@ exports.default = CompanyMaster;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const dataService_1 = require("../../services/dataService");
 function CompanyMaster() {
     const [search, setSearch] = (0, react_1.useState)('');
     const [isModalOpen, setIsModalOpen] = (0, react_1.useState)(false);
@@ -63,8 +64,13 @@ function CompanyMaster() {
         }
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const companyId = user.companyId || 'COMP-DEMO-001';
-            if (formData.id) {
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
+            const isNew = !formData.id;
+            const id = isNew ? 'MFG-' + Date.now() : formData.id;
+            if (!isNew) {
                 const res = await window.pharmaAPI.db.run(`
           UPDATE manufacturers SET name = ?, status = ?, updated_at = datetime('now') WHERE id = ?
         `, [formData.name, formData.status, formData.id]);
@@ -74,7 +80,6 @@ function CompanyMaster() {
                 }
             }
             else {
-                const id = 'MFG-' + Date.now();
                 const res = await window.pharmaAPI.db.run(`
           INSERT INTO manufacturers (id, company_id, name, status, created_at, updated_at) 
           VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -84,6 +89,13 @@ function CompanyMaster() {
                     return;
                 }
             }
+            // Sync to cloud
+            await (0, dataService_1.syncEntity)('Manufacturer', isNew ? 'create' : 'update', {
+                id,
+                companyId,
+                name: formData.name,
+                status: formData.status
+            });
             setIsModalOpen(false);
             setFormData({ id: null, name: '', status: 'active' });
             fetchManufacturers();
@@ -102,6 +114,8 @@ function CompanyMaster() {
             return;
         try {
             await window.pharmaAPI.db.run("DELETE FROM manufacturers WHERE id = ?", [id]);
+            // Sync to cloud
+            await (0, dataService_1.syncEntity)('Manufacturer', 'delete', { id });
             fetchManufacturers();
         }
         catch (err) {

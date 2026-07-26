@@ -9,12 +9,18 @@ electron_1.contextBridge.exposeInMainWorld('pharmaAPI', {
         query: (sql, params) => electron_1.ipcRenderer.invoke('db:query', sql, params),
         run: (sql, params) => electron_1.ipcRenderer.invoke('db:run', sql, params),
         transaction: (operations) => electron_1.ipcRenderer.invoke('db:transaction', operations),
+        reset: () => electron_1.ipcRenderer.invoke('db:reset'),
     },
     // Sync operations
     sync: {
         push: () => electron_1.ipcRenderer.invoke('sync:push'),
         getStatus: () => electron_1.ipcRenderer.invoke('sync:status'),
         onSyncComplete: (callback) => electron_1.ipcRenderer.on('sync:complete', (_e, result) => callback(result)),
+    },
+    // Auth operations
+    auth: {
+        setToken: (token) => electron_1.ipcRenderer.invoke('auth:setToken', token),
+        clearToken: () => electron_1.ipcRenderer.invoke('auth:clearToken')
     },
     // Print operations
     print: {
@@ -34,6 +40,7 @@ electron_1.contextBridge.exposeInMainWorld('pharmaAPI', {
     // Updates
     update: {
         check: () => electron_1.ipcRenderer.invoke('update:check'),
+        quitAndInstall: () => electron_1.ipcRenderer.invoke('update:install'),
         onAvailable: (callback) => electron_1.ipcRenderer.on('update:available', (_e, info) => callback(info)),
         onDownloaded: (callback) => electron_1.ipcRenderer.on('update:downloaded', () => callback()),
     },

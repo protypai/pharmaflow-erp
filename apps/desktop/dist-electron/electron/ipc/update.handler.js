@@ -27,6 +27,9 @@ function setupUpdateHandlers(mainWindow) {
             return { success: false, error: err.message };
         }
     });
+    electron_1.ipcMain.handle('update:install', () => {
+        electron_updater_1.autoUpdater.quitAndInstall();
+    });
     // Check for updates on startup (production only)
     if (process.env.NODE_ENV !== 'development') {
         setTimeout(() => electron_updater_1.autoUpdater.checkForUpdates(), 3000);

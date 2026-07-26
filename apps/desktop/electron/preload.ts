@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
       ipcRenderer.on('sync:complete', (_e, result) => callback(result)),
   },
 
+  // Auth operations
+  auth: {
+    setToken: (token: string) => ipcRenderer.invoke('auth:setToken', token),
+    clearToken: () => ipcRenderer.invoke('auth:clearToken')
+  },
+
   // Print operations
   print: {
     invoice: (html: string) => ipcRenderer.invoke('print:invoice', html),

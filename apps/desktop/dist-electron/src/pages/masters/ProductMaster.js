@@ -37,6 +37,7 @@ exports.default = ProductMaster;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const lucide_react_1 = require("lucide-react");
+const dataService_1 = require("../../services/dataService");
 function ProductMaster() {
     const [search, setSearch] = (0, react_1.useState)('');
     const [catFilter, setCatFilter] = (0, react_1.useState)('');
@@ -102,9 +103,14 @@ function ProductMaster() {
         }
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const companyId = user.companyId || 'COMP-DEMO-001';
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            if (!userRes?.data?.length)
+                throw new Error("Admin user not found in local DB");
+            const companyId = userRes.data[0].company_id;
             const code = formData.code || ('ITM' + Math.floor(Math.random() * 100000));
-            if (formData.id) {
+            const isNew = !formData.id;
+            const id = isNew ? 'PROD-' + Date.now() : formData.id;
+            if (!isNew) {
                 const res = await window.pharmaAPI.db.run(`
           UPDATE products SET
             code = ?, barcode = ?, name = ?, generic_name = ?, manufacturer_id = ?, category_id = ?,
@@ -124,7 +130,6 @@ function ProductMaster() {
                 }
             }
             else {
-                const id = 'PROD-' + Date.now();
                 const res = await window.pharmaAPI.db.run(`
           INSERT INTO products (
             id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id,
@@ -144,6 +149,28 @@ function ProductMaster() {
                     return;
                 }
             }
+            // Sync to cloud
+            await (0, dataService_1.syncEntity)('Product', isNew ? 'create' : 'update', {
+                id,
+                companyId,
+                code,
+                barcode: formData.barcode,
+                name: formData.name,
+                genericName: formData.generic_name,
+                manufacturerId: formData.manufacturer_id || null,
+                categoryId: formData.category_id || null,
+                rackId: formData.rack_id || null,
+                packing: formData.packing,
+                purchaseUnit: formData.purchase_unit,
+                saleUnit: formData.sale_unit,
+                conversionFactor: formData.conversion_factor,
+                hsnCode: formData.hsn_code,
+                gstRate: formData.gst_rate,
+                schedule: formData.schedule,
+                minStock: formData.min_stock,
+                maxStock: formData.max_stock,
+                status: 'active'
+            });
             setIsModalOpen(false);
             setFormData({
                 id: null,
@@ -177,6 +204,8 @@ function ProductMaster() {
             return;
         try {
             await window.pharmaAPI.db.run("DELETE FROM products WHERE id = ?", [id]);
+            // Sync to cloud
+            await (0, dataService_1.syncEntity)('Product', 'delete', { id });
             fetchData();
         }
         catch (err) {
