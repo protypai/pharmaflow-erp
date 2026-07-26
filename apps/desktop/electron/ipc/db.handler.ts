@@ -1,8 +1,18 @@
 import { ipcMain } from 'electron';
-import { queryDb, runDb, transactionDb } from '../services/localDb.service';
+import { queryDb, runDb, transactionDb, resetLocalDb } from '../services/localDb.service';
 import { logger } from '../services/logger';
 
 export function setupDbHandlers(): void {
+  ipcMain.handle('db:reset', async () => {
+    try {
+      await resetLocalDb();
+      return { success: true };
+    } catch (err: any) {
+      logger.error('db:reset failed', { error: err.message });
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('db:query', async (_event, sql: string, params?: any[]) => {
     try {
       logger.info('db:query', { sql, params });

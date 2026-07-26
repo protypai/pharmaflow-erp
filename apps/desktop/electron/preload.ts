@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
     run: (sql: string, params?: any[]) => ipcRenderer.invoke('db:run', sql, params),
     transaction: (operations: { sql: string; params?: any[] }[]) =>
       ipcRenderer.invoke('db:transaction', operations),
+    reset: () => ipcRenderer.invoke('db:reset'),
   },
 
   // Sync operations

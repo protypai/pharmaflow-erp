@@ -27,6 +27,31 @@ export async function initLocalDb(): Promise<void> {
   logger.info('Local database initialized');
 }
 
+export async function resetLocalDb(): Promise<void> {
+  const dbPath = path.join(app.getPath('userData'), 'pharmaflow.db');
+  logger.info(`Resetting local database at: ${dbPath}`);
+  
+  if (db) {
+    db.close();
+    db = undefined as any;
+  }
+  
+  const fs = require('fs');
+  if (fs.existsSync(dbPath)) {
+    fs.unlinkSync(dbPath);
+    logger.info('Old database file deleted');
+  }
+  if (fs.existsSync(dbPath + '-wal')) {
+    fs.unlinkSync(dbPath + '-wal');
+  }
+  if (fs.existsSync(dbPath + '-shm')) {
+    fs.unlinkSync(dbPath + '-shm');
+  }
+  
+  await initLocalDb();
+  logger.info('Database reset complete');
+}
+
 export function queryDb(sql: string, params: any[] = []): any[] {
   return getDb().prepare(sql).all(...params);
 }

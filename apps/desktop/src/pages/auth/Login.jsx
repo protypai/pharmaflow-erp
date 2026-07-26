@@ -19,28 +19,28 @@ export default function Login() {
     
     (data.customers || []).forEach(c => {
       ops.push({
-        sql: 'INSERT OR REPLACE INTO Customer (id, companyId, code, name, type, gstin, drugLicense, phone, email, address, area, city, state, pincode, salesman, creditLimit, creditDays, openingBalance, openingBalanceType, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        sql: 'INSERT OR REPLACE INTO customers (id, company_id, code, name, type, gstin, drug_license, phone, email, address, area, city, state, pincode, salesman, credit_limit, credit_days, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status]
       });
     });
 
     (data.suppliers || []).forEach(s => {
       ops.push({
-        sql: 'INSERT OR REPLACE INTO Supplier (id, companyId, code, name, gstin, drugLicense, phone, email, address, city, state, pincode, creditDays, creditLimit, openingBalance, openingBalanceType, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        sql: 'INSERT OR REPLACE INTO suppliers (id, company_id, code, name, gstin, drug_license, phone, email, address, city, state, pincode, credit_days, credit_limit, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status]
       });
     });
 
     (data.products || []).forEach(p => {
       ops.push({
-        sql: 'INSERT OR REPLACE INTO Product (id, companyId, code, barcode, name, genericName, manufacturerId, categoryId, rackId, packing, purchaseUnit, saleUnit, conversionFactor, hsnCode, gstRate, minStock, maxStock, reorderQty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        sql: 'INSERT OR REPLACE INTO products (id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id, rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate, min_stock, max_stock, reorder_qty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         params: [p.id, p.companyId, p.code, p.barcode, p.name, p.genericName, p.manufacturerId, p.categoryId, p.rackId, p.packing, p.purchaseUnit, p.saleUnit, p.conversionFactor, p.hsnCode, p.gstRate, p.minStock, p.maxStock, p.reorderQty, p.discontinued ? 1 : 0, p.status]
       });
     });
 
     (data.batches || []).forEach(b => {
       ops.push({
-        sql: 'INSERT OR REPLACE INTO Batch (id, productId, batchNo, expiryDate, mrp, ptr, pts, purchasePrice, gstRate, currentQty, freeQty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        sql: 'INSERT OR REPLACE INTO batches (id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         params: [b.id, b.productId, b.batchNo, b.expiryDate, b.mrp, b.ptr, b.pts, b.purchasePrice, b.gstRate, b.currentQty, b.freeQty]
       });
     });
@@ -83,19 +83,33 @@ export default function Login() {
           // Sync into local SQLite if window.pharmaAPI exists
           if (window.pharmaAPI?.db) {
             try {
+              // Workspace Protection Check
+              const compRes = await window.pharmaAPI.db.query('SELECT id FROM companies LIMIT 1');
+              if (compRes?.data && compRes.data.length > 0) {
+                const existingCompanyId = compRes.data[0].id;
+                const newCompanyId = user.company?.id || user.companyId || 'comp_001';
+                
+                if (existingCompanyId !== newCompanyId) {
+                  console.warn('Workspace change detected! Wiping local database for new company.');
+                  if (window.pharmaAPI.db.reset) {
+                    await window.pharmaAPI.db.reset();
+                  }
+                }
+              }
+
               if (user.company) {
-                await window.pharmaAPI.db.query(
-                  'INSERT OR REPLACE INTO Company (id, name, shortName, email) VALUES (?, ?, ?, ?)',
+                await window.pharmaAPI.db.run(
+                  'INSERT OR REPLACE INTO companies (id, name, short_name, email) VALUES (?, ?, ?, ?)',
                   [user.company.id, user.company.name, user.company.shortName || user.company.name, user.email]
                 );
               }
-              await window.pharmaAPI.db.query(
-                'INSERT OR REPLACE INTO User (id, companyId, name, email, passwordHash, role, isActive) VALUES (?, ?, ?, ?, ?, ?, 1)',
+              await window.pharmaAPI.db.run(
+                'INSERT OR REPLACE INTO users (id, company_id, name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
                 [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, password, user.role || 'admin']
               );
 
               // Initial Cloud Restore check
-              const custRes = await window.pharmaAPI.db.query('SELECT COUNT(*) as c FROM Customer');
+              const custRes = await window.pharmaAPI.db.query('SELECT COUNT(*) as c FROM customers');
               if (custRes?.data && custRes.data[0]?.c === 0) {
                 setSyncing(true);
                 const syncRes = await fetch(`${API_BASE_URL}/api/v1/sync/initial`, {
@@ -127,7 +141,7 @@ export default function Login() {
       // 2. Fallback to local SQLite DB if cloud unavailable
       if (window.pharmaAPI?.db) {
         const response = await window.pharmaAPI.db.query(
-          'SELECT id, name, companyId, role FROM User WHERE email = ? AND passwordHash = ? AND isActive = 1',
+          'SELECT id, name, company_id as companyId, role FROM users WHERE email = ? AND password_hash = ? AND is_active = 1',
           [username, password]
         );
 
