@@ -29,6 +29,10 @@ export function setupUpdateHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
+  ipcMain.handle('update:install', () => {
+    autoUpdater.quitAndInstall();
+  });
+
   // Check for updates on startup (production only)
   if (process.env.NODE_ENV !== 'development') {
     setTimeout(() => autoUpdater.checkForUpdates(), 3000);

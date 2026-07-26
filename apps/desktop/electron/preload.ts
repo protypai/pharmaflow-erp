@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
   // Updates
   update: {
     check: () => ipcRenderer.invoke('update:check'),
+    quitAndInstall: () => ipcRenderer.invoke('update:install'),
     onAvailable: (callback: (info: any) => void) =>
       ipcRenderer.on('update:available', (_e, info) => callback(info)),
     onDownloaded: (callback: () => void) =>
