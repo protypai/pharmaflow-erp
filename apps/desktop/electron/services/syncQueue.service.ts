@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getDb } from './localDb.service';
 import { logger } from './logger';
 
-const API_URL = process.env.VITE_CLOUD_API_URL || 'https://api.pharmaflow.in';
+const API_URL = process.env.VITE_CLOUD_API_URL || 'http://168.144.179.128';
 const APP_VERSION = process.env.VITE_APP_VERSION || '1.0.0';
 
 export function addToSyncQueue(tableName: string, operation: 'create' | 'update' | 'delete', payload: any): void {
