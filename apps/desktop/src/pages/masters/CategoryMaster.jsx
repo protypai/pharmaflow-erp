@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, X } from 'lucide-react';
+import { syncEntity } from '../../services/dataService';
 
 export default function CategoryMaster() {
   const [search, setSearch] = useState('');
@@ -32,19 +33,29 @@ export default function CategoryMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      if (formData.id) {
+      const isNew = !formData.id;
+      const id = isNew ? 'CAT-' + Date.now() : formData.id;
+
+      if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE categories SET name = ?, status = ?, updated_at = datetime('now') WHERE id = ?
         `, [formData.name, formData.status, formData.id]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
-        const id = 'CAT-' + Date.now();
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO categories (id, company_id, name, status, created_at, updated_at) 
           VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
         `, [id, companyId, formData.name, formData.status]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
+
+      // Sync to cloud
+      await syncEntity('Category', isNew ? 'create' : 'update', {
+        id,
+        companyId,
+        name: formData.name,
+        status: formData.status
+      });
 
       setIsModalOpen(false);
       setFormData({ id: null, name: '', status: 'active' });
@@ -64,6 +75,10 @@ export default function CategoryMaster() {
     if (!window.confirm("Are you sure you want to delete this category?")) return;
     try {
       await window.pharmaAPI.db.run("DELETE FROM categories WHERE id = ?", [id]);
+      
+      // Sync to cloud
+      await syncEntity('Category', 'delete', { id });
+      
       fetchCategories();
     } catch (err) {
       alert("Failed to delete category: " + err.message);

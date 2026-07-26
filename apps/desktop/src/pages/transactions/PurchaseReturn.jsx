@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
-
+import { syncEntity } from '../../services/dataService';
 
 export default function PurchaseReturn() {
   const [suppliers, set_suppliers] = useState([]);
@@ -164,21 +164,59 @@ export default function PurchaseReturn() {
 
       if (!res.success) throw new Error(res.error);
 
+      await syncEntity('PurchaseReturn', 'create', {
+        id: returnId,
+        companyId,
+        entryNo,
+        purchaseId: originalPurchaseId,
+        supplierId,
+        returnDate: new Date(returnDate).toISOString(),
+        reason: returnReason,
+        netAmount: totals.net,
+        status: 'saved'
+      });
+
       for (const row of rows) {
         if (!row.product || !row.qty) continue;
         const prod = products.find(p => p.id.toString() === row.product.toString());
         const batchData = prod?.batches.find(b => b.batch === row.batch);
         if (!batchData) throw new Error("Batch not found for product.");
 
+        const returnItemId = 'PRI-' + Date.now() + Math.random();
         await window.pharmaAPI.db.run(`
           INSERT INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, ['PRI-' + Date.now() + Math.random(), returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, returnReason]);
+        `, [returnItemId, returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, returnReason]);
+
+        const mapReturnReason = (r) => {
+          if (r.includes('Expiry')) return 'expired';
+          if (r.includes('Damaged')) return 'damaged';
+          if (r.includes('Rate')) return 'quality_issue';
+          if (r.includes('Excess')) return 'excess_supply';
+          return 'quality_issue';
+        };
+
+        await syncEntity('PurchaseReturnItem', 'create', {
+          id: returnItemId,
+          returnId,
+          productId: row.product,
+          batchId: batchData.id,
+          qty: row.qty,
+          mrp: batchData.mrp,
+          ptr: row.ptr,
+          netAmount: row.amount,
+          reason: mapReturnReason(returnReason)
+        });
 
         // Decrease stock
         await window.pharmaAPI.db.run(`
           UPDATE batches SET current_qty = current_qty - ? WHERE id = ?
         `, [row.qty, batchData.id]);
+        
+        await syncEntity('Batch', 'update', {
+          id: batchData.id,
+          currentQty: batchData.current_qty - Number(row.qty)
+        });
       }
 
       setSuccessMsg("Purchase Return saved successfully!");

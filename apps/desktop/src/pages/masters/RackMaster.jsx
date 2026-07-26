@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, X } from 'lucide-react';
+import { syncEntity } from '../../services/dataService';
 
 export default function RackMaster() {
   const [search, setSearch] = useState('');
@@ -32,19 +33,29 @@ export default function RackMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      if (formData.id) {
+      const isNew = !formData.id;
+      const id = isNew ? 'RACK-' + Date.now() : formData.id;
+
+      if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE racks SET code = ?, status = ?, updated_at = datetime('now') WHERE id = ?
         `, [formData.name, formData.status, formData.id]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
-        const id = 'RACK-' + Date.now();
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO racks (id, company_id, code, status, created_at, updated_at) 
           VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
         `, [id, companyId, formData.name, formData.status]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
+
+      // Sync to cloud
+      await syncEntity('Rack', isNew ? 'create' : 'update', {
+        id,
+        companyId,
+        code: formData.name, // The backend expects 'code'
+        status: formData.status
+      });
 
       setIsModalOpen(false);
       setFormData({ id: null, name: '', status: 'active' });
@@ -64,6 +75,10 @@ export default function RackMaster() {
     if (!window.confirm("Are you sure you want to delete this rack?")) return;
     try {
       await window.pharmaAPI.db.run("DELETE FROM racks WHERE id = ?", [id]);
+      
+      // Sync to cloud
+      await syncEntity('Rack', 'delete', { id });
+      
       fetchRacks();
     } catch (err) {
       alert("Failed to delete rack: " + err.message);

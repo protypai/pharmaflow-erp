@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Calculator, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
+import { syncEntity } from '../../services/dataService';
 export default function Purchase() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([
@@ -130,18 +130,24 @@ export default function Purchase() {
       });
 
       // Insert payment if not credit
+      let paymentId = null;
+      let pModeNormalized = null;
+      let paymentNo = null;
       if (paymentMode !== 'Credit') {
-        const pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
+        pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
+        paymentId = 'PAY-' + Date.now();
+        paymentNo = 'PMT-' + Date.now().toString().slice(-6);
         operations.push({
           sql: `INSERT INTO payments (
             id, company_id, payment_no, supplier_id, date, amount, payment_mode, notes, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
           params: [
-            'PAY-' + Date.now(), companyId, 'PMT-' + Date.now().toString().slice(-6), supplierId, invoiceDate, totals.net, pModeNormalized, 'Against Purchase ' + invoiceNo
+            paymentId, companyId, paymentNo, supplierId, invoiceDate, totals.net, pModeNormalized, 'Against Purchase ' + invoiceNo
           ]
         });
       }
 
+      const syncItems = [];
       // 2. Insert items and update batches
       for (const row of validRows) {
         const batchId = 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
@@ -162,19 +168,58 @@ export default function Purchase() {
           ]
         });
 
+        // We can't know the exact batch ID for sync update if it was an upsert, but we can just use the provided batchId for sync creation
+        // Note: The cloud backend will just perform an upsert on batch as well if we pass 'create'
+        syncItems.push({
+          tableName: 'Batch',
+          operation: 'create',
+          payload: {
+            id: batchId,
+            productId: row.product,
+            batchNo: row.batch,
+            expiryDate: row.expiry || '12/99',
+            mrp: row.mrp,
+            ptr: row.ptr,
+            purchasePrice: row.ptr,
+            gstRate: row.gst,
+            currentQty: row.qty,
+            freeQty: row.free
+          }
+        });
+
         // Insert Purchase Item (Using a subquery to get the correct batch_id just in case it was updated, or we can use the batchId if it's new. 
         // To be safe, we resolve batch_id using SELECT inside the insert)
+        const purchaseItemId = 'P-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
         operations.push({
           sql: `INSERT INTO purchase_items (
             id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, gst_rate, net_amount
           ) VALUES (?, ?, ?, (SELECT id FROM batches WHERE product_id = ? AND batch_no = ?), ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
-            'P-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            purchaseItemId,
             purchaseId,
             row.product,
             row.product, row.batch,
             row.qty, row.free, row.ptr, row.ptr, row.mrp, row.disc1, row.gst, row.amount
           ]
+        });
+
+        syncItems.push({
+          tableName: 'PurchaseItem',
+          operation: 'create',
+          payload: {
+            id: purchaseItemId,
+            purchaseId,
+            productId: row.product,
+            batchId, // Close enough, we use the generated one
+            qty: row.qty,
+            freeQty: row.free,
+            purchasePrice: row.ptr,
+            ptr: row.ptr,
+            mrp: row.mrp,
+            discPercent: row.disc1,
+            gstRate: row.gst,
+            netAmount: row.amount
+          }
         });
       }
 
@@ -182,6 +227,49 @@ export default function Purchase() {
       
       if (!res.success) {
         throw new Error(res.error || 'Transaction failed');
+      }
+
+      const mapPaymentMode = (pm) => {
+        if (pm === 'Cash') return 'cash';
+        if (pm === 'Credit') return 'credit';
+        return 'upi'; // For Bank / UPI
+      };
+
+      const mappedPm = mapPaymentMode(paymentMode);
+
+      // Sync to cloud
+      await syncEntity('Purchase', 'create', {
+        id: purchaseId,
+        companyId,
+        entryNo,
+        supplierId,
+        invoiceNo,
+        invoiceDate: new Date(invoiceDate).toISOString(),
+        gstType: 'exclusive',
+        subtotal: totals.sub,
+        discountAmount: totals.disc,
+        taxableAmount: totals.sub - totals.disc,
+        netAmount: totals.net,
+        paymentMode: mappedPm,
+        paidAmount: paymentMode === 'Credit' ? 0 : totals.net,
+        status: 'saved'
+      });
+
+      if (paymentMode !== 'Credit') {
+        await syncEntity('Payment', 'create', {
+          id: paymentId,
+          companyId,
+          paymentNo,
+          supplierId,
+          date: new Date(invoiceDate).toISOString(),
+          amount: totals.net,
+          paymentMode: mappedPm === 'cash' ? 'cash' : 'upi',
+          notes: 'Against Purchase ' + invoiceNo
+        });
+      }
+
+      for (const item of syncItems) {
+        await syncEntity(item.tableName, item.operation, item.payload);
       }
 
       setSuccessMsg(`Purchase Invoice ${invoiceNo} saved successfully! Entry No: ${entryNo}`);

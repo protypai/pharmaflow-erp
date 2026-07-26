@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, X } from 'lucide-react';
+import { syncEntity } from '../../services/dataService';
 
 export default function CompanyMaster() {
   const [search, setSearch] = useState('');
@@ -32,19 +33,29 @@ export default function CompanyMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
-      if (formData.id) {
+      const isNew = !formData.id;
+      const id = isNew ? 'MFG-' + Date.now() : formData.id;
+
+      if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE manufacturers SET name = ?, status = ?, updated_at = datetime('now') WHERE id = ?
         `, [formData.name, formData.status, formData.id]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
-        const id = 'MFG-' + Date.now();
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO manufacturers (id, company_id, name, status, created_at, updated_at) 
           VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
         `, [id, companyId, formData.name, formData.status]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
+
+      // Sync to cloud
+      await syncEntity('Manufacturer', isNew ? 'create' : 'update', {
+        id,
+        companyId,
+        name: formData.name,
+        status: formData.status
+      });
 
       setIsModalOpen(false);
       setFormData({ id: null, name: '', status: 'active' });
@@ -64,6 +75,10 @@ export default function CompanyMaster() {
     if (!window.confirm("Are you sure you want to delete this company?")) return;
     try {
       await window.pharmaAPI.db.run("DELETE FROM manufacturers WHERE id = ?", [id]);
+      
+      // Sync to cloud
+      await syncEntity('Manufacturer', 'delete', { id });
+      
       fetchManufacturers();
     } catch (err) {
       alert("Failed to delete company: " + err.message);

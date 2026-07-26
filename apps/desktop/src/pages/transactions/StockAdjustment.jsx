@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer } from 'lucide-react';
-
+import { syncEntity } from '../../services/dataService';
 
 export default function StockAdjustment() {
   const [products, set_products] = useState([]);
@@ -65,6 +65,66 @@ export default function StockAdjustment() {
     }
   };
 
+  const [adjDate, setAdjDate] = useState(new Date().toISOString().split('T')[0]);
+  const [refNo, setRefNo] = useState('');
+  const [reason, setReason] = useState('Physical Count Mismatch');
+  const [authBy, setAuthBy] = useState('Admin User');
+
+  const handleSave = async () => {
+    const validRows = rows.filter(r => r.product && r.batch && r.actualQty !== '');
+    if (validRows.length === 0) return alert("Add at least one product to adjust.");
+    
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const adjId = 'ADJ-' + Date.now();
+
+      await window.pharmaAPI.db.run(`
+        INSERT INTO stock_adjustments (id, company_id, date, reference_no, reason, authorized_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [adjId, companyId, adjDate, refNo, reason, authBy]);
+
+      const mapReason = (r) => {
+        if (r.includes('Mismatch')) return 'physical_count';
+        if (r.includes('Damage')) return 'damage';
+        if (r.includes('Theft')) return 'lost_theft';
+        if (r.includes('Expired')) return 'expired_destroyed';
+        return 'other';
+      };
+
+      await syncEntity('StockAdjustment', 'create', {
+        id: adjId,
+        companyId,
+        entryNo: refNo || adjId,
+        date: new Date(adjDate).toISOString(),
+        reason: mapReason(reason),
+        notes: "Authorized by: " + authBy
+      });
+
+      for (const row of validRows) {
+        const prod = products.find(p => p.id === parseInt(row.product));
+        const batchData = prod?.batches.find(b => b.batch === row.batch);
+        
+        if (batchData) {
+          await window.pharmaAPI.db.run(`
+            UPDATE batches SET current_qty = ? WHERE id = ?
+          `, [Number(row.actualQty), batchData.id]);
+          
+          await syncEntity('Batch', 'update', {
+            id: batchData.id,
+            currentQty: Number(row.actualQty)
+          });
+        }
+      }
+      
+      alert("Stock Adjustment saved!");
+      setRows([{ id: 1, product: '', batch: '', sysQty: 0, actualQty: '', diff: 0 }]);
+      setRefNo('');
+    } catch(err) {
+      alert("Error: " + err.message);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
@@ -74,7 +134,7 @@ export default function StockAdjustment() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Report</button>
-          <button className="btn btn-primary"><Save size={16} /> Save Adjustment</button>
+          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> Save Adjustment</button>
         </div>
       </div>
 
@@ -83,24 +143,24 @@ export default function StockAdjustment() {
           <div className="form-row-2">
             <div className="form-group">
               <label className="form-label">Adjustment Date <span className="text-danger">*</span></label>
-              <input type="date" className="form-input" defaultValue={new Date().toISOString().split('T')[0]} />
+              <input type="date" className="form-input" value={adjDate} onChange={e => setAdjDate(e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Reference No</label>
-              <input type="text" className="form-input" placeholder="e.g. PHY-CNT-01" />
+              <input type="text" className="form-input" placeholder="e.g. PHY-CNT-01" value={refNo} onChange={e => setRefNo(e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Reason for Adjustment <span className="text-danger">*</span></label>
-              <select className="form-select">
-                <option>Physical Count Mismatch</option>
-                <option>Damage / Breakage in Warehouse</option>
-                <option>Theft / Loss</option>
-                <option>Expired & Destroyed</option>
+              <select className="form-select" value={reason} onChange={e => setReason(e.target.value)}>
+                <option value="Physical Count Mismatch">Physical Count Mismatch</option>
+                <option value="Damage / Breakage in Warehouse">Damage / Breakage in Warehouse</option>
+                <option value="Theft / Loss">Theft / Loss</option>
+                <option value="Expired & Destroyed">Expired & Destroyed</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Authorized By <span className="text-danger">*</span></label>
-              <input type="text" className="form-input" defaultValue="Admin User" />
+              <input type="text" className="form-input" value={authBy} onChange={e => setAuthBy(e.target.value)} />
             </div>
           </div>
         </div>

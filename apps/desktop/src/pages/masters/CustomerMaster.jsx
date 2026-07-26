@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Edit2, ShieldAlert } from 'lucide-react';
+import { syncEntity } from '../../services/dataService';
 
 export default function CustomerMaster() {
   const [search, setSearch] = useState('');
@@ -38,8 +39,10 @@ export default function CustomerMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
+      const isNew = !formData.id;
+      const id = isNew ? 'CUST-' + Date.now() : formData.id;
 
-      if (formData.id) {
+      if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE customers SET
             name = ?, type = ?, salesman = ?, phone = ?, email = ?, address = ?, area = ?, pincode = ?, 
@@ -54,7 +57,6 @@ export default function CustomerMaster() {
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
-        const id = 'CUST-' + Date.now();
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO customers (
             id, company_id, name, type, salesman, phone, email, address, area, pincode, 
@@ -70,6 +72,27 @@ export default function CustomerMaster() {
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
+
+      // Sync to cloud
+      await syncEntity('Customer', isNew ? 'create' : 'update', {
+        id,
+        companyId,
+        name: formData.name,
+        type: formData.type.toLowerCase(),
+        salesman: formData.salesman,
+        phone: formData.phone,
+        email: formData.email,
+        address: formData.address,
+        area: formData.area,
+        pincode: formData.pincode,
+        drugLicense: formData.drug_license,
+        gstin: formData.gstin,
+        creditLimit: formData.credit_limit,
+        creditDays: formData.credit_days,
+        openingBalance: formData.opening_balance,
+        openingBalanceType: formData.opening_balance_type,
+        status: 'active'
+      });
 
       setIsModalOpen(false);
       // Reset form
@@ -100,6 +123,10 @@ export default function CustomerMaster() {
     if (!window.confirm("Are you sure you want to delete this customer?")) return;
     try {
       await window.pharmaAPI.db.run("DELETE FROM customers WHERE id = ?", [id]);
+      
+      // Sync to cloud
+      await syncEntity('Customer', 'delete', { id });
+
       fetchCustomers();
     } catch (err) {
       alert("Failed to delete customer: " + err.message);

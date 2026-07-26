@@ -55,6 +55,13 @@ async function applyRecord(tableName: string, operation: string, payload: any, c
     PurchaseReturn: db.purchaseReturn,
     StockAdjustment: db.stockAdjustment,
     Journal: db.journal,
+    Manufacturer: db.manufacturer,
+    Category: db.category,
+    Rack: db.rack,
+    PurchaseItem: db.purchaseItem,
+    SaleItem: db.saleItem,
+    SaleReturnItem: db.saleReturnItem,
+    PurchaseReturnItem: db.purchaseReturnItem,
   };
 
   const model = tableMap[tableName];

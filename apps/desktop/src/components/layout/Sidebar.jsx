@@ -97,10 +97,10 @@ export default function Sidebar({ collapsed, onToggle }) {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const compRes = await window.pharmaAPI.db.query("SELECT * FROM Company LIMIT 1");
+        const compRes = await window.pharmaAPI.db.query("SELECT * FROM companies LIMIT 1");
         if (compRes?.data?.length > 0) setCompanyInfo(compRes.data[0]);
 
-        const userRes = await window.pharmaAPI.db.query("SELECT * FROM User LIMIT 1");
+        const userRes = await window.pharmaAPI.db.query("SELECT * FROM users LIMIT 1");
         if (userRes?.data?.length > 0) setUserInfo(userRes.data[0]);
       } catch (err) {
         console.error("Failed to load profile data", err);

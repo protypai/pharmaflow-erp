@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Edit2 } from 'lucide-react';
+import { syncEntity } from '../../services/dataService';
 
 export default function SupplierMaster() {
   const [search, setSearch] = useState('');
@@ -38,8 +39,10 @@ export default function SupplierMaster() {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
+      const isNew = !formData.id;
+      const id = isNew ? 'SUPP-' + Date.now() : formData.id;
 
-      if (formData.id) {
+      if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE suppliers SET
             name = ?, phone = ?, email = ?, address = ?, city = ?, pincode = ?, 
@@ -54,7 +57,6 @@ export default function SupplierMaster() {
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
-        const id = 'SUPP-' + Date.now();
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO suppliers (
             id, company_id, name, phone, email, address, city, pincode, 
@@ -70,6 +72,25 @@ export default function SupplierMaster() {
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
+
+      // Sync to cloud
+      await syncEntity('Supplier', isNew ? 'create' : 'update', {
+        id,
+        companyId,
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        city: formData.city,
+        address: formData.address,
+        pincode: formData.pincode,
+        drugLicense: formData.drug_license,
+        gstin: formData.gstin,
+        creditLimit: formData.credit_limit,
+        creditDays: formData.credit_days,
+        openingBalance: formData.opening_balance,
+        openingBalanceType: formData.opening_balance_type,
+        status: 'active'
+      });
 
       setIsModalOpen(false);
       setFormData({
@@ -99,6 +120,10 @@ export default function SupplierMaster() {
     if (!window.confirm("Are you sure you want to delete this supplier?")) return;
     try {
       await window.pharmaAPI.db.run("DELETE FROM suppliers WHERE id = ?", [id]);
+      
+      // Sync to cloud
+      await syncEntity('Supplier', 'delete', { id });
+      
       fetchSuppliers();
     } catch (err) {
       alert("Failed to delete supplier: " + err.message);

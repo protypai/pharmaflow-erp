@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Filter, Edit2, Package, History, X, Save } from 'lucide-react';
+import { syncEntity } from '../../services/dataService';
 
 export default function ProductMaster() {
   const [search, setSearch] = useState('');
@@ -77,8 +78,10 @@ export default function ProductMaster() {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const companyId = user.companyId || 'COMP-DEMO-001';
       const code = formData.code || ('ITM' + Math.floor(Math.random() * 100000));
+      const isNew = !formData.id;
+      const id = isNew ? 'PROD-' + Date.now() : formData.id;
 
-      if (formData.id) {
+      if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE products SET
             code = ?, barcode = ?, name = ?, generic_name = ?, manufacturer_id = ?, category_id = ?,
@@ -94,7 +97,6 @@ export default function ProductMaster() {
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
-        const id = 'PROD-' + Date.now();
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO products (
             id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id,
@@ -111,6 +113,29 @@ export default function ProductMaster() {
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
+
+      // Sync to cloud
+      await syncEntity('Product', isNew ? 'create' : 'update', {
+        id,
+        companyId,
+        code,
+        barcode: formData.barcode,
+        name: formData.name,
+        genericName: formData.generic_name,
+        manufacturerId: formData.manufacturer_id || null,
+        categoryId: formData.category_id || null,
+        rackId: formData.rack_id || null,
+        packing: formData.packing,
+        purchaseUnit: formData.purchase_unit,
+        saleUnit: formData.sale_unit,
+        conversionFactor: formData.conversion_factor,
+        hsnCode: formData.hsn_code,
+        gstRate: formData.gst_rate,
+        schedule: formData.schedule,
+        minStock: formData.min_stock,
+        maxStock: formData.max_stock,
+        status: 'active'
+      });
 
       setIsModalOpen(false);
       setFormData({
@@ -145,6 +170,10 @@ export default function ProductMaster() {
     if (!window.confirm("Are you sure you want to delete this product?")) return;
     try {
       await window.pharmaAPI.db.run("DELETE FROM products WHERE id = ?", [id]);
+      
+      // Sync to cloud
+      await syncEntity('Product', 'delete', { id });
+      
       fetchData();
     } catch (err) {
       alert("Failed to delete product: " + err.message);

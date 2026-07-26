@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Printer, IndianRupee } from 'lucide-react';
-
+import { syncEntity } from '../../services/dataService';
 
 export default function Payments() {
   const [suppliers, set_suppliers] = useState([]);
@@ -77,14 +77,19 @@ export default function Payments() {
       
       const paymentNo = "PAY-" + Date.now().toString().slice(-6);
       
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const paymentId = crypto.randomUUID();
+
       await window.pharmaAPI.db.run(
         `INSERT INTO payments (
           id, company_id, payment_no, supplier_id, date, amount, payment_mode, cheque_no, utr_no
         ) VALUES (
-          ?, 'COMP-DEMO-001', ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
         )`,
         [
-          crypto.randomUUID(),
+          paymentId,
+          companyId,
           paymentNo,
           supplierId,
           paymentDate,
@@ -94,12 +99,39 @@ export default function Payments() {
           utrNo
         ]
       );
+
+      const mapPayMode = (m) => {
+        if (m === 'cash') return 'cash';
+        return 'neft_rtgs';
+      };
+
+      await syncEntity('Payment', 'create', {
+        id: paymentId,
+        companyId,
+        paymentNo,
+        supplierId,
+        date: new Date(paymentDate).toISOString(),
+        amount: Number(amountPaid),
+        paymentMode: mapPayMode(payMode),
+        chequeNo,
+        utrNo
+      });
+
       for (const b of bills) {
         if (b.allocated > 0 || b.discount > 0) {
+          const addAmount = Number(b.allocated || 0) + Number(b.discount || 0);
           await window.pharmaAPI.db.run(
             "UPDATE purchases SET paid_amount = paid_amount + ? WHERE id = ?", 
-            [Number(b.allocated || 0) + Number(b.discount || 0), b.dbId]
+            [addAmount, b.dbId]
           );
+
+          const purRes = await window.pharmaAPI.db.query("SELECT paid_amount FROM purchases WHERE id = ?", [b.dbId]);
+          if (purRes?.data?.length > 0) {
+            await syncEntity('Purchase', 'update', {
+              id: b.dbId,
+              paidAmount: purRes.data[0].paid_amount
+            });
+          }
         }
       }
       setSupplierId('');

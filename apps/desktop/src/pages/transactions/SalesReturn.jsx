@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
-
+import { syncEntity } from '../../services/dataService';
 
 export default function SalesReturn() {
   const [customers, set_customers] = useState([]);
@@ -170,22 +170,59 @@ export default function SalesReturn() {
 
       if (!res.success) throw new Error(res.error);
 
+      await syncEntity('SaleReturn', 'create', {
+        id: returnId,
+        companyId,
+        entryNo,
+        saleId: originalSaleId,
+        customerId,
+        returnDate: new Date(returnDate).toISOString(),
+        reason: returnReason,
+        netAmount: totals.net,
+        status: 'saved'
+      });
+
       for (const row of rows) {
         if (!row.product || !row.qty) continue;
         const prod = products.find(p => p.id.toString() === row.product.toString());
         const batchData = prod?.batches.find(b => b.batch === row.batch);
         if (!batchData) throw new Error("Batch not found for product.");
 
+        const returnItemId = 'SRI-' + Date.now() + Math.random();
         await window.pharmaAPI.db.run(`
           INSERT INTO sale_return_items (id, return_id, product_id, batch_id, qty, rate, disc_percent, gst_rate, net_amount, reason)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, ['SRI-' + Date.now() + Math.random(), returnId, row.product, batchData.id, row.qty, row.rate, row.disc, row.gst, row.amount, returnReason]);
+        `, [returnItemId, returnId, row.product, batchData.id, row.qty, row.rate, row.disc, row.gst, row.amount, returnReason]);
+
+        const mapReturnReason = (r) => {
+          if (r.includes('Salable')) return 'excess_supply';
+          if (r.includes('Expired')) return 'expired';
+          if (r.includes('Breakage')) return 'damaged';
+          return 'quality_issue';
+        };
+
+        await syncEntity('SaleReturnItem', 'create', {
+          id: returnItemId,
+          returnId,
+          productId: row.product,
+          batchId: batchData.id,
+          qty: row.qty,
+          mrp: row.rate,
+          salePrice: row.rate,
+          netAmount: row.amount,
+          reason: mapReturnReason(returnReason)
+        });
 
         // Increase stock if salable return
         if (returnReason.includes("Salable")) {
           await window.pharmaAPI.db.run(`
             UPDATE batches SET current_qty = current_qty + ? WHERE id = ?
           `, [row.qty, batchData.id]);
+          
+          await syncEntity('Batch', 'update', {
+            id: batchData.id,
+            currentQty: batchData.current_qty + Number(row.qty)
+          });
         }
       }
 

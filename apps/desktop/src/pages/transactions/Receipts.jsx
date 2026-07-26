@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Printer, IndianRupee } from 'lucide-react';
-
+import { syncEntity } from '../../services/dataService';
 
 export default function Receipts() {
   const [customers, set_customers] = useState([]);
@@ -77,14 +77,19 @@ export default function Receipts() {
       
       const receiptNo = "REC-" + Date.now().toString().slice(-6);
       
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const companyId = user.companyId || 'COMP-DEMO-001';
+      const receiptId = crypto.randomUUID();
+
       await window.pharmaAPI.db.run(
         `INSERT INTO receipts (
           id, company_id, receipt_no, customer_id, date, amount, payment_mode, cheque_no, bank_name
         ) VALUES (
-          ?, 'COMP-DEMO-001', ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
         )`,
         [
-          crypto.randomUUID(),
+          receiptId,
+          companyId,
           receiptNo,
           customerId,
           receiptDate,
@@ -94,13 +99,39 @@ export default function Receipts() {
           bankName
         ]
       );
+
+      const mapPayMode = (m) => {
+        if (m === 'cash') return 'cash';
+        return 'neft_rtgs';
+      };
+
+      await syncEntity('Receipt', 'create', {
+        id: receiptId,
+        companyId,
+        receiptNo,
+        customerId,
+        date: new Date(receiptDate).toISOString(),
+        amount: Number(amountReceived),
+        paymentMode: mapPayMode(payMode),
+        chequeNo,
+        bankName
+      });
       
       for (const b of bills) {
         if (b.allocated > 0 || b.discount > 0) {
+          const addAmount = Number(b.allocated || 0) + Number(b.discount || 0);
           await window.pharmaAPI.db.run(
             "UPDATE sales SET paid_amount = paid_amount + ? WHERE id = ?", 
-            [Number(b.allocated || 0) + Number(b.discount || 0), b.dbId]
+            [addAmount, b.dbId]
           );
+
+          const saleRes = await window.pharmaAPI.db.query("SELECT paid_amount FROM sales WHERE id = ?", [b.dbId]);
+          if (saleRes?.data?.length > 0) {
+            await syncEntity('Sale', 'update', {
+              id: b.dbId,
+              paidAmount: saleRes.data[0].paid_amount
+            });
+          }
         }
       }
       setCustomerId('');

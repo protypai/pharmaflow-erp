@@ -35,26 +35,24 @@ export const getManufacturers = () => getEntities('manufacturers', mockManufactu
 export const getCategories = () => getEntities('categories', mockCategories);
 export const getRacks = () => getEntities('racks', mockRacks);
 
-// Insert or save entity locally + add to offline sync queue
-export async function saveEntity(tableName, entityData) {
+// Queue an offline sync operation
+export async function syncEntity(cloudTableName, operation, payload) {
   if (isElectron()) {
     try {
-      const keys = Object.keys(entityData);
-      const fields = keys.join(', ');
-      const placeholders = keys.map(() => '?').join(', ');
-      const values = Object.values(entityData);
-
-      const sql = `INSERT OR REPLACE INTO ${tableName} (${fields}) VALUES (${placeholders})`;
-      const result = await window.pharmaAPI.db.run(sql, values);
+      const syncSql = `
+        INSERT INTO sync_queue (id, table_name, operation, payload, is_synced, app_version, created_at)
+        VALUES (?, ?, ?, ?, 0, ?, datetime('now'))
+      `;
+      // Use crypto.randomUUID for the sync_queue ID, not the entity ID (since an entity can be updated multiple times)
+      const queueId = crypto.randomUUID ? crypto.randomUUID() : 'sq-' + Date.now() + Math.random().toString(36).substr(2, 9);
+      const currentVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.0';
+      
+      await window.pharmaAPI.db.run(syncSql, [queueId, cloudTableName, operation, JSON.stringify(payload), currentVersion]);
 
       // Trigger background sync push if online
       window.pharmaAPI.sync.push().catch(() => {});
-
-      return { success: true, result };
     } catch (err) {
-      console.error(`[LocalDB] Failed to save to ${tableName}:`, err);
-      return { success: false, error: err.message };
+      console.error(`[Sync] Failed to queue sync for ${cloudTableName}:`, err);
     }
   }
-  return { success: true, mocked: true };
 }

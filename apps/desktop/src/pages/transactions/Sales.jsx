@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
+import { syncEntity } from '../../services/dataService';
 export default function Sales() {
   const navigate = useNavigate();
   const [customerId, setCustomerId] = useState('');
@@ -211,19 +211,25 @@ export default function Sales() {
       });
 
       // Insert receipt if not credit
+      let receiptId = null;
+      let pModeNormalized = null;
+      let receiptNo = null;
       if (paymentMode !== 'Credit') {
-        const pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
+        pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
+        receiptId = 'REC-' + Date.now();
+        receiptNo = 'RCT-' + Date.now().toString().slice(-6);
         operations.push({
           sql: `INSERT INTO receipts (
             id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
           params: [
-            'REC-' + Date.now(), companyId, 'RCT-' + Date.now().toString().slice(-6), customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
+            receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
           ]
         });
       }
 
       // 2. Insert items and update batches
+      const syncItems = []; // Collect sync payloads to run after db transaction
       for (const row of validRows) {
         // Deduct from Batch
         operations.push({
@@ -234,15 +240,40 @@ export default function Sales() {
           params: [row.qty, row.batchId]
         });
 
+        syncItems.push({
+          tableName: 'Batch',
+          operation: 'update',
+          payload: { id: row.batchId, currentQty: row.available - row.qty }
+        });
+
         // Insert Sale Item
+        const saleItemId = 'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
         operations.push({
           sql: `INSERT INTO sale_items (
             id, sale_id, product_id, batch_id, qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
-            'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            saleItemId,
             saleId, row.product, row.batchId, row.qty, row.mrp, row.rate, row.rate, row.disc, row.gst, row.amount
           ]
+        });
+
+        syncItems.push({
+          tableName: 'SaleItem',
+          operation: 'create',
+          payload: {
+            id: saleItemId,
+            saleId,
+            productId: row.product,
+            batchId: row.batchId,
+            qty: row.qty,
+            mrp: row.mrp,
+            ptr: row.rate,
+            salePrice: row.rate,
+            discPercent: row.disc,
+            gstRate: row.gst,
+            netAmount: row.amount
+          }
         });
       }
 
@@ -250,6 +281,50 @@ export default function Sales() {
       
       if (!res.success) {
         throw new Error(res.error || 'Transaction failed');
+      }
+
+      const mapPaymentMode = (pm) => {
+        if (pm === 'Cash') return 'cash';
+        if (pm === 'Credit') return 'credit';
+        return 'upi'; // For Bank / UPI
+      };
+
+      const mappedPm = mapPaymentMode(paymentMode);
+
+      // Sync to cloud after successful transaction
+      await syncEntity('Sale', 'create', {
+        id: saleId,
+        companyId,
+        invoiceNo,
+        customerId,
+        date: new Date(invoiceDate).toISOString(),
+        salesman: user.name || 'Admin',
+        gstType: 'exclusive',
+        subtotal: totals.sub,
+        discountAmount: totals.disc,
+        taxableAmount: totals.sub - totals.disc,
+        netAmount: totals.net,
+        paymentMode: mappedPm,
+        paidAmount: paymentMode === 'Credit' ? 0 : totals.net,
+        notes: doctorName ? 'Doctor: ' + doctorName : null,
+        status: 'completed'
+      });
+
+      if (paymentMode !== 'Credit') {
+        await syncEntity('Receipt', 'create', {
+          id: receiptId,
+          companyId,
+          receiptNo,
+          customerId,
+          date: new Date(invoiceDate).toISOString(),
+          amount: totals.net,
+          paymentMode: mappedPm === 'cash' ? 'cash' : 'upi',
+          notes: 'Against Sale ' + invoiceNo
+        });
+      }
+
+      for (const item of syncItems) {
+        await syncEntity(item.tableName, item.operation, item.payload);
       }
 
       setSuccessMsg(`Sales Invoice ${invoiceNo} saved successfully!`);
