@@ -45,6 +45,125 @@ export default function Login() {
       });
     });
 
+    (data.manufacturers || []).forEach(m => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO manufacturers (id, company_id, name, status) VALUES (?, ?, ?, ?)',
+        params: [m.id, m.companyId, m.name, m.status]
+      });
+    });
+
+    (data.categories || []).forEach(c => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO categories (id, company_id, name, status) VALUES (?, ?, ?, ?)',
+        params: [c.id, c.companyId, c.name, c.status]
+      });
+    });
+
+    (data.racks || []).forEach(r => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO racks (id, company_id, code, description, status) VALUES (?, ?, ?, ?, ?)',
+        params: [r.id, r.companyId, r.code, r.description, r.status]
+      });
+    });
+
+    (data.sales || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO sales (id, company_id, invoice_no, customer_id, date, salesman, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.invoiceNo, item.customerId, item.date, item.salesman, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt]
+      });
+    });
+
+    (data.saleItems || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO sale_items (id, sale_id, product_id, batch_id, qty, mrp, ptr, sale_price, disc_percent, disc_amount, gst_rate, cgst, sgst, igst, taxable_amt, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.saleId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.salePrice, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount]
+      });
+    });
+
+    (data.purchases || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO purchases (id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.entryNo, item.supplierId, item.invoiceNo, item.invoiceDate, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt]
+      });
+    });
+
+    (data.purchaseItems || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO purchase_items (id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, disc_amount, gst_rate, cgst, sgst, igst, taxable_amt, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.purchaseId, item.productId, item.batchId, item.qty, item.freeQty, item.purchasePrice, item.ptr, item.mrp, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount]
+      });
+    });
+
+    (data.purchaseReturns || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, debit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.entryNo, item.purchaseId, item.supplierId, item.returnDate, item.reason, item.debitNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt]
+      });
+    });
+
+    (data.purchaseReturnItems || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.netAmount, item.reason]
+      });
+    });
+
+    (data.saleReturns || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, credit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.entryNo, item.saleId, item.customerId, item.returnDate, item.reason, item.creditNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt]
+      });
+    });
+
+    (data.saleReturnItems || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO sale_return_items (id, return_id, product_id, batch_id, qty, mrp, sale_price, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.salePrice, item.netAmount, item.reason]
+      });
+    });
+
+    (data.receipts || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO receipts (id, company_id, receipt_no, customer_id, date, amount, payment_mode, cheque_no, cheque_date, bank_name, utr_no, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.receiptNo, item.customerId, item.date, item.amount, item.paymentMode, item.chequeNo, item.chequeDate, item.bankName, item.utrNo, item.notes, item.createdAt, item.updatedAt]
+      });
+    });
+
+    (data.payments || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO payments (id, company_id, payment_no, supplier_id, date, amount, payment_mode, cheque_no, cheque_date, bank_name, utr_no, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.paymentNo, item.supplierId, item.date, item.amount, item.paymentMode, item.chequeNo, item.chequeDate, item.bankName, item.utrNo, item.notes, item.createdAt, item.updatedAt]
+      });
+    });
+
+    (data.stockAdjustments || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO stock_adjustments (id, company_id, entry_no, date, reason, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.entryNo, item.date, item.reason, item.notes, item.createdAt]
+      });
+    });
+
+    (data.stockAdjustmentItems || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO stock_adjustment_items (id, adjustment_id, product_id, batch_id, system_qty, physical_qty, difference_qty, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.adjustmentId, item.productId, item.batchId, item.systemQty, item.physicalQty, item.differenceQty, item.reason]
+      });
+    });
+
+    (data.journals || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO journals (id, company_id, entry_no, date, narration, debit_amt, credit_amt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [item.id, item.companyId, item.entryNo, item.date, item.narration, item.debitAmt, item.creditAmt, item.createdAt]
+      });
+    });
+
+    (data.journalEntries || []).forEach(item => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO journal_entries (id, journal_id, particular, type, amount) VALUES (?, ?, ?, ?, ?)',
+        params: [item.id, item.journalId, item.particular, item.type, item.amount]
+      });
+    });
+
     if (ops.length > 0) {
       await window.pharmaAPI.db.transaction(ops);
     }
