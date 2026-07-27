@@ -49,6 +49,13 @@ function Login() {
     const [hasUpdate, setHasUpdate] = (0, react_1.useState)(false);
     const [syncing, setSyncing] = (0, react_1.useState)(false);
     const navigate = (0, react_router_dom_1.useNavigate)();
+    // Auto-login check
+    (0, react_1.useEffect)(() => {
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [navigate]);
     const performInitialSync = async (data) => {
         const ops = [];
         (data.customers || []).forEach(c => {
@@ -210,7 +217,7 @@ function Login() {
                     localStorage.setItem('accessToken', accessToken);
                     localStorage.setItem('refreshToken', refreshToken);
                     if (window.pharmaAPI?.auth) {
-                        await window.pharmaAPI.auth.setToken(accessToken);
+                        await window.pharmaAPI.auth.setToken(accessToken, refreshToken);
                     }
                     // Sync into local SQLite if window.pharmaAPI exists
                     if (window.pharmaAPI?.db) {

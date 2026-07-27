@@ -208,7 +208,7 @@ export default function Login() {
           localStorage.setItem('refreshToken', refreshToken);
 
           if (window.pharmaAPI?.auth) {
-            await window.pharmaAPI.auth.setToken(accessToken);
+            await window.pharmaAPI.auth.setToken(accessToken, refreshToken);
           }
 
           // Sync into local SQLite if window.pharmaAPI exists

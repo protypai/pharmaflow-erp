@@ -67,8 +67,9 @@ async function applyRecord(tableName: string, operation: string, payload: any, c
   const model = tableMap[tableName];
   if (!model) throw new Error(`Unknown table: ${tableName}`);
 
-  // Special case for Company table: it doesn't have a companyId foreign key (its id IS the companyId)
-  const createPayload = tableName === 'Company' 
+  // Special cases: tables that do not have a companyId column
+  const noCompanyIdTables = ['Company', 'Batch', 'PurchaseItem', 'SaleItem', 'PurchaseReturnItem', 'SaleReturnItem', 'JournalEntry', 'StockAdjustmentItem'];
+  const createPayload = noCompanyIdTables.includes(tableName) 
     ? { ...payload } 
     : { ...payload, companyId };
 

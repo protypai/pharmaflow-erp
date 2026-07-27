@@ -60,7 +60,16 @@ function AdminHeader({ collapsed, onToggle, pathname }) {
                                     background: 'white', border: '1px solid var(--border)',
                                     borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-lg)',
                                     minWidth: '180px', zIndex: 200, overflow: 'hidden',
-                                }, children: [(0, jsx_runtime_1.jsxs)("div", { style: { padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)' }, children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 600, fontSize: '0.82rem' }, children: "Super Admin" }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.72rem', color: 'var(--text-muted)' }, children: "System Manager" })] }), (0, jsx_runtime_1.jsx)("div", { style: { padding: '0.25rem 0' }, children: (0, jsx_runtime_1.jsxs)("div", { onClick: () => { navigate('/admin/login'); setProfileOpen(false); }, style: {
+                                }, children: [(0, jsx_runtime_1.jsxs)("div", { style: { padding: '0.75rem 1rem', borderBottom: '1px solid var(--border)' }, children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 600, fontSize: '0.82rem' }, children: "Super Admin" }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.72rem', color: 'var(--text-muted)' }, children: "System Manager" })] }), (0, jsx_runtime_1.jsx)("div", { style: { padding: '0.25rem 0' }, children: (0, jsx_runtime_1.jsxs)("div", { onClick: async () => {
+                                                if (window.pharmaAPI?.auth) {
+                                                    await window.pharmaAPI.auth.clearToken();
+                                                }
+                                                localStorage.removeItem('user');
+                                                localStorage.removeItem('accessToken');
+                                                localStorage.removeItem('refreshToken');
+                                                setProfileOpen(false);
+                                                navigate('/admin/login');
+                                            }, style: {
                                                 display: 'flex', alignItems: 'center', gap: '0.625rem',
                                                 padding: '0.5rem 1rem', cursor: 'pointer',
                                                 fontSize: '0.82rem', color: 'var(--danger)',

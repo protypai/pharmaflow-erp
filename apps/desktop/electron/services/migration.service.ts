@@ -35,9 +35,20 @@ export async function runMigrations(db: Database.Database): Promise<void> {
 
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
     logger.info(`Applying migration: ${file}`);
-    db.exec(sql);
-    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
-    logger.info(`Migration applied: ${file}`);
+    try {
+      db.exec(sql);
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
+      logger.info(`Migration applied: ${file}`);
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('duplicate column name') || msg.includes('already exists')) {
+        logger.warn(`Migration ${file} skipped: schema change already exists (${msg})`);
+        db.prepare('INSERT OR IGNORE INTO _migrations (name) VALUES (?)').run(file);
+      } else {
+        logger.error(`Migration ${file} failed: ${msg}`);
+        throw err;
+      }
+    }
   }
 
   logger.info('All migrations applied');

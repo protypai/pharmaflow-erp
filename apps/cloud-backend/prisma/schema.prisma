@@ -450,6 +450,7 @@ model SaleItem {
   productId   String
   batchId     String
   qty         Float
+  freeQty     Float   @default(0)
   mrp         Float
   ptr         Float
   salePrice   Float

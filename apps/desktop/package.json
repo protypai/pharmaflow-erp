@@ -10,7 +10,7 @@
   "private": true,
   "main": "dist-electron/electron/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "tsc && node -e \"require('fs').cpSync('electron/migrations', 'dist-electron/electron/migrations', {recursive:true})\" && concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc && node -e \"require('fs').cpSync('electron/migrations', 'dist-electron/electron/migrations', {recursive:true})\" && vite build && node scripts/validate-build.js",
     "preview": "npm run build && electron . --prod",
     "electron:build": "npm run build && electron-builder --config electron-builder.config.js",

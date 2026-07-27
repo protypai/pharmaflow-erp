@@ -20,8 +20,10 @@ import salesRoutes from './routes/sales.routes';
 import accountRoutes from './routes/account.routes';
 import reportRoutes from './routes/report.routes';
 import returnRoutes from './routes/return.routes';
+import { db } from './config/database';
 
 const app = express();
+app.locals.db = db;
 
 // Security
 app.use(helmet());

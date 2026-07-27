@@ -49,6 +49,12 @@ async function syncEntity(cloudTableName, operation, payload) {
             const queueId = crypto.randomUUID ? crypto.randomUUID() : 'sq-' + Date.now() + Math.random().toString(36).substr(2, 9);
             const currentVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.0';
             await window.pharmaAPI.db.run(syncSql, [queueId, cloudTableName, operation, JSON.stringify(payload), currentVersion]);
+            // Ensure Electron has current tokens before syncing
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (accessToken && window.pharmaAPI.auth?.setToken) {
+                await window.pharmaAPI.auth.setToken(accessToken, refreshToken);
+            }
             // Trigger background sync push if online
             window.pharmaAPI.sync.push().catch(() => { });
         }

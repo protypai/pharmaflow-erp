@@ -36,9 +36,22 @@ async function runMigrations(db) {
             continue;
         const sql = fs_1.default.readFileSync(path_1.default.join(migrationsDir, file), 'utf-8');
         logger_1.logger.info(`Applying migration: ${file}`);
-        db.exec(sql);
-        db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
-        logger_1.logger.info(`Migration applied: ${file}`);
+        try {
+            db.exec(sql);
+            db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
+            logger_1.logger.info(`Migration applied: ${file}`);
+        }
+        catch (err) {
+            const msg = err?.message || '';
+            if (msg.includes('duplicate column name') || msg.includes('already exists')) {
+                logger_1.logger.warn(`Migration ${file} skipped: schema change already exists (${msg})`);
+                db.prepare('INSERT OR IGNORE INTO _migrations (name) VALUES (?)').run(file);
+            }
+            else {
+                logger_1.logger.error(`Migration ${file} failed: ${msg}`);
+                throw err;
+            }
+        }
     }
     logger_1.logger.info('All migrations applied');
 }

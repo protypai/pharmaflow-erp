@@ -268,6 +268,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   product_id TEXT NOT NULL,
   batch_id TEXT NOT NULL,
   qty REAL NOT NULL,
+  free_qty REAL DEFAULT 0,
   mrp REAL NOT NULL,
   ptr REAL NOT NULL,
   sale_price REAL NOT NULL,

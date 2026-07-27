@@ -10,10 +10,14 @@ const logger_1 = require("../services/logger");
 const keytar_1 = __importDefault(require("keytar"));
 const SERVICE_NAME = 'PharmaFlowERP';
 const ACCOUNT_NAME = 'access_token';
+const REFRESH_ACCOUNT_NAME = 'refresh_token';
 function setupSyncHandlers(mainWindow) {
-    electron_1.ipcMain.handle('auth:setToken', async (_e, token) => {
+    electron_1.ipcMain.handle('auth:setToken', async (_e, token, refreshToken) => {
         try {
-            await keytar_1.default.setPassword(SERVICE_NAME, ACCOUNT_NAME, token);
+            if (token)
+                await keytar_1.default.setPassword(SERVICE_NAME, ACCOUNT_NAME, token);
+            if (refreshToken)
+                await keytar_1.default.setPassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME, refreshToken);
             return { success: true };
         }
         catch (err) {
@@ -24,6 +28,7 @@ function setupSyncHandlers(mainWindow) {
     electron_1.ipcMain.handle('auth:clearToken', async () => {
         try {
             await keytar_1.default.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
+            await keytar_1.default.deletePassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME);
             return { success: true };
         }
         catch (err) {
@@ -34,9 +39,10 @@ function setupSyncHandlers(mainWindow) {
     electron_1.ipcMain.handle('sync:push', async () => {
         try {
             const token = await keytar_1.default.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+            const refreshToken = await keytar_1.default.getPassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME);
             if (!token)
                 return { success: false, error: 'Not authenticated' };
-            const result = await (0, syncQueue_service_1.pushPendingQueue)(token);
+            const result = await (0, syncQueue_service_1.pushPendingQueue)(token, refreshToken || undefined);
             mainWindow.webContents.send('sync:complete', result);
             return { ok: true, ...result };
         }
@@ -52,9 +58,10 @@ function setupSyncHandlers(mainWindow) {
     setInterval(async () => {
         try {
             const token = await keytar_1.default.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+            const refreshToken = await keytar_1.default.getPassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME);
             if (!token)
                 return;
-            const result = await (0, syncQueue_service_1.pushPendingQueue)(token);
+            const result = await (0, syncQueue_service_1.pushPendingQueue)(token, refreshToken || undefined);
             if (result.success > 0) {
                 mainWindow.webContents.send('sync:complete', result);
             }

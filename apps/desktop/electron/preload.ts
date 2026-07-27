@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
 
   // Auth operations
   auth: {
-    setToken: (token: string) => ipcRenderer.invoke('auth:setToken', token),
+    setToken: (token: string, refreshToken?: string) => ipcRenderer.invoke('auth:setToken', token, refreshToken),
     clearToken: () => ipcRenderer.invoke('auth:clearToken')
   },
 

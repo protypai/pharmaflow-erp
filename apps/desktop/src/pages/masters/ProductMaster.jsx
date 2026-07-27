@@ -69,8 +69,8 @@ export default function ProductMaster() {
 
   const handleSave = async () => {
     setErrorMsg('');
-    if (!formData.name || !formData.generic_name || !formData.hsn_code || !formData.conversion_factor) {
-      setErrorMsg("Name, Generic Name, HSN Code, and Conversion Factor are required.");
+    if (!formData.name || !formData.hsn_code || !formData.conversion_factor) {
+      setErrorMsg("Name, HSN Code, and Conversion Factor are required.");
       return;
     }
 
@@ -308,7 +308,7 @@ export default function ProductMaster() {
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{prod.name}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      {prod.generic_name} • {prod.packing}
+                      {prod.generic_name ? `${prod.generic_name} • ` : ''}{prod.packing || '-'}
                     </div>
                   </td>
                   <td>
@@ -396,7 +396,7 @@ export default function ProductMaster() {
                     <input className="form-input" placeholder="e.g. Dolo 650mg Tablet" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                   </div>
                   <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                    <label className="form-label">Generic Name / Composition <span className="text-danger">*</span></label>
+                    <label className="form-label">Generic Name / Composition <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal', fontSize: '0.85rem' }}>(optional)</span></label>
                     <input className="form-input" placeholder="e.g. Paracetamol 650mg" value={formData.generic_name} onChange={e => setFormData({...formData, generic_name: e.target.value})} />
                   </div>
                   <div className="form-group">

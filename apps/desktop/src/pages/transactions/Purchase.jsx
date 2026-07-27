@@ -5,8 +5,9 @@ import { syncEntity } from '../../services/dataService';
 export default function Purchase() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([
-    { id: 1, product: '', batch: '', expiry: '', qty: 0, free: 0, ptr: 0, mrp: 0, disc1: 0, disc2: 0, gst: 12, amount: 0 }
+    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }
   ]);
+  const [activeRowSearch, setActiveRowSearch] = useState(null);
   const [totals, setTotals] = useState({ sub: 0, disc: 0, gst: 0, net: 0 });
   const [supplierId, setSupplierId] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
@@ -26,7 +27,7 @@ export default function Purchase() {
         const supRes = await window.pharmaAPI.db.query("SELECT id, name, city FROM suppliers ORDER BY name ASC");
         setSuppliersList(supRes?.data || []);
 
-        const prodRes = await window.pharmaAPI.db.query("SELECT id, name, gst_rate FROM products ORDER BY name ASC");
+        const prodRes = await window.pharmaAPI.db.query("SELECT id, name, gst_rate, packing, conversion_factor FROM products ORDER BY name ASC");
         setProductsList(prodRes?.data || []);
       } catch (err) {
         console.error('Failed to load master data for purchase:', err);
@@ -43,10 +44,9 @@ export default function Purchase() {
     let totalGst = 0;
 
     const newRows = rows.map(r => {
-      const baseAmt = (Number(r.qty) || 0) * (Number(r.ptr) || 0);
-      const d1Amt = baseAmt * ((Number(r.disc1) || 0) / 100);
-      const d2Amt = (baseAmt - d1Amt) * ((Number(r.disc2) || 0) / 100);
-      const rowDisc = d1Amt + d2Amt;
+      const packMultiplier = (r.priceUnit || 'strip') === 'strip' ? (Number(r.boxSize) || 10) : 1;
+      const baseAmt = (Number(r.qty) || 0) * (Number(r.invPrice) || 0) * packMultiplier;
+      const rowDisc = baseAmt * ((Number(r.disc) || 0) / 100);
       const taxable = baseAmt - rowDisc;
       const gstAmt = taxable * ((Number(r.gst) || 0) / 100);
       const rowNet = taxable + gstAmt;
@@ -70,16 +70,33 @@ export default function Purchase() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), product: '', batch: '', expiry: '', qty: 0, free: 0, ptr: 0, mrp: 0, disc1: 0, disc2: 0, gst: 12, amount: 0 }]);
+    setRows([...rows, { id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
+  };
+
+  const selectProduct = (id, prod) => {
+    setRows(rows.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          product: prod.id,
+          productName: prod.name,
+          productSearch: prod.name,
+          gst: prod.gst_rate ?? 12,
+          boxSize: (prod.conversion_factor && Number(prod.conversion_factor) > 0) ? Number(prod.conversion_factor) : 10
+        };
+      }
+      return r;
+    }));
+    setActiveRowSearch(null);
   };
 
   const updateRow = (id, field, value) => {
     setRows(rows.map(r => {
       if (r.id === id) {
         let updated = { ...r, [field]: value };
-        if (field === 'product') {
-          const prod = productsList.find(p => p.id === value);
-          if (prod) updated.gst = prod.gst_rate;
+        if (field === 'productSearch') {
+          updated.product = '';
+          updated.productName = '';
         }
         return updated;
       }
@@ -102,9 +119,9 @@ export default function Purchase() {
       return;
     }
 
-    const validRows = rows.filter(r => r.product && r.batch && r.qty > 0 && r.ptr > 0 && r.mrp > 0);
+    const validRows = rows.filter(r => r.product && r.batch && Number(r.qty) > 0 && Number(r.mrp) > 0 && Number(r.invPrice) > 0);
     if (validRows.length === 0) {
-      setErrorMsg("Please add at least one valid product row with Batch, Qty, PTR, and MRP.");
+      setErrorMsg("Please add at least one valid product row with selected Product, Batch, Qty, Invoice Price, and MRP.");
       return;
     }
 
@@ -153,25 +170,35 @@ export default function Purchase() {
       // 2. Insert items and update batches
       for (const row of validRows) {
         const batchId = 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        const isBox = (row.priceUnit || 'strip') === 'box';
+        const packMultiplier = Number(row.boxSize) || 10;
+        
+        // Database current_qty always records Boxes
+        const stockQty = Number(row.qty) || 0;
+        
+        // Database prices always record Price per Strip
+        const unitPurchasePrice = isBox ? Number(((Number(row.invPrice) || 0) / packMultiplier).toFixed(2)) : Number(row.invPrice) || 0;
+        const saveMrp = isBox ? Number(((Number(row.mrp) || 0) / packMultiplier).toFixed(2)) : Number(row.mrp) || 0;
+        const savePtr = isBox ? Number(((Number(row.ptr) || 0) / packMultiplier).toFixed(2)) : Number(row.ptr) || 0;
+        const savePts = isBox ? Number(((Number(row.pts) || 0) / packMultiplier).toFixed(2)) : Number(row.pts) || 0;
         
         // Upsert Batch
         operations.push({
           sql: `INSERT INTO batches (
-            id, product_id, batch_no, expiry_date, mrp, ptr, purchase_price, gst_rate, current_qty, free_qty, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
           ON CONFLICT(product_id, batch_no) DO UPDATE SET 
             current_qty = current_qty + excluded.current_qty,
-            free_qty = free_qty + excluded.free_qty,
             mrp = excluded.mrp,
             ptr = excluded.ptr,
+            pts = excluded.pts,
+            purchase_price = excluded.purchase_price,
             updated_at = datetime('now')`,
           params: [
-            batchId, row.product, row.batch, row.expiry || '12/99', row.mrp, row.ptr, row.ptr, row.gst, row.qty, row.free
+            batchId, row.product, row.batch, row.expiry || '12/99', saveMrp, savePtr, savePts, unitPurchasePrice, Number(row.gst) || 0, stockQty
           ]
         });
 
-        // We can't know the exact batch ID for sync update if it was an upsert, but we can just use the provided batchId for sync creation
-        // Note: The cloud backend will just perform an upsert on batch as well if we pass 'create'
         syncItems.push({
           tableName: 'Batch',
           operation: 'create',
@@ -180,28 +207,28 @@ export default function Purchase() {
             productId: row.product,
             batchNo: row.batch,
             expiryDate: row.expiry || '12/99',
-            mrp: row.mrp,
-            ptr: row.ptr,
-            purchasePrice: row.ptr,
-            gstRate: row.gst,
-            currentQty: row.qty,
-            freeQty: row.free
+            mrp: saveMrp,
+            ptr: savePtr,
+            pts: savePts,
+            purchasePrice: unitPurchasePrice,
+            gstRate: Number(row.gst) || 0,
+            currentQty: stockQty,
+            freeQty: 0
           }
         });
 
-        // Insert Purchase Item (Using a subquery to get the correct batch_id just in case it was updated, or we can use the batchId if it's new. 
-        // To be safe, we resolve batch_id using SELECT inside the insert)
+        // Insert Purchase Item
         const purchaseItemId = 'P-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
         operations.push({
           sql: `INSERT INTO purchase_items (
             id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, gst_rate, net_amount
-          ) VALUES (?, ?, ?, (SELECT id FROM batches WHERE product_id = ? AND batch_no = ?), ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, (SELECT id FROM batches WHERE product_id = ? AND batch_no = ?), ?, 0, ?, ?, ?, ?, ?, ?)`,
           params: [
             purchaseItemId,
             purchaseId,
             row.product,
             row.product, row.batch,
-            row.qty, row.free, row.ptr, row.ptr, row.mrp, row.disc1, row.gst, row.amount
+            stockQty, unitPurchasePrice, savePtr, saveMrp, Number(row.disc) || 0, Number(row.gst) || 0, row.amount
           ]
         });
 
@@ -212,14 +239,14 @@ export default function Purchase() {
             id: purchaseItemId,
             purchaseId,
             productId: row.product,
-            batchId, // Close enough, we use the generated one
-            qty: row.qty,
-            freeQty: row.free,
-            purchasePrice: row.ptr,
-            ptr: row.ptr,
-            mrp: row.mrp,
-            discPercent: row.disc1,
-            gstRate: row.gst,
+            batchId,
+            qty: stockQty,
+            freeQty: 0,
+            purchasePrice: unitPurchasePrice,
+            ptr: savePtr,
+            mrp: saveMrp,
+            discPercent: Number(row.disc) || 0,
+            gstRate: Number(row.gst) || 0,
             netAmount: row.amount
           }
         });
@@ -280,7 +307,7 @@ export default function Purchase() {
       setSupplierId('');
       setInvoiceNo('');
       setPaymentMode('Credit');
-      setRows([{ id: Date.now(), product: '', batch: '', expiry: '', qty: 0, free: 0, ptr: 0, mrp: 0, disc1: 0, disc2: 0, gst: 12, amount: 0 }]);
+      setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
       
     } catch (err) {
       console.error("Purchase save error:", err);
@@ -357,40 +384,88 @@ export default function Purchase() {
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="card-body no-pad" style={{ flex: 1, overflowY: 'auto' }}>
-          <table className="data-table" style={{ minWidth: '1200px' }}>
+          <table className="data-table" style={{ minWidth: '1350px', overflow: 'visible' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
-                <th style={{ width: '200px' }}>Product <span className="text-danger">*</span></th>
-                <th style={{ width: '100px' }}>Batch <span className="text-danger">*</span></th>
-                <th style={{ width: '80px' }}>Expiry</th>
+                <th style={{ width: '230px' }}>Product <span className="text-danger">*</span></th>
+                <th style={{ width: '90px' }}>Batch <span className="text-danger">*</span></th>
+                <th style={{ width: '75px' }}>Expiry</th>
                 <th style={{ width: '70px' }}>Qty <span className="text-danger">*</span></th>
-                <th style={{ width: '70px' }}>Free</th>
-                <th style={{ width: '90px' }}>PTR (₹) <span className="text-danger">*</span></th>
-                <th style={{ width: '90px' }}>MRP (₹) <span className="text-danger">*</span></th>
-                <th style={{ width: '70px' }}>D1%</th>
-                <th style={{ width: '70px' }}>D2%</th>
-                <th style={{ width: '80px' }}>GST%</th>
+                <th style={{ width: '160px' }}>Invoice Price (₹) <span className="text-danger">*</span></th>
+                <th style={{ width: '85px' }}>PTS (₹)</th>
+                <th style={{ width: '85px' }}>PTR (₹) <span className="text-danger">*</span></th>
+                <th style={{ width: '85px' }}>MRP (₹) <span className="text-danger">*</span></th>
+                <th style={{ width: '70px' }}>Disc %</th>
+                <th style={{ width: '75px' }}>GST %</th>
                 <th style={{ width: '100px', textAlign: 'right' }}>Net (₹)</th>
                 <th style={{ width: '40px' }}></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody style={{ overflow: 'visible' }}>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td>
-                    <select className="form-select form-input-sm" value={r.product} onChange={e => updateRow(r.id, 'product', e.target.value)}>
-                      <option value="">Search Product...</option>
-                      {productsList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
+                  <td style={{ position: 'relative', overflow: 'visible' }}>
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <input
+                        type="text"
+                        className="form-input form-input-sm"
+                        placeholder="Type to filter product..."
+                        value={r.productSearch !== undefined ? r.productSearch : (r.productName || '')}
+                        onChange={e => updateRow(r.id, 'productSearch', e.target.value)}
+                        onFocus={() => setActiveRowSearch(r.id)}
+                        onBlur={() => setTimeout(() => setActiveRowSearch(null), 200)}
+                        style={{ borderColor: r.product ? 'var(--primary)' : undefined, fontWeight: r.product ? 600 : 400 }}
+                      />
+                      {activeRowSearch === r.id && (
+                        <div className="search-dropdown" style={{
+                          position: 'absolute', top: 'calc(100% + 2px)', left: 0, width: '280px', zIndex: 9999,
+                          background: '#ffffff', border: '1px solid #cbd5e1', maxHeight: '200px', overflowY: 'auto',
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', borderRadius: '6px'
+                        }}>
+                          {productsList
+                            .filter(p => !r.productSearch || p.name.toLowerCase().includes((r.productSearch || '').toLowerCase()))
+                            .slice(0, 40)
+                            .map(p => (
+                              <div
+                                key={p.id}
+                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  selectProduct(r.id, p);
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
+                              >
+                                <div style={{ fontWeight: 500, color: '#1e293b' }}>{p.name}</div>
+                                <div style={{ fontSize: '11px', background: '#e2e8f0', color: '#475569', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>GST {p.gst_rate}%</div>
+                              </div>
+                            ))}
+                          {productsList.filter(p => !r.productSearch || p.name.toLowerCase().includes((r.productSearch || '').toLowerCase())).length === 0 && (
+                            <div style={{ padding: '10px 12px', color: '#64748b', fontSize: '12px', fontStyle: 'italic', textAlign: 'center' }}>No matching products found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td><input type="text" className="form-input form-input-sm" placeholder="Batch No" value={r.batch} onChange={e => updateRow(r.id, 'batch', e.target.value.toUpperCase())} /></td>
                   <td><input type="text" className="form-input form-input-sm" placeholder="MM/YY" value={r.expiry} onChange={e => updateRow(r.id, 'expiry', e.target.value)} /></td>
                   <td><input type="number" className="form-input form-input-sm" min="0" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} /></td>
-                  <td><input type="number" className="form-input form-input-sm" min="0" value={r.free === 0 ? '' : r.free} onChange={e => updateRow(r.id, 'free', e.target.value)} /></td>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <input type="number" className="form-input form-input-sm" min="0" step="0.01" placeholder="0.00" value={r.invPrice === 0 ? '' : r.invPrice} onChange={e => updateRow(r.id, 'invPrice', e.target.value)} style={{ fontWeight: 600, color: 'var(--primary)' }} />
+                      <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                        <select className="form-select form-input-sm" value={r.priceUnit || 'strip'} onChange={e => updateRow(r.id, 'priceUnit', e.target.value)} style={{ padding: '1px 4px', height: '22px', fontSize: '11px', background: '#f1f5f9', borderRadius: '4px', border: '1px solid #cbd5e1', flex: 1 }}>
+                          <option value="strip">Per Strip/Unit</option>
+                          <option value="box">Per Box</option>
+                        </select>
+                        <input type="number" className="form-input form-input-sm" min="1" placeholder="Strips/Box" title="Strips per Box" value={r.boxSize === 0 ? '' : r.boxSize} onChange={e => updateRow(r.id, 'boxSize', e.target.value)} style={{ width: '45px', padding: '1px 4px', height: '22px', fontSize: '11px', textAlign: 'center', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.pts === 0 ? '' : r.pts} onChange={e => updateRow(r.id, 'pts', e.target.value)} /></td>
                   <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.ptr === 0 ? '' : r.ptr} onChange={e => updateRow(r.id, 'ptr', e.target.value)} /></td>
                   <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.mrp === 0 ? '' : r.mrp} onChange={e => updateRow(r.id, 'mrp', e.target.value)} /></td>
-                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.disc1 === 0 ? '' : r.disc1} onChange={e => updateRow(r.id, 'disc1', e.target.value)} /></td>
-                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.disc2 === 0 ? '' : r.disc2} onChange={e => updateRow(r.id, 'disc2', e.target.value)} /></td>
+                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.disc === 0 ? '' : r.disc} onChange={e => updateRow(r.id, 'disc', e.target.value)} /></td>
                   <td>
                     <select className="form-select form-input-sm" value={r.gst} onChange={e => updateRow(r.id, 'gst', e.target.value)}>
                       <option value="12">12%</option>
@@ -400,7 +475,7 @@ export default function Purchase() {
                       <option value="28">28%</option>
                     </select>
                   </td>
-                  <td style={{ fontWeight: 600, textAlign: 'right' }}>{r.amount.toFixed(2)}</td>
+                  <td style={{ fontWeight: 700, textAlign: 'right', color: 'var(--text-primary)', fontSize: '14px' }}>{r.amount.toFixed(2)}</td>
                   <td>
                     <button className="btn btn-ghost btn-sm" onClick={() => removeRow(r.id)} style={{ color: 'var(--danger)', padding: '0.25rem' }}>
                       <Trash2 size={16} />
@@ -409,9 +484,9 @@ export default function Purchase() {
                 </tr>
               ))}
               <tr>
-                <td colSpan="12">
-                  <button className="btn btn-ghost btn-sm" onClick={addRow} style={{ color: 'var(--primary)' }}>
-                    <Plus size={16} /> Add Product Row
+                <td colSpan="12" style={{ paddingTop: '1rem' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={addRow} style={{ color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Plus size={16} /> Add Another Product Row
                   </button>
                 </td>
               </tr>

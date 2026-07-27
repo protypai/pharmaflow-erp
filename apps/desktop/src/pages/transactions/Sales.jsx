@@ -8,8 +8,9 @@ export default function Sales() {
   const [customerWarning, setCustomerWarning] = useState(null);
   
   const [rows, setRows] = useState([
-    { id: 1, product: '', batch: '', expiry: '', qty: 0, available: 0, rate: 0, mrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
+    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
   ]);
+  const [activeRowSearch, setActiveRowSearch] = useState(null);
   const [totals, setTotals] = useState({ sub: 0, disc: 0, gst: 0, net: 0 });
 
   const [customersList, setCustomersList] = useState([]);
@@ -26,11 +27,12 @@ export default function Sales() {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
+        try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) {}
         const custRes = await window.pharmaAPI.db.query("SELECT id, name, area, credit_limit, opening_balance FROM customers ORDER BY name ASC");
         setCustomersList(custRes?.data || []);
 
         const prodRes = await window.pharmaAPI.db.query(`
-          SELECT p.id as product_id, p.name as product_name, p.gst_rate,
+          SELECT p.id as product_id, p.name as product_name, p.gst_rate, p.packing, p.conversion_factor,
                  b.id as batch_id, b.batch_no, b.expiry_date, b.mrp, b.ptr, b.current_qty as available
           FROM products p
           JOIN batches b ON p.id = b.product_id
@@ -46,6 +48,7 @@ export default function Sales() {
                 id: row.product_id,
                 name: row.product_name,
                 gst: row.gst_rate,
+                boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10,
                 batches: []
               };
             }
@@ -120,7 +123,33 @@ export default function Sales() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), product: '', batch: '', expiry: '', qty: 0, available: 0, rate: 0, mrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+    setRows([...rows, { id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+  };
+
+  const selectProduct = (id, prod) => {
+    setRows(rows.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          product: prod.id,
+          productName: prod.name,
+          productSearch: prod.name,
+          gst: prod.gst ?? 12,
+          boxSize: prod.boxSize || 10,
+          batch: '',
+          batchId: '',
+          expiry: '',
+          available: 0,
+          baseAvailable: 0,
+          rate: 0,
+          baseRate: 0,
+          mrp: 0,
+          baseMrp: 0
+        };
+      }
+      return r;
+    }));
+    setActiveRowSearch(null);
   };
 
   const updateRow = (id, field, value) => {
@@ -129,17 +158,16 @@ export default function Sales() {
       
       let updated = { ...r, [field]: value };
       
-      if (field === 'product') {
+      if (field === 'productSearch') {
+        updated.product = '';
+        updated.productName = '';
         updated.batch = '';
         updated.batchId = '';
         updated.expiry = '';
         updated.available = 0;
+        updated.baseAvailable = 0;
         updated.rate = 0;
         updated.mrp = 0;
-        const prod = productsList.find(p => p.id === value);
-        if (prod) {
-          updated.gst = prod.gst;
-        }
       }
       
       if (field === 'batch' && r.product) {
@@ -149,11 +177,49 @@ export default function Sales() {
           if (batchData) {
             updated.batchId = batchData.id;
             updated.expiry = batchData.expiry;
-            updated.available = batchData.qty;
-            updated.mrp = batchData.mrp;
-            // E.g. default rate = ptr * 1.1 or similar, here we just use mrp
-            updated.rate = batchData.mrp; 
+            updated.baseAvailable = Number(batchData.qty);
+            updated.baseMrp = Number(batchData.mrp);
+            updated.baseRate = Number(batchData.mrp);
+            
+            const factor = Number(updated.boxSize) || 10;
+            if (updated.unit === 'box') {
+              updated.available = Number(batchData.qty);
+              updated.mrp = Number((batchData.mrp * factor).toFixed(2));
+              updated.rate = Number((batchData.mrp * factor).toFixed(2));
+            } else {
+              updated.available = Number((batchData.qty * factor).toFixed(1));
+              updated.mrp = Number(batchData.mrp);
+              updated.rate = Number(batchData.mrp);
+            }
           }
+        }
+      }
+
+      if (field === 'unit') {
+        const oldUnit = r.unit || 'box';
+        const newUnit = value;
+        const factor = Number(updated.boxSize) || 10;
+        if (oldUnit === 'box' && newUnit === 'strip') {
+          updated.rate = Number((r.baseRate || 0).toFixed(2));
+          updated.mrp = Number((r.baseMrp || 0).toFixed(2));
+          updated.available = Number(((r.baseAvailable ?? r.available) * factor).toFixed(1));
+        } else if (oldUnit === 'strip' && newUnit === 'box') {
+          updated.rate = Number(((r.baseRate || 0) * factor).toFixed(2));
+          updated.mrp = Number(((r.baseMrp || 0) * factor).toFixed(2));
+          updated.available = Number(r.baseAvailable ?? (r.available / factor));
+        }
+      }
+
+      if (field === 'boxSize') {
+        const newFactor = Number(value) || 10;
+        if (r.unit === 'box') {
+          updated.rate = Number(((r.baseRate || 0) * newFactor).toFixed(2));
+          updated.mrp = Number(((r.baseMrp || 0) * newFactor).toFixed(2));
+          updated.available = r.baseAvailable || r.available;
+        } else {
+          updated.rate = Number(r.baseRate || 0);
+          updated.mrp = Number(r.baseMrp || 0);
+          updated.available = Number(((r.baseAvailable ?? 0) * newFactor).toFixed(1));
         }
       }
       
@@ -176,7 +242,7 @@ export default function Sales() {
       return;
     }
 
-    const validRows = rows.filter(r => r.product && r.batch && r.qty > 0 && r.rate > 0);
+    const validRows = rows.filter(r => r.product && r.batch && Number(r.qty) > 0 && Number(r.rate) > 0);
     if (validRows.length === 0) {
       setErrorMsg("Please add at least one valid product row with Batch, Qty, and Rate.");
       return;
@@ -184,14 +250,21 @@ export default function Sales() {
 
     // Validate overstock
     for (const row of validRows) {
-      if (row.qty > row.available) {
-        setErrorMsg(`Quantity for batch ${row.batch} exceeds available stock (${row.available}).`);
+      const isBox = row.unit === 'box';
+      const packMultiplier = Number(row.boxSize) || 10;
+      const totalBoxesNeeded = isBox 
+        ? (Number(row.qty || 0) + Number(row.free || 0)) 
+        : (Number(row.qty || 0) + Number(row.free || 0)) / packMultiplier;
+      const availBoxes = row.baseAvailable ?? (isBox ? row.available : row.available / packMultiplier);
+      if (totalBoxesNeeded > availBoxes) {
+        setErrorMsg(`Total quantity (${isBox ? totalBoxesNeeded + ' Boxes' : (Number(row.qty||0)+Number(row.free||0)) + ' Strips'}) for batch ${row.batch} exceeds available stock (${availBoxes} Boxes).`);
         return;
       }
     }
 
     setIsSaving(true);
     try {
+      try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) {}
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
@@ -233,30 +306,39 @@ export default function Sales() {
       // 2. Insert items and update batches
       const syncItems = []; // Collect sync payloads to run after db transaction
       for (const row of validRows) {
+        const isBox = row.unit === 'box';
+        const packMultiplier = Number(row.boxSize) || 10;
+        const billedBoxes = isBox ? Number(row.qty || 0) : Number(row.qty || 0) / packMultiplier;
+        const freeBoxes = isBox ? Number(row.free || 0) : Number(row.free || 0) / packMultiplier;
+        const totalDeductBoxes = billedBoxes + freeBoxes;
+        const stripRate = isBox ? Number(row.rate || 0) / packMultiplier : Number(row.rate || 0);
+        const stripMrp = isBox ? Number(row.mrp || 0) / packMultiplier : Number(row.mrp || 0);
+        const availBoxes = row.baseAvailable ?? (isBox ? row.available : row.available / packMultiplier);
+
         // Deduct from Batch
         operations.push({
           sql: `UPDATE batches SET 
             current_qty = current_qty - ?, 
             updated_at = datetime('now') 
             WHERE id = ?`,
-          params: [row.qty, row.batchId]
+          params: [totalDeductBoxes, row.batchId]
         });
 
         syncItems.push({
           tableName: 'Batch',
           operation: 'update',
-          payload: { id: row.batchId, currentQty: row.available - row.qty }
+          payload: { id: row.batchId, currentQty: availBoxes - totalDeductBoxes }
         });
 
         // Insert Sale Item
         const saleItemId = 'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
         operations.push({
           sql: `INSERT INTO sale_items (
-            id, sale_id, product_id, batch_id, qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, sale_id, product_id, batch_id, qty, free_qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
             saleItemId,
-            saleId, row.product, row.batchId, row.qty, row.mrp, row.rate, row.rate, row.disc, row.gst, row.amount
+            saleId, row.product, row.batchId, billedBoxes, freeBoxes, stripMrp, stripRate, stripRate, Number(row.disc || 0), Number(row.gst || 0), row.amount
           ]
         });
 
@@ -268,12 +350,13 @@ export default function Sales() {
             saleId,
             productId: row.product,
             batchId: row.batchId,
-            qty: row.qty,
-            mrp: row.mrp,
-            ptr: row.rate,
-            salePrice: row.rate,
-            discPercent: row.disc,
-            gstRate: row.gst,
+            qty: billedBoxes,
+            freeQty: freeBoxes,
+            mrp: stripMrp,
+            ptr: stripRate,
+            salePrice: stripRate,
+            discPercent: Number(row.disc || 0),
+            gstRate: Number(row.gst || 0),
             netAmount: row.amount
           }
         });
@@ -335,11 +418,11 @@ export default function Sales() {
       setCustomerId('');
       setInvoiceNo('INV-' + Date.now().toString().slice(-6));
       setDoctorName('');
-      setRows([{ id: Date.now(), product: '', batch: '', expiry: '', qty: 0, available: 0, rate: 0, mrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+      setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
       
       // Re-fetch master data to update available stock levels
       const prodRes = await window.pharmaAPI.db.query(`
-        SELECT p.id as product_id, p.name as product_name, p.gst_rate,
+        SELECT p.id as product_id, p.name as product_name, p.gst_rate, p.packing, p.conversion_factor,
                b.id as batch_id, b.batch_no, b.expiry_date, b.mrp, b.ptr, b.current_qty as available
         FROM products p
         JOIN batches b ON p.id = b.product_id
@@ -351,7 +434,13 @@ export default function Sales() {
       if (prodRes?.data) {
         prodRes.data.forEach(row => {
           if (!prodMap[row.product_id]) {
-            prodMap[row.product_id] = { id: row.product_id, name: row.product_name, gst: row.gst_rate, batches: [] };
+            prodMap[row.product_id] = {
+              id: row.product_id,
+              name: row.product_name,
+              gst: row.gst_rate,
+              boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10,
+              batches: []
+            };
           }
           prodMap[row.product_id].batches.push({
             id: row.batch_id, batch: row.batch_no, expiry: row.expiry_date, mrp: row.mrp, ptr: row.ptr, qty: row.available
@@ -438,42 +527,102 @@ export default function Sales() {
           <table className="data-table" style={{ minWidth: '1100px' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
-                <th style={{ width: '250px' }}>Product</th>
-                <th style={{ width: '150px' }}>Batch (FEFO)</th>
-                <th style={{ width: '80px' }}>Expiry</th>
-                <th style={{ width: '80px' }}>Available</th>
-                <th style={{ width: '80px' }}>Bill Qty</th>
-                <th style={{ width: '90px' }}>Rate (₹)</th>
-                <th style={{ width: '90px' }}>MRP (₹)</th>
-                <th style={{ width: '70px' }}>Disc%</th>
-                <th style={{ width: '80px' }}>GST%</th>
-                <th style={{ width: '100px', textAlign: 'right' }}>Amount (₹)</th>
+                <th style={{ width: '220px' }}>Product</th>
+                <th style={{ width: '130px' }}>Batch (FEFO)</th>
+                <th style={{ width: '75px' }}>Expiry</th>
+                <th style={{ width: '110px' }}>Available</th>
+                <th style={{ width: '130px' }}>Bill Qty & Unit</th>
+                <th style={{ width: '70px' }}>Free</th>
+                <th style={{ width: '85px' }}>Rate (₹)</th>
+                <th style={{ width: '85px' }}>MRP (₹)</th>
+                <th style={{ width: '65px' }}>Disc%</th>
+                <th style={{ width: '70px' }}>GST%</th>
+                <th style={{ width: '90px', textAlign: 'right' }}>Amount (₹)</th>
                 <th style={{ width: '40px' }}></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
                 const prod = productsList.find(p => p.id === r.product);
-                const overStock = r.qty > r.available;
+                const isBox = r.unit === 'box';
+                const packMultiplier = Number(r.boxSize) || 10;
+                const totalBoxesNeeded = isBox ? (Number(r.qty || 0) + Number(r.free || 0)) : (Number(r.qty || 0) + Number(r.free || 0)) / packMultiplier;
+                const availBoxes = r.baseAvailable ?? (isBox ? r.available : r.available / packMultiplier);
+                const overStock = totalBoxesNeeded > availBoxes;
+                const availText = isBox ? `${availBoxes} Boxes (${Number((availBoxes * packMultiplier).toFixed(0))} Strips)` : `${r.available} Strips (${availBoxes} Boxes)`;
+
                 return (
                   <tr key={r.id} style={{ background: overStock ? '#FEF2F2' : 'transparent' }}>
-                    <td>
-                      <select className="form-select form-input-sm" value={r.product} onChange={e => updateRow(r.id, 'product', e.target.value)}>
-                        <option value="">Search Product...</option>
-                        {productsList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                    <td style={{ position: 'relative' }}>
+                      <input 
+                        type="text" 
+                        className="form-input form-input-sm"
+                        placeholder="Type to search product..." 
+                        value={r.productSearch ?? ''}
+                        onFocus={() => setActiveRowSearch(r.id)}
+                        onChange={e => updateRow(r.id, 'productSearch', e.target.value)} 
+                      />
+                      {activeRowSearch === r.id && (
+                        <div 
+                          style={{
+                            position: 'absolute', top: '100%', left: 0, width: '300px',
+                            background: '#fff', border: '1px solid var(--border)', borderRadius: '4px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', zIndex: 50, maxHeight: '200px', overflowY: 'auto'
+                          }}
+                        >
+                          {productsList
+                            .filter(p => !r.productSearch || p.name.toLowerCase().includes(r.productSearch.toLowerCase()))
+                            .slice(0, 20)
+                            .map(p => (
+                              <div 
+                                key={p.id} 
+                                style={{ padding: '6px 10px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', fontSize: '13px' }}
+                                onMouseDown={(e) => { e.preventDefault(); selectProduct(r.id, p); }}
+                                onMouseEnter={(e) => e.target.style.background = '#f8fafc'}
+                                onMouseLeave={(e) => e.target.style.background = '#fff'}
+                              >
+                                <div style={{ fontWeight: 500 }}>{p.name}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                  In Stock: {p.batches.reduce((sum, b) => sum + Number(b.qty), 0)} Boxes ({p.batches.length} batches)
+                                </div>
+                              </div>
+                            ))}
+                          {productsList.filter(p => !r.productSearch || p.name.toLowerCase().includes(r.productSearch.toLowerCase())).length === 0 && (
+                            <div style={{ padding: '8px', color: '#94a3b8', fontSize: '12px', textAlign: 'center' }}>No available stock found</div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <select className="form-select form-input-sm" value={r.batch} onChange={e => updateRow(r.id, 'batch', e.target.value)} disabled={!r.product}>
                         <option value="">Select Batch</option>
                         {prod && prod.batches.map(b => (
-                          <option key={b.id} value={b.batch}>{b.batch} ({b.qty} in stock)</option>
+                          <option key={b.id} value={b.batch}>{b.batch} ({b.qty} Boxes)</option>
                         ))}
                       </select>
                     </td>
                     <td><input type="text" className="form-input form-input-sm" value={r.expiry} readOnly style={{ background: '#F8FAFC' }} /></td>
-                    <td><input type="number" className="form-input form-input-sm" value={r.available} readOnly style={{ background: '#F8FAFC', color: r.available === 0 ? 'var(--danger)' : 'inherit' }} /></td>
-                    <td><input type="number" className="form-input form-input-sm" min="1" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} style={{ borderColor: overStock ? 'var(--danger)' : 'var(--border)' }} /></td>
+                    <td><input type="text" className="form-input form-input-sm" value={availText} readOnly style={{ background: '#F8FAFC', color: availBoxes === 0 ? 'var(--danger)' : 'inherit', fontSize: '11px', fontWeight: 600 }} /></td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <input type="number" className="form-input form-input-sm" min="1" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} style={{ borderColor: overStock ? 'var(--danger)' : 'var(--border)', fontWeight: 600 }} />
+                        <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                          <select className="form-select form-input-sm" value={r.unit || 'box'} onChange={e => updateRow(r.id, 'unit', e.target.value)} style={{ padding: '1px 4px', height: '22px', fontSize: '11px', background: '#f8fafc', flex: 1 }}>
+                            <option value="box">Per Box</option>
+                            <option value="strip">Per Strip</option>
+                          </select>
+                          {r.unit === 'box' && (
+                            <input type="number" className="form-input form-input-sm" min="1" title="Units per Box" value={r.boxSize || 10} onChange={e => updateRow(r.id, 'boxSize', e.target.value)} style={{ width: '40px', padding: '1px 2px', height: '22px', fontSize: '11px', textAlign: 'center' }} />
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <input type="number" className="form-input form-input-sm" min="0" placeholder="0" value={r.free === 0 ? '' : r.free} onChange={e => updateRow(r.id, 'free', e.target.value)} />
+                        <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>{r.unit === 'box' ? 'Boxes' : 'Strips'}</span>
+                      </div>
+                    </td>
                     <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.rate === 0 ? '' : r.rate} onChange={e => updateRow(r.id, 'rate', e.target.value)} /></td>
                     <td><input type="number" className="form-input form-input-sm" value={r.mrp === 0 ? '' : r.mrp} readOnly style={{ background: '#F8FAFC' }} /></td>
                     <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.disc === 0 ? '' : r.disc} onChange={e => updateRow(r.id, 'disc', e.target.value)} /></td>
@@ -490,7 +639,7 @@ export default function Sales() {
                 );
               })}
               <tr>
-                <td colSpan="11">
+                <td colSpan="12">
                   <button className="btn btn-ghost btn-sm" onClick={addRow} style={{ color: 'var(--primary)' }}>
                     <Plus size={16} /> Add Product Row
                   </button>

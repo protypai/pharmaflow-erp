@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess } from '../utils/response';
 import { processSyncQueue } from '../services/sync.service';
+import { db } from '../config/database';
 
 export const pushSync = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.companyId;
@@ -15,7 +16,7 @@ export const pushSync = asyncHandler(async (req: Request, res: Response) => {
 
 export const getSyncStatus = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.companyId;
-  const pending = await (req.app.locals.db?.syncQueue?.count({
+  const pending = await (db.syncQueue?.count({
     where: { companyId, isSynced: false },
   }) ?? 0);
   sendSuccess(res, { pending }, 'Sync status');
@@ -23,11 +24,6 @@ export const getSyncStatus = asyncHandler(async (req: Request, res: Response) =>
 
 export const getInitialSyncData = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.companyId;
-  const db = req.app.locals.db;
-  
-  if (!db) {
-    return res.status(500).json({ success: false, message: 'Database not initialized' });
-  }
 
   // Fetch all related records for the company
   const [

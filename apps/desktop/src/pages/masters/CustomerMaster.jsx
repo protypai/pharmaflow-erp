@@ -6,12 +6,13 @@ export default function CustomerMaster() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customersList, setCustomersList] = useState([]);
+  const [showEmail, setShowEmail] = useState(false);
   
   // Form State
   const [formData, setFormData] = useState({
     id: null,
     name: '', type: 'Retail', salesman: '', phone: '', email: '',
-    address: '', area: 'Dadar', pincode: '', drug_license: '', gstin: '',
+    address: '', area: '', pincode: '', drug_license: '', gstin: '',
     credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
   });
   const [errorMsg, setErrorMsg] = useState('');
@@ -101,9 +102,10 @@ export default function CustomerMaster() {
       setFormData({
         id: null,
         name: '', type: 'Retail', salesman: '', phone: '', email: '',
-        address: '', area: 'Dadar', pincode: '', drug_license: '', gstin: '',
+        address: '', area: '', pincode: '', drug_license: '', gstin: '',
         credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
       });
+      setShowEmail(false);
       fetchCustomers();
     } catch (err) {
       console.error("Save failed", err);
@@ -115,9 +117,10 @@ export default function CustomerMaster() {
     setFormData({
       id: cust.id,
       name: cust.name || '', type: cust.type || 'Retail', salesman: cust.salesman || '', phone: cust.phone || '', email: cust.email || '',
-      address: cust.address || '', area: cust.area || 'Dadar', pincode: cust.pincode || '', drug_license: cust.drug_license || '', gstin: cust.gstin || '',
+      address: cust.address || '', area: cust.area || '', pincode: cust.pincode || '', drug_license: cust.drug_license || '', gstin: cust.gstin || '',
       credit_limit: cust.credit_limit || 50000, credit_days: cust.credit_days || 30, opening_balance: cust.opening_balance || 0, opening_balance_type: cust.opening_balance_type || 'debit'
     });
+    setShowEmail(!!cust.email);
     setIsModalOpen(true);
   };
 
@@ -137,7 +140,8 @@ export default function CustomerMaster() {
 
   const filtered = customersList.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
-    (c.area && c.area.toLowerCase().includes(search.toLowerCase()))
+    (c.area && c.area.toLowerCase().includes(search.toLowerCase())) ||
+    (c.address && c.address.toLowerCase().includes(search.toLowerCase()))
   );
 
   const formatCurr = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -162,9 +166,10 @@ export default function CustomerMaster() {
             setFormData({
               id: null,
               name: '', type: 'Retail', salesman: '', phone: '', email: '',
-              address: '', area: 'Dadar', pincode: '', drug_license: '', gstin: '',
+              address: '', area: '', pincode: '', drug_license: '', gstin: '',
               credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
             });
+            setShowEmail(false);
             setIsModalOpen(true);
           }}>
             <Plus size={16} /> New Customer
@@ -177,7 +182,7 @@ export default function CustomerMaster() {
           <thead>
             <tr>
               <th>Customer Info</th>
-              <th>Contact & Area</th>
+              <th>Contact & Address</th>
               <th>License Details</th>
               <th>Financials</th>
               <th>Status</th>
@@ -201,7 +206,7 @@ export default function CustomerMaster() {
                   <td>
                     <div style={{ fontSize: '0.8rem' }}>{cust.phone}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <MapPin size={10} /> {cust.area}
+                      <MapPin size={10} /> {cust.address || cust.area || '-'}
                     </div>
                   </td>
                   <td>
@@ -279,27 +284,31 @@ export default function CustomerMaster() {
                   <label className="form-label">Phone Number <span className="text-danger">*</span></label>
                   <input className="form-input" placeholder="e.g. 9876543210" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Email ID</label>
-                  <input className="form-input" type="email" placeholder="e.g. user@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                </div>
+                
+                {showEmail ? (
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Email ID</span>
+                      <span style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 'normal' }} onClick={() => { setShowEmail(false); setFormData({...formData, email: ''}); }}>(&times; Hide)</span>
+                    </label>
+                    <input className="form-input" type="email" placeholder="e.g. user@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                  </div>
+                ) : (
+                  <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-ghost" 
+                      onClick={() => setShowEmail(true)} 
+                      style={{ color: 'var(--primary)', border: '1px dashed #cbd5e1', width: '100%', height: '38px', justifyContent: 'center', fontWeight: '500' }}
+                    >
+                      <Plus size={14} /> Add Email (Optional)
+                    </button>
+                  </div>
+                )}
+
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label className="form-label">Address</label>
-                  <input className="form-input" placeholder="Full address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Area / Route</label>
-                  <select className="form-select" value={formData.area} onChange={e => setFormData({...formData, area: e.target.value})}>
-                    <option>Dadar</option>
-                    <option>Parel</option>
-                    <option>Bandra</option>
-                    <option>Kurla</option>
-                    <option>Ghatkopar</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Pincode</label>
-                  <input className="form-input" placeholder="e.g. 400028" value={formData.pincode} onChange={e => setFormData({...formData, pincode: e.target.value})} />
+                  <input className="form-input" placeholder="Enter complete address..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                 </div>
                 
                 {/* Licenses */}

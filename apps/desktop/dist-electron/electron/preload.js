@@ -19,7 +19,7 @@ electron_1.contextBridge.exposeInMainWorld('pharmaAPI', {
     },
     // Auth operations
     auth: {
-        setToken: (token) => electron_1.ipcRenderer.invoke('auth:setToken', token),
+        setToken: (token, refreshToken) => electron_1.ipcRenderer.invoke('auth:setToken', token, refreshToken),
         clearToken: () => electron_1.ipcRenderer.invoke('auth:clearToken')
     },
     // Print operations

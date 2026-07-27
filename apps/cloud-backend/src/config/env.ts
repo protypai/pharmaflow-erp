@@ -7,7 +7,7 @@ const envSchema = z.object({
   PORT: z.string().default('5000'),
   DATABASE_URL: z.string().default('postgresql://pharmaflow:devpassword@localhost:5432/pharmaflow_dev'),
   JWT_SECRET: z.string().default('default_jwt_secret_key_32_characters_minimum_length_required_here_12345'),
-  JWT_EXPIRES_IN: z.string().default('15m'),
+  JWT_EXPIRES_IN: z.string().default('30d'),
   JWT_REFRESH_SECRET: z.string().default('default_jwt_refresh_secret_key_32_characters_minimum_length_required_here_12345'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
   ADMIN_EMAIL: z.string().default('admin@pharmaflow.in'),

@@ -220,7 +220,16 @@ function Header({ collapsed, onToggle, pathname }) {
                                                             padding: '0.5rem 1rem', cursor: 'pointer',
                                                             fontSize: '0.82rem', color: 'var(--text-primary)',
                                                             transition: 'background 0.15s',
-                                                        }, onMouseEnter: e => e.currentTarget.style.background = 'var(--content-bg)', onMouseLeave: e => e.currentTarget.style.background = 'transparent', children: [(0, jsx_runtime_1.jsx)(Icon, { size: 14 }), label] }, label))), (0, jsx_runtime_1.jsx)("div", { style: { borderTop: '1px solid var(--border)', marginTop: '0.25rem', paddingTop: '0.25rem' }, children: (0, jsx_runtime_1.jsxs)("div", { onClick: () => { navigate('/login'); setProfileOpen(false); }, style: {
+                                                        }, onMouseEnter: e => e.currentTarget.style.background = 'var(--content-bg)', onMouseLeave: e => e.currentTarget.style.background = 'transparent', children: [(0, jsx_runtime_1.jsx)(Icon, { size: 14 }), label] }, label))), (0, jsx_runtime_1.jsx)("div", { style: { borderTop: '1px solid var(--border)', marginTop: '0.25rem', paddingTop: '0.25rem' }, children: (0, jsx_runtime_1.jsxs)("div", { onClick: async () => {
+                                                                if (window.pharmaAPI?.auth) {
+                                                                    await window.pharmaAPI.auth.clearToken();
+                                                                }
+                                                                localStorage.removeItem('user');
+                                                                localStorage.removeItem('accessToken');
+                                                                localStorage.removeItem('refreshToken');
+                                                                setProfileOpen(false);
+                                                                navigate('/login');
+                                                            }, style: {
                                                                 display: 'flex', alignItems: 'center', gap: '0.625rem',
                                                                 padding: '0.5rem 1rem', cursor: 'pointer',
                                                                 fontSize: '0.82rem', color: 'var(--danger)',
