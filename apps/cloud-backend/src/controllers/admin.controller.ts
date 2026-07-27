@@ -3,6 +3,34 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess } from '../utils/response';
 import { db } from '../config/database';
 import bcrypt from 'bcryptjs';
+import { logActivity, listActivityLogs } from '../services/activityLog.service';
+
+/**
+ * Resolve the acting super admin (id + email) from the verified admin token.
+ * Best-effort: never throws — used only to enrich audit-log entries.
+ */
+const resolveActor = async (req: Request): Promise<{ id?: string; email?: string }> => {
+  const adminId = req.admin?.adminId;
+  if (!adminId) return {};
+  try {
+    const admin = await db.superAdmin.findUnique({
+      where: { id: adminId },
+      select: { id: true, email: true },
+    });
+    return { id: admin?.id ?? adminId, email: admin?.email };
+  } catch {
+    return { id: adminId };
+  }
+};
+
+// Map the frontend Activity Logs filter values to concrete audit actions.
+const ACTIVITY_FILTER_MAP: Record<string, string[]> = {
+  login: ['admin.login', 'auth.login'],
+  company: ['company.approve', 'company.toggle', 'company.subscription'],
+  password: ['user.password_reset'],
+  // Failures & errors — one place to review everything that went wrong.
+  errors: ['admin.login_failed', 'auth.login_failed', 'sync.failed', 'sync.rejected', 'sync.partial', 'backup.failed'],
+};
 
 export const getCompanies = asyncHandler(async (_req: Request, res: Response) => {
   const companies = await db.company.findMany({
@@ -67,8 +95,25 @@ export const toggleCompany = asyncHandler(async (req: Request, res: Response) =>
   if (!company) return res.status(404).json({ success: false, message: 'Not found' });
   const updated = await db.company.update({
     where: { id },
-    data: { isActive: !company.isActive },
+    data: {
+      isActive: !company.isActive,
+      subscriptionStatus: !company.isActive ? 'active' : 'inactive',
+    },
   });
+
+  const actor = await resolveActor(req);
+  await logActivity({
+    companyId: updated.id,
+    actorType: 'superadmin',
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: 'company.toggle',
+    targetType: 'company',
+    targetId: updated.id,
+    detail: `${updated.name} ${updated.isActive ? 'activated' : 'deactivated'}`,
+    ipAddress: req.ip,
+  });
+
   sendSuccess(res, updated, `Company ${updated.isActive ? 'activated' : 'deactivated'}`);
 });
 
@@ -77,15 +122,12 @@ export const approveCompany = asyncHandler(async (req: Request, res: Response) =
   const company = await db.company.findUnique({ where: { id } });
   if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
 
-  const trialExpiry = new Date();
-  trialExpiry.setDate(trialExpiry.getDate() + 14);
-
   const updatedCompany = await db.company.update({
     where: { id },
     data: {
       isActive: true,
       subscriptionStatus: 'active',
-      subscriptionExpiry: trialExpiry,
+      subscriptionExpiry: null,
     },
   });
 
@@ -93,6 +135,19 @@ export const approveCompany = asyncHandler(async (req: Request, res: Response) =
   await db.user.updateMany({
     where: { companyId: id },
     data: { isActive: true },
+  });
+
+  const actor = await resolveActor(req);
+  await logActivity({
+    companyId: updatedCompany.id,
+    actorType: 'superadmin',
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: 'company.approve',
+    targetType: 'company',
+    targetId: updatedCompany.id,
+    detail: `${updatedCompany.name} approved & activated`,
+    ipAddress: req.ip,
   });
 
   sendSuccess(res, updatedCompany, 'Company and users approved and activated successfully');
@@ -116,31 +171,109 @@ export const updateSubscription = asyncHandler(async (req: Request, res: Respons
     },
   });
 
+  const actor = await resolveActor(req);
+  await logActivity({
+    companyId: updated.id,
+    actorType: 'superadmin',
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: 'company.subscription',
+    targetType: 'company',
+    targetId: updated.id,
+    detail: `${updated.name} subscription set to '${updated.subscriptionStatus}' (expires ${expiry.toISOString().slice(0, 10)})`,
+    ipAddress: req.ip,
+  });
+
   sendSuccess(res, updated, 'Subscription updated successfully');
 });
 
-export const resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
-  const { companyId, newPassword } = req.body;
-  const hash = await bcrypt.hash(newPassword, 12);
-  await db.user.updateMany({
-    where: { companyId },
-    data: { passwordHash: hash },
+export const listCompanyUsers = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const users = await db.user.findMany({
+    where: { companyId: id },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, email: true, role: true },
   });
-  sendSuccess(res, null, 'Password reset for all users in company');
+  sendSuccess(res, users, 'Company users');
+});
+
+export const resetUserPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { companyId, newPassword, userId, email } = req.body as {
+    companyId: string;
+    newPassword: string;
+    userId?: string;
+    email?: string;
+  };
+
+  // Server-side guard (defence-in-depth; the route also runs the zod validator).
+  if (!companyId || !newPassword || newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: 'companyId and a newPassword of at least 6 characters are required',
+    });
+  }
+
+  // Resolve exactly ONE target user. Never touch other users in the company.
+  let target;
+  if (userId) {
+    target = await db.user.findFirst({ where: { id: userId, companyId } });
+  } else if (email) {
+    target = await db.user.findFirst({ where: { email, companyId } });
+  } else {
+    // Default: the company's primary admin (earliest-created admin user).
+    target = await db.user.findFirst({
+      where: { companyId, role: 'admin' },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  if (!target) {
+    return res.status(404).json({
+      success: false,
+      message: 'No matching user found for this company',
+    });
+  }
+
+  const hash = await bcrypt.hash(newPassword, 12);
+  await db.user.update({ where: { id: target.id }, data: { passwordHash: hash } });
+
+  const actor = await resolveActor(req);
+  await logActivity({
+    companyId,
+    actorType: 'superadmin',
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: 'user.password_reset',
+    targetType: 'user',
+    targetId: target.id,
+    detail: `Password reset for ${target.email}`,
+    ipAddress: req.ip,
+  });
+
+  sendSuccess(res, { email: target.email }, `Password reset for ${target.email}`);
 });
 
 export const getActivityLogs = asyncHandler(async (req: Request, res: Response) => {
-  const { companyId, limit = '50' } = req.query;
-  const logs = await db.syncQueue.findMany({
-    where: companyId ? { companyId: companyId as string } : {},
-    orderBy: { createdAt: 'desc' },
-    take: parseInt(limit as string),
-    select: {
-      id: true, companyId: true, tableName: true,
-      operation: true, deviceId: true, appVersion: true,
-      isSynced: true, syncedAt: true, createdAt: true,
-      company: { select: { name: true } }
-    },
+  const { companyId, action, limit } = req.query as {
+    companyId?: string;
+    action?: string;
+    limit?: string;
+  };
+
+  // The frontend sends category values (login/company/password) or an exact action.
+  // Map categories to their concrete action list; pass an exact action through as-is.
+  let actions: string[] | undefined;
+  if (action && action !== 'all') {
+    actions = ACTIVITY_FILTER_MAP[action] || [action];
+  }
+
+  const parsedLimit = limit ? parseInt(limit, 10) : 200;
+
+  const logs = await listActivityLogs({
+    companyId: companyId || undefined,
+    action: actions,
+    limit: Number.isFinite(parsedLimit) ? parsedLimit : 200,
   });
+
   sendSuccess(res, logs, 'Activity logs');
 });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ghost, ArrowDownToLine, Printer } from 'lucide-react';
+import { formatStock } from '../../utils/units';
 
 
 export default function DeadStock() {
@@ -115,7 +116,7 @@ export default function DeadStock() {
                     {p.genericName} • {p.manufacturer}
                   </div>
                 </td>
-                <td style={{ fontWeight: 600 }}>{p.totalQty} {p.saleUnit}</td>
+                <td style={{ fontWeight: 600 }}>{formatStock(p.totalQty, p.conversion_factor, p.sale_unit)}</td>
                 <td>{p.lastSaleDateStr}</td>
                 <td>
                   <span style={{ 

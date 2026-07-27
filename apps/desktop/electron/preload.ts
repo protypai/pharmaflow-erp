@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
   // Sync operations
   sync: {
     push: () => ipcRenderer.invoke('sync:push'),
+    pull: () => ipcRenderer.invoke('sync:pull'),
     getStatus: () => ipcRenderer.invoke('sync:status'),
     onSyncComplete: (callback: (result: any) => void) =>
       ipcRenderer.on('sync:complete', (_e, result) => callback(result)),
@@ -22,13 +23,30 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
   // Auth operations
   auth: {
     setToken: (token: string, refreshToken?: string) => ipcRenderer.invoke('auth:setToken', token, refreshToken),
-    clearToken: () => ipcRenderer.invoke('auth:clearToken')
+    clearToken: () => ipcRenderer.invoke('auth:clearToken'),
+    // Local (offline) auth helpers — bcrypt runs in main, never in the renderer.
+    hashPassword: (plain: string) => ipcRenderer.invoke('auth:hashPassword', plain),
+    verifyLocalPassword: (email: string, plain: string) =>
+      ipcRenderer.invoke('auth:verifyLocalPassword', email, plain),
+    // Fired after a 401 refresh in main so the renderer can update its stored token.
+    onTokenRefreshed: (callback: (tokens: { accessToken: string }) => void) =>
+      ipcRenderer.on('auth:token-refreshed', (_e, tokens) => callback(tokens)),
+    onForceLogout: (callback: (info: { reason: string; message: string }) => void) =>
+      ipcRenderer.on('auth:force-logout', (_e, info) => callback(info)),
   },
 
   // Print operations
   print: {
     invoice: (html: string) => ipcRenderer.invoke('print:invoice', html),
     report: (html: string) => ipcRenderer.invoke('print:report', html),
+  },
+
+  // Export operations (CSV / XLSX / TXT save + HTML-to-PDF)
+  export: {
+    save: (defaultFileName: string, data: string, opts?: { base64?: boolean }) =>
+      ipcRenderer.invoke('export:save', defaultFileName, data, opts),
+    pdf: (html: string, defaultFileName: string) =>
+      ipcRenderer.invoke('export:pdf', html, defaultFileName),
   },
 
   // Backup operations

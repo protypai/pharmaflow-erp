@@ -149,18 +149,28 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {adminActivityLogs.slice(0, 6).map(log => (
-                    <tr key={log.id}>
-                      <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('en-IN') : 'N/A'}
-                      </td>
-                      <td style={{ fontWeight: 500 }}>{log.company?.name || log.companyId || 'System'}</td>
-                      <td>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{(log.operation || 'Sync').toUpperCase()}</span>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{log.tableName || ''}</div>
+                  {adminActivityLogs.length === 0 && (
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        No recent activity.
                       </td>
                     </tr>
-                  ))}
+                  )}
+                  {adminActivityLogs.slice(0, 6).map(log => {
+                    const company = adminCompanies.find(c => c.id === log.companyId);
+                    return (
+                      <tr key={log.id}>
+                        <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('en-IN') : 'N/A'}
+                        </td>
+                        <td style={{ fontWeight: 500 }}>{company?.name || (log.companyId ? log.companyId : 'System')}</td>
+                        <td>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{log.action || 'activity'}</span>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{log.detail || log.actorEmail || ''}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

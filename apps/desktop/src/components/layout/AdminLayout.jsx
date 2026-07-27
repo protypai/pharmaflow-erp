@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Key, Database, Activity, Settings,
-  Shield, Menu, Bell, User, LogOut
+  LayoutDashboard, Building2, Key, Activity,
+  Shield, Menu, Bell, LogOut
 } from 'lucide-react';
 
 const adminNavConfig = [
@@ -10,7 +10,6 @@ const adminNavConfig = [
   { label: 'Company Management', path: '/admin/companies', icon: Building2 },
   { label: 'Reset Password', path: '/admin/reset-password', icon: Key },
   { label: 'Activity Logs', path: '/admin/activity-logs', icon: Activity },
-  { label: 'Settings', path: '/admin/settings', icon: Settings },
 ];
 
 function AdminSidebar({ collapsed }) {
@@ -116,10 +115,14 @@ function AdminHeader({ collapsed, onToggle, pathname }) {
               </div>
               <div style={{ padding: '0.25rem 0' }}>
                 <div
-                  onClick={async () => { 
+                  onClick={async () => {
                     if (window.pharmaAPI?.auth) {
                       await window.pharmaAPI.auth.clearToken();
                     }
+                    // Clear the super-admin session (the real admin credentials)…
+                    localStorage.removeItem('adminToken');
+                    localStorage.removeItem('adminUser');
+                    // …and any lingering ERP session tokens for good measure.
                     localStorage.removeItem('user');
                     localStorage.removeItem('accessToken');
                     localStorage.removeItem('refreshToken');

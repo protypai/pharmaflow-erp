@@ -1,31 +1,56 @@
 import { db } from '../config/database';
 import { generateCode } from '../utils/codeGenerator';
+import { AppError } from '../utils/AppError';
+
+// Whitelisted, writable Product fields (prevents mass-assignment of companyId/id/etc.)
+function buildProductData(data: any) {
+  const out: any = {};
+  const fields = [
+    'barcode', 'name', 'genericName', 'manufacturerId', 'categoryId', 'rackId',
+    'packing', 'purchaseUnit', 'saleUnit', 'conversionFactor', 'hsnCode', 'gstRate',
+    'schedule', 'minStock', 'maxStock', 'reorderQty', 'discontinued', 'status',
+  ];
+  for (const f of fields) {
+    if (data[f] !== undefined) out[f] = data[f];
+  }
+  return out;
+}
 
 export class ProductService {
-  async createProduct(data: any) {
-    const code = data.code || await generateCode('MED', 'product');
-    return db.product.create({
-      data: {
-        ...data,
-        code
-      }
+  async createProduct(companyId: string, data: any) {
+    return db.$transaction(async (tx: any) => {
+      const code = data.code || (await generateCode(companyId, 'product', tx));
+      return tx.product.create({
+        data: {
+          ...buildProductData(data),
+          companyId,
+          code,
+        },
+      });
     });
   }
 
-  async updateProduct(id: string, data: any) {
+  async updateProduct(companyId: string, id: string, data: any) {
+    // Scope by companyId to prevent cross-tenant IDOR.
+    const existing = await db.product.findFirst({ where: { id, companyId } });
+    if (!existing) throw new AppError('Product not found', 404);
+
     return db.product.update({
       where: { id },
-      data
+      data: buildProductData(data),
     });
   }
 
-  async listProducts(filters: { search?: string; categoryId?: string; manufacturerId?: string }) {
-    const where: any = {};
+  async listProducts(
+    companyId: string,
+    filters: { search?: string; categoryId?: string; manufacturerId?: string },
+  ) {
+    const where: any = { companyId };
     if (filters.search) {
       where.OR = [
         { name: { contains: filters.search, mode: 'insensitive' } },
         { code: { contains: filters.search, mode: 'insensitive' } },
-        { genericName: { contains: filters.search, mode: 'insensitive' } }
+        { genericName: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
     if (filters.categoryId) where.categoryId = filters.categoryId;
@@ -37,21 +62,21 @@ export class ProductService {
         category: true,
         manufacturer: true,
         rack: true,
-        batches: true
+        batches: true,
       },
-      orderBy: { name: 'asc' }
+      orderBy: { name: 'asc' },
     });
   }
 
-  async getProductById(id: string) {
-    const product = await db.product.findUnique({
-      where: { id },
+  async getProductById(companyId: string, id: string) {
+    const product = await db.product.findFirst({
+      where: { id, companyId },
       include: {
         category: true,
         manufacturer: true,
         rack: true,
-        batches: true
-      }
+        batches: true,
+      },
     });
 
     if (!product) return null;
@@ -59,28 +84,33 @@ export class ProductService {
     return { ...product, totalStock };
   }
 
-  async getBatchStockList(productId: string) {
+  async getBatchStockList(companyId: string, productId: string) {
+    // Verify the product belongs to the caller's company before exposing batches.
+    const product = await db.product.findFirst({ where: { id: productId, companyId } });
+    if (!product) throw new AppError('Product not found', 404);
+
     const now = new Date();
     const ninetyDaysFromNow = new Date();
     ninetyDaysFromNow.setDate(now.getDate() + 90);
 
     const batches = await db.batch.findMany({
       where: { productId },
-      orderBy: { expiryDate: 'asc' }
+      orderBy: { expiryDate: 'asc' },
     });
 
     return batches.map((batch: any) => ({
       ...batch,
       isExpired: batch.expiryDate < now,
-      isNearExpiry: batch.expiryDate >= now && batch.expiryDate <= ninetyDaysFromNow
+      isNearExpiry: batch.expiryDate >= now && batch.expiryDate <= ninetyDaysFromNow,
     }));
   }
 
-  async getLowStockProducts() {
+  async getLowStockProducts(companyId: string) {
     const products = await db.product.findMany({
+      where: { companyId },
       include: {
-        batches: true
-      }
+        batches: true,
+      },
     });
 
     return products

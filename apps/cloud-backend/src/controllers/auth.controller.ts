@@ -10,13 +10,13 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-  const result = await authService.loginUser(email, password);
+  const result = await authService.loginUser(email, password, req.ip);
   sendSuccess(res, result, 'Login successful');
 });
 
 export const adminLogin = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-  const result = await authService.loginAdmin(email, password);
+  const result = await authService.loginAdmin(email, password, req.ip);
   sendSuccess(res, result, 'Admin login successful');
 });
 

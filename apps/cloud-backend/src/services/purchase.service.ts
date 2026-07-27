@@ -1,11 +1,100 @@
 import { db } from '../config/database';
 import { generateCode } from '../utils/codeGenerator';
+import { AppError } from '../utils/AppError';
+import { computeLine, computeHeader, GstType } from '../utils/taxCalculator';
+
+function isIgstLine(item: any): boolean {
+  return item.isIgst === true || (Number(item.igst) > 0 && !(Number(item.cgst) > 0));
+}
 
 export class PurchaseService {
   async createPurchase(companyId: string, data: any) {
-    const entryNo = data.entryNo || await generateCode('PUR', 'product');
+    const gstType: GstType = data.gstType === 'inclusive' ? 'inclusive' : 'exclusive';
 
     return db.$transaction(async (tx: any) => {
+      const entryNo = data.entryNo || (await generateCode(companyId, 'purchase', tx));
+
+      // Resolve/create the batch for every line BEFORE creating the purchase, and remember how
+      // much stock to add. New batches are created with their opening qty, existing ones are
+      // incremented afterwards.
+      const resolvedItems = [];
+      for (const item of data.items) {
+        const qty = Number(item.qty) || 0;
+        const freeQty = Number(item.freeQty) || 0;
+        const incoming = qty + freeQty;
+
+        // Tenant guard: the product must belong to the caller's company.
+        const product = await tx.product.findFirst({
+          where: { id: item.productId, companyId },
+        });
+        if (!product) {
+          throw new AppError(`Product not found: ${item.productId}`, 400);
+        }
+
+        let batchId: string | null = null;
+        let createdNewBatch = false;
+
+        if (item.batchId) {
+          const existing = await tx.batch.findUnique({ where: { id: item.batchId } });
+          if (existing && existing.productId === item.productId) {
+            batchId = existing.id;
+          }
+        }
+
+        if (!batchId && item.batchNo) {
+          const existing = await tx.batch.findFirst({
+            where: { productId: item.productId, batchNo: item.batchNo },
+          });
+          if (existing) batchId = existing.id;
+        }
+
+        if (!batchId) {
+          // Create a brand-new batch for this product with its opening quantity.
+          if (!item.batchNo) {
+            throw new AppError('batchNo is required to create a new batch', 400);
+          }
+          const created = await tx.batch.create({
+            data: {
+              productId: item.productId,
+              batchNo: item.batchNo,
+              expiryDate: item.expiryDate ? new Date(item.expiryDate) : new Date(),
+              mrp: Number(item.mrp) || 0,
+              ptr: Number(item.ptr) || 0,
+              pts: item.pts != null ? Number(item.pts) : null,
+              purchasePrice: Number(item.purchasePrice) || 0,
+              gstRate: Number(item.gstRate) || 0,
+              currentQty: incoming,
+              freeQty,
+            },
+          });
+          batchId = created.id;
+          createdNewBatch = true;
+        }
+
+        const computed = computeLine(
+          {
+            qty,
+            unitPrice: Number(item.purchasePrice) || 0,
+            discPercent: item.discPercent,
+            discAmount: item.discAmount,
+            gstRate: Number(item.gstRate) || 0,
+            isIgst: isIgstLine(item),
+          },
+          gstType,
+        );
+
+        resolvedItems.push({ item, qty, freeQty, incoming, batchId, createdNewBatch, computed });
+      }
+
+      const header = computeHeader(
+        resolvedItems.map((ri) => ({
+          qty: ri.qty,
+          unitPrice: Number(ri.item.purchasePrice) || 0,
+          computed: ri.computed,
+        })),
+        Number(data.roundOff) || 0,
+      );
+
       const purchase = await tx.purchase.create({
         data: {
           companyId,
@@ -13,46 +102,47 @@ export class PurchaseService {
           supplierId: data.supplierId,
           invoiceNo: data.invoiceNo,
           invoiceDate: new Date(data.invoiceDate),
-          gstType: data.gstType || 'exclusive',
-          subtotal: data.subtotal,
-          discountAmount: data.discountAmount || 0,
-          taxableAmount: data.taxableAmount,
-          cgstAmount: data.cgstAmount || 0,
-          sgstAmount: data.sgstAmount || 0,
-          igstAmount: data.igstAmount || 0,
-          netAmount: data.netAmount,
-          roundOff: data.roundOff || 0,
+          gstType,
+          subtotal: header.subtotal,
+          discountAmount: header.discountAmount,
+          taxableAmount: header.taxableAmount,
+          cgstAmount: header.cgstAmount,
+          sgstAmount: header.sgstAmount,
+          igstAmount: header.igstAmount,
+          netAmount: header.netAmount,
+          roundOff: Number(data.roundOff) || 0,
           paymentMode: data.paymentMode || 'credit',
-          paidAmount: data.paidAmount || 0,
+          paidAmount: Number(data.paidAmount) || 0,
           notes: data.notes,
           items: {
-            create: data.items.map((item: any) => ({
+            create: resolvedItems.map(({ item, qty, freeQty, batchId, computed }) => ({
               productId: item.productId,
-              batchId: item.batchId,
-              qty: item.qty,
-              freeQty: item.freeQty || 0,
-              purchasePrice: item.purchasePrice,
-              ptr: item.ptr,
-              mrp: item.mrp,
-              discPercent: item.discPercent || 0,
-              discAmount: item.discAmount || 0,
-              gstRate: item.gstRate,
-              cgst: item.cgst || 0,
-              sgst: item.sgst || 0,
-              igst: item.igst || 0,
-              taxableAmt: item.taxableAmt,
-              netAmount: item.netAmount
-            }))
-          }
+              batchId: batchId as string,
+              qty,
+              freeQty,
+              purchasePrice: Number(item.purchasePrice) || 0,
+              ptr: Number(item.ptr) || 0,
+              mrp: Number(item.mrp) || 0,
+              discPercent: Number(item.discPercent) || 0,
+              discAmount: computed.discAmount,
+              gstRate: computed.gstRate,
+              cgst: computed.cgst,
+              sgst: computed.sgst,
+              igst: computed.igst,
+              taxableAmt: computed.taxableAmt,
+              netAmount: computed.netAmount,
+            })),
+          },
         },
-        include: { items: true }
+        include: { items: true },
       });
 
-      // Increment batch currentQty for each line item
-      for (const item of data.items) {
+      // Increment stock only for pre-existing batches (new batches already opened with their qty).
+      for (const { batchId, incoming, createdNewBatch } of resolvedItems) {
+        if (createdNewBatch) continue;
         await tx.batch.update({
-          where: { id: item.batchId },
-          data: { currentQty: { increment: item.qty + (item.freeQty || 0) } }
+          where: { id: batchId as string },
+          data: { currentQty: { increment: incoming } },
         });
       }
 
@@ -60,7 +150,10 @@ export class PurchaseService {
     });
   }
 
-  async listPurchases(companyId: string, filters: { supplierId?: string; startDate?: Date; endDate?: Date }) {
+  async listPurchases(
+    companyId: string,
+    filters: { supplierId?: string; startDate?: Date; endDate?: Date },
+  ) {
     const where: any = { companyId };
     if (filters.supplierId) where.supplierId = filters.supplierId;
     if (filters.startDate || filters.endDate) {
@@ -73,19 +166,19 @@ export class PurchaseService {
       where,
       include: {
         supplier: { select: { name: true, gstin: true } },
-        items: { include: { product: { select: { name: true } } } }
+        items: { include: { product: { select: { name: true } } } },
       },
-      orderBy: { invoiceDate: 'desc' }
+      orderBy: { invoiceDate: 'desc' },
     });
   }
 
-  async getPurchaseById(id: string) {
-    return db.purchase.findUnique({
-      where: { id },
+  async getPurchaseById(companyId: string, id: string) {
+    return db.purchase.findFirst({
+      where: { id, companyId },
       include: {
         supplier: true,
-        items: { include: { product: true, batch: true } }
-      }
+        items: { include: { product: true, batch: true } },
+      },
     });
   }
 }

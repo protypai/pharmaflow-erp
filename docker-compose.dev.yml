@@ -27,12 +27,14 @@ services:
       NODE_ENV: development
       PORT: "5000"
       DATABASE_URL: postgresql://pharmaflow:devpassword@postgres:5432/pharmaflow_dev
-      JWT_SECRET: your_64_char_hex_secret_here_min_32_chars_never_hardcode
+      # JWT secrets must be provided via the environment (e.g. a local .env file);
+      # never commit real secrets here.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (e.g. `openssl rand -hex 32`)}
       JWT_EXPIRES_IN: 15m
-      JWT_REFRESH_SECRET: another_64_char_hex_refresh_secret_here
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set (e.g. `openssl rand -hex 32`)}
       JWT_REFRESH_EXPIRES_IN: 30d
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pharmaflow.in}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Sagar@2003}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
       CORS_ORIGIN: "*"
       LOG_LEVEL: info
       RUN_SEEDING: "false"

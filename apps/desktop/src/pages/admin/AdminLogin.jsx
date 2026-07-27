@@ -35,13 +35,7 @@ export default function AdminLogin() {
       }
     } catch (err) {
       console.error('Admin login error:', err);
-      // Fallback for dev mode
-      if (username === 'admin@pharmaflow.in' && password === 'changeme_strong_password') {
-        localStorage.setItem('adminToken', 'dev-token');
-        navigate('/admin/dashboard');
-      } else {
-        setError('Failed to connect to Cloud Backend API.');
-      }
+      setError('Failed to connect to Cloud Backend API. Please check your network and try again.');
     } finally {
       setLoading(false);
     }

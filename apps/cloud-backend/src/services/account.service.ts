@@ -1,13 +1,24 @@
 import { db } from '../config/database';
+import { generateCode } from '../utils/codeGenerator';
 
 export class AccountService {
   async createReceipt(companyId: string, data: any) {
     return db.$transaction(async (tx: any) => {
+      const receiptNo = data.receiptNo || (await generateCode(companyId, 'receipt', tx));
       const receipt = await tx.receipt.create({
         data: {
-          ...data,
-          companyId
-        }
+          companyId,
+          receiptNo,
+          customerId: data.customerId,
+          date: new Date(data.date),
+          amount: Number(data.amount) || 0,
+          paymentMode: data.paymentMode,
+          chequeNo: data.chequeNo,
+          chequeDate: data.chequeDate ? new Date(data.chequeDate) : null,
+          bankName: data.bankName,
+          utrNo: data.utrNo,
+          notes: data.notes,
+        },
       });
       return receipt;
     });
@@ -15,30 +26,50 @@ export class AccountService {
 
   async createPayment(companyId: string, data: any) {
     return db.$transaction(async (tx: any) => {
+      const paymentNo = data.paymentNo || (await generateCode(companyId, 'payment', tx));
       const payment = await tx.payment.create({
         data: {
-          ...data,
-          companyId
-        }
+          companyId,
+          paymentNo,
+          supplierId: data.supplierId,
+          date: new Date(data.date),
+          amount: Number(data.amount) || 0,
+          paymentMode: data.paymentMode,
+          chequeNo: data.chequeNo,
+          chequeDate: data.chequeDate ? new Date(data.chequeDate) : null,
+          bankName: data.bankName,
+          utrNo: data.utrNo,
+          notes: data.notes,
+        },
       });
       return payment;
     });
   }
 
-  async createJournal(companyId: string, data: { entryNo: string; date: Date; narration: string; debitAmt: number; creditAmt: number; entries: any[] }) {
-    return db.journal.create({
-      data: {
-        companyId,
-        entryNo: data.entryNo,
-        date: data.date,
-        narration: data.narration,
-        debitAmt: data.debitAmt,
-        creditAmt: data.creditAmt,
-        entries: {
-          create: data.entries
-        }
-      },
-      include: { entries: true }
+  async createJournal(
+    companyId: string,
+    data: { entryNo?: string; date: Date; narration: string; debitAmt: number; creditAmt: number; entries: any[] },
+  ) {
+    return db.$transaction(async (tx: any) => {
+      const entryNo = data.entryNo || (await generateCode(companyId, 'journal', tx));
+      return tx.journal.create({
+        data: {
+          companyId,
+          entryNo,
+          date: new Date(data.date),
+          narration: data.narration,
+          debitAmt: Number(data.debitAmt) || 0,
+          creditAmt: Number(data.creditAmt) || 0,
+          entries: {
+            create: data.entries.map((e: any) => ({
+              particular: e.particular,
+              type: e.type,
+              amount: Number(e.amount) || 0,
+            })),
+          },
+        },
+        include: { entries: true },
+      });
     });
   }
 

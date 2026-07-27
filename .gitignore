@@ -2,6 +2,9 @@
 
 node_modules/
 dist/
+apps/*/dist/
+# Compiled Electron output (build artifact, should not be committed)
+apps/desktop/dist-electron/
 .env
 .env.production
 .env.local

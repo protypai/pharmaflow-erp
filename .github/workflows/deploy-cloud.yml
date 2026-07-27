@@ -70,6 +70,12 @@ jobs:
             git pull origin main
 
             echo "Writing .env.production from secrets..."
+            # NOTE: RUN_SEEDING seeds/overwrites the superadmin account. Leaving it
+            # true on every deploy resets the superadmin password each time, so it
+            # defaults to false below. For first-time setup, set the repo variable
+            # RUN_SEEDING=true (Settings > Variables) for one deploy, then unset it.
+            # CORS_ORIGIN and FRONTEND_URL come from repo secrets/vars — never '*'
+            # and never plain http in production.
             printf '%s\n' \
               "NODE_ENV=production" \
               "LOG_LEVEL=info" \
@@ -84,11 +90,11 @@ jobs:
               "JWT_REFRESH_EXPIRES_IN=30d" \
               "ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}" \
               "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" \
-              "CORS_ORIGIN=*" \
-              "FRONTEND_URL=http://${{ secrets.SSH_HOST }}" \
+              "CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}" \
+              "FRONTEND_URL=${{ vars.FRONTEND_URL || format('https://{0}', secrets.SSH_HOST) }}" \
               "HTTP_PORT=80" \
               "HTTPS_PORT=443" \
-              "RUN_SEEDING=true" \
+              "RUN_SEEDING=${{ vars.RUN_SEEDING || 'false' }}" \
               > .env.production
 
             cp .env.production .env

@@ -1,1 +1,0 @@
-ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;

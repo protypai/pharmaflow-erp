@@ -36,7 +36,6 @@ const pageTitles = {
   '/reports/customer': { title: 'Customer Report', sub: 'Customer-wise analysis' },
   '/reports/supplier': { title: 'Supplier Report', sub: 'Supplier-wise analysis' },
   '/reports/profit': { title: 'Profit Report', sub: 'Profitability analysis' },
-  '/backup': { title: 'Backup & Restore', sub: 'Data backup management' },
   '/settings': { title: 'Settings', sub: 'Application configuration' },
   '/profile': { title: 'Company Profile', sub: 'Manage your company details' },
 };

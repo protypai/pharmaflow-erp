@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Filter, Edit2, Package, History, X, Save } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
+import { formatStock } from '../../utils/units';
 
 export default function ProductMaster() {
   const [search, setSearch] = useState('');
@@ -317,7 +318,7 @@ export default function ProductMaster() {
                   </td>
                   <td>
                     <div style={{ fontWeight: 600, color: isLow ? 'var(--danger)' : 'var(--text-primary)' }}>
-                      {totalStock} {prod.sale_unit}
+                      {formatStock(totalStock, prod.conversion_factor, prod.sale_unit)}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Rack: {prod.rack_code || 'None'}</div>
                   </td>
@@ -546,7 +547,7 @@ export default function ProductMaster() {
                         <td style={{ textAlign: 'right' }}>₹{b.mrp.toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>₹{b.ptr.toFixed(2)}</td>
                         <td style={{ textAlign: 'right', fontWeight: 600, color: b.current_qty > 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
-                          {b.current_qty} {selectedProduct?.sale_unit}
+                          {formatStock(b.current_qty, selectedProduct?.conversion_factor, selectedProduct?.sale_unit)}
                         </td>
                       </tr>
                     ))}

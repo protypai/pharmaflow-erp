@@ -210,14 +210,19 @@ export default function PurchaseReturn() {
           reason: mapReturnReason(returnReason)
         });
 
-        // Decrease stock
+        // Decrease stock (qty is in STRIPS, whole numbers). Guard against negative stock.
+        const returnStrips = Math.round(Number(row.qty) || 0);
+        const availStrips = Number(batchData.current_qty) || 0;
+        if (returnStrips > availStrips) {
+          throw new Error(`Return qty (${returnStrips} Strips) for batch ${row.batch} exceeds available stock (${availStrips} Strips).`);
+        }
         await window.pharmaAPI.db.run(`
           UPDATE batches SET current_qty = current_qty - ? WHERE id = ?
-        `, [row.qty, batchData.id]);
-        
+        `, [returnStrips, batchData.id]);
+
         await syncEntity('Batch', 'update', {
           id: batchData.id,
-          currentQty: batchData.current_qty - Number(row.qty)
+          currentQty: availStrips - returnStrips
         });
       }
 
@@ -306,7 +311,7 @@ export default function PurchaseReturn() {
                 <th style={{ width: '250px' }}>Product</th>
                 <th style={{ width: '150px' }}>Batch</th>
                 <th style={{ width: '100px' }}>Expiry</th>
-                <th style={{ width: '100px' }}>Return Qty</th>
+                <th style={{ width: '100px' }}>Return Qty (Strips)</th>
                 <th style={{ width: '120px' }}>Original PTR (₹)</th>
                 <th style={{ width: '100px' }}>GST%</th>
                 <th style={{ width: '150px', textAlign: 'right' }}>Amount (₹)</th>

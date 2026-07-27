@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../config/database';
 import { AppError } from '../utils/AppError';
 import { signAccessToken, signRefreshToken, signAdminToken, verifyRefreshToken } from '../utils/jwt';
+import { logActivity } from './activityLog.service';
 
 export interface RegisterPayload {
   companyName: string;
@@ -21,9 +22,6 @@ export const registerCompany = async (data: RegisterPayload) => {
     throw new AppError('Email address already registered', 400);
   }
 
-  const trialExpiry = new Date();
-  trialExpiry.setDate(trialExpiry.getDate() + 14); // 14-day trial after approval
-
   const passwordHash = await bcrypt.hash(data.password, 12);
 
   return db.$transaction(async (tx: any) => {
@@ -35,9 +33,8 @@ export const registerCompany = async (data: RegisterPayload) => {
         phone: data.phone,
         city: data.city,
         state: data.state,
-        subscriptionStatus: 'trial',
-        subscriptionExpiry: trialExpiry,
-        isActive: false, // Requires Super Admin approval
+        subscriptionStatus: 'pending',
+        isActive: false, // Requires Super Admin approval (manual on/off)
       },
     });
 
@@ -65,14 +62,32 @@ export const registerCompany = async (data: RegisterPayload) => {
   });
 };
 
-export const loginUser = async (email: string, password: string) => {
+export const loginUser = async (email: string, password: string, ipAddress?: string) => {
   const user = await db.user.findUnique({ where: { email }, include: { company: true } });
-  if (!user) throw new AppError('Invalid credentials', 401);
+  if (!user) {
+    await logActivity({
+      actorType: 'user', actorEmail: email, action: 'auth.login_failed',
+      detail: 'Unknown email', ipAddress,
+    });
+    throw new AppError('Invalid credentials', 401);
+  }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) throw new AppError('Invalid credentials', 401);
+  if (!valid) {
+    await logActivity({
+      companyId: user.companyId, actorType: 'user', actorId: user.id, actorEmail: email,
+      action: 'auth.login_failed', detail: 'Incorrect password', ipAddress,
+    });
+    throw new AppError('Invalid credentials', 401);
+  }
 
   if (!user.isActive || !user.company.isActive || user.company.subscriptionStatus === 'pending') {
+    await logActivity({
+      companyId: user.companyId, actorType: 'user', actorId: user.id, actorEmail: email,
+      action: 'auth.login_failed',
+      detail: `Login blocked — account ${user.company.isActive ? 'pending approval' : 'deactivated'}`,
+      ipAddress,
+    });
     throw new AppError('Your account is pending Super Admin approval. Please contact administrator.', 403);
   }
 
@@ -90,6 +105,18 @@ export const loginUser = async (email: string, password: string) => {
 
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
+  await logActivity({
+    companyId: user.companyId,
+    actorType: 'user',
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'auth.login',
+    targetType: 'user',
+    targetId: user.id,
+    detail: `${user.email} logged in to ${user.company.name}`,
+    ipAddress,
+  });
+
   return {
     accessToken,
     refreshToken,
@@ -103,13 +130,37 @@ export const loginUser = async (email: string, password: string) => {
   };
 };
 
-export const loginAdmin = async (email: string, password: string) => {
+export const loginAdmin = async (email: string, password: string, ipAddress?: string) => {
   const admin = await db.superAdmin.findUnique({ where: { email } });
-  if (!admin || !admin.isActive) throw new AppError('Invalid credentials', 401);
+  if (!admin || !admin.isActive) {
+    await logActivity({
+      actorType: 'superadmin', actorEmail: email, action: 'admin.login_failed',
+      detail: admin ? 'Super admin account inactive' : 'Unknown super admin email', ipAddress,
+    });
+    throw new AppError('Invalid credentials', 401);
+  }
   const valid = await bcrypt.compare(password, admin.passwordHash);
-  if (!valid) throw new AppError('Invalid credentials', 401);
+  if (!valid) {
+    await logActivity({
+      actorType: 'superadmin', actorId: admin.id, actorEmail: email,
+      action: 'admin.login_failed', detail: 'Incorrect password', ipAddress,
+    });
+    throw new AppError('Invalid credentials', 401);
+  }
   await db.superAdmin.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
   const token = signAdminToken(admin.id);
+
+  await logActivity({
+    actorType: 'superadmin',
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: 'admin.login',
+    targetType: 'superadmin',
+    targetId: admin.id,
+    detail: `Super admin ${admin.email} signed in`,
+    ipAddress,
+  });
+
   return { token, admin: { id: admin.id, name: admin.name, email: admin.email } };
 };
 
@@ -119,6 +170,17 @@ export const refreshUserToken = async (refreshToken: string) => {
     throw new AppError('Invalid refresh token', 401);
   }
   const payload = verifyRefreshToken(refreshToken);
+
+  // Re-validate account state on refresh so a deactivated user/company
+  // cannot keep minting access tokens.
+  const user = await db.user.findUnique({
+    where: { id: payload.userId },
+    include: { company: true },
+  });
+  if (!user || !user.isActive || !user.company?.isActive) {
+    throw new AppError('Your account has been deactivated. Contact administrator.', 403, 'ACCOUNT_DISABLED');
+  }
+
   const accessToken = signAccessToken({
     userId: payload.userId,
     companyId: payload.companyId,

@@ -11,6 +11,7 @@ export default function SyncStatusCard() {
     next_sync_time: ''
   });
   const [syncing, setSyncing] = useState(false);
+  const [flash, setFlash] = useState(null); // { type: 'success'|'partial'|'failed', msg }
 
   const fetchSyncStatus = async () => {
     if (typeof window === 'undefined' || !window.pharmaAPI) return;
@@ -42,15 +43,30 @@ export default function SyncStatusCard() {
   const handleSyncNow = async () => {
     if (syncing || typeof window === 'undefined' || !window.pharmaAPI) return;
     setSyncing(true);
+    setFlash(null);
     // Instantly set state to Syncing... for immediate feedback
     setStatusInfo(prev => ({ ...prev, status: 'Syncing...' }));
     try {
-      await window.pharmaAPI.sync.push();
+      const res = await window.pharmaAPI.sync.push();
+      if (res && res.ok) {
+        if ((res.failed || 0) > 0) {
+          setFlash({ type: 'partial', msg: `Partial — ${res.failed} failed` });
+        } else if ((res.success || 0) > 0) {
+          setFlash({ type: 'success', msg: `Synced — ${res.success} uploaded` });
+        } else {
+          setFlash({ type: 'success', msg: 'Up to date' });
+        }
+      } else {
+        setFlash({ type: 'failed', msg: res && res.error ? 'Sync failed' : 'Sync failed' });
+      }
     } catch (err) {
       console.error('Manual sync push failed', err);
+      setFlash({ type: 'failed', msg: 'Sync failed' });
     } finally {
       await fetchSyncStatus();
       setSyncing(false);
+      // Auto-clear the confirmation after a few seconds.
+      setTimeout(() => setFlash(null), 3500);
     }
   };
 
@@ -124,6 +140,24 @@ export default function SyncStatusCard() {
           </>
         )}
       </div>
+
+      {/* Transient confirmation after a manual sync */}
+      {flash && (
+        <div
+          className={`mt-3 py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 ${
+            flash.type === 'success'
+              ? 'bg-emerald-100 text-emerald-800'
+              : flash.type === 'partial'
+              ? 'bg-amber-100 text-amber-800'
+              : 'bg-red-100 text-red-800'
+          }`}
+        >
+          {flash.type === 'success'
+            ? <CheckCircle2 className="h-3.5 w-3.5" />
+            : <AlertCircle className="h-3.5 w-3.5" />}
+          {flash.type === 'success' ? `✓ ${flash.msg}` : flash.msg}
+        </div>
+      )}
 
       {/* Sync Button */}
       <button

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { TrendingDown, FilePlus2, Printer } from 'lucide-react';
+import { formatStock } from '../../utils/units';
 
 
 export default function LowStock() {
@@ -115,13 +116,13 @@ export default function LowStock() {
                     {p.genericName} • {p.manufacturer}
                   </div>
                 </td>
-                <td style={{ fontWeight: 500 }}>{p.minStock} {p.saleUnit}</td>
-                <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{p.totalQty} {p.saleUnit}</td>
+                <td style={{ fontWeight: 500 }}>{formatStock(p.min_stock, p.conversion_factor, p.sale_unit)}</td>
+                <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatStock(p.totalQty, p.conversion_factor, p.sale_unit)}</td>
                 <td style={{ background: '#FEF2F2', fontWeight: 600, color: 'var(--danger)' }}>
-                  -{p.deficit} {p.saleUnit}
+                  -{formatStock(p.deficit, p.conversion_factor, p.sale_unit)}
                 </td>
                 <td style={{ background: '#F0FDF4', fontWeight: 700, color: 'var(--success)' }}>
-                  {p.suggestedOrder} {p.saleUnit}
+                  {formatStock(p.suggestedOrder, p.conversion_factor, p.sale_unit)}
                 </td>
                 <td style={{ color: 'var(--text-secondary)' }}>{p.primarySupplier}</td>
                 <td className="col-actions">

@@ -20,6 +20,7 @@ import salesRoutes from './routes/sales.routes';
 import accountRoutes from './routes/account.routes';
 import reportRoutes from './routes/report.routes';
 import returnRoutes from './routes/return.routes';
+import stockAdjustmentRoutes from './routes/stockAdjustment.routes';
 import { db } from './config/database';
 
 const app = express();
@@ -67,6 +68,7 @@ app.get('/api/health', (_req, res) => {
   app.use(`${prefix}/accounts`, accountRoutes);
   app.use(`${prefix}/reports`, reportRoutes);
   app.use(`${prefix}/returns`, returnRoutes);
+  app.use(`${prefix}/stock-adjustments`, stockAdjustmentRoutes);
 });
 
 // 404

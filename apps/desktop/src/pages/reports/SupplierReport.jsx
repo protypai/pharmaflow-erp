@@ -1,38 +1,49 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, Truck } from 'lucide-react';
+import { Search, Printer, Download, FileText, Truck } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
+  getCompanyProfile, dateRangeBounds,
+} from '../../utils/export';
 
 
 export default function SupplierReport() {
   const [suppliers, set_suppliers] = useState([]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const res_suppliers = await window.pharmaAPI.db.query(`
-        SELECT s.*, 
-               COUNT(p.id) as totalInvoices,
-               SUM(p.net_amount) as totalProcurement,
-               (SELECT SUM(amount) FROM payments WHERE supplier_id = s.id) as totalPaid,
-               (SELECT SUM(net_amount) FROM purchase_returns WHERE supplier_id = s.id) as totalReturns
-        FROM suppliers s
-        LEFT JOIN purchases p ON s.id = p.supplier_id
-        GROUP BY s.id
-      `);
-      set_suppliers(res_suppliers?.data || []);
-    };
-    fetchData();
-  }, []);
-
   const [dateRange, setDateRange] = useState('this_year');
 
-  // Mock Supplier Analysis Data
+  const fetchData = async () => {
+    const where = [];
+    const params = [];
+    const { start, end } = dateRangeBounds(dateRange);
+    // Filter procurement by period in the JOIN so suppliers with no activity
+    // in the range still appear (with zero totals).
+    let joinCond = 's.id = p.supplier_id';
+    if (start && end) { joinCond += ' AND p.invoice_date BETWEEN ? AND ?'; params.push(start, end); }
+
+    const res_suppliers = await window.pharmaAPI.db.query(`
+      SELECT s.*,
+             COUNT(p.id) as totalInvoices,
+             SUM(p.net_amount) as totalProcurement,
+             (SELECT SUM(amount) FROM payments WHERE supplier_id = s.id) as totalPaid,
+             (SELECT SUM(net_amount) FROM purchase_returns WHERE supplier_id = s.id) as totalReturns
+      FROM suppliers s
+      LEFT JOIN purchases p ON ${joinCond}
+      GROUP BY s.id
+    `, params);
+    set_suppliers(res_suppliers?.data || []);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [dateRange]);
+
   const supplierData = useMemo(() => {
     return suppliers.map(s => {
       const totalInvoices = s.totalInvoices || 0;
       const totalProcurement = s.totalProcurement || 0;
-      const returnVolume = s.totalReturns || 0; 
+      const returnVolume = s.totalReturns || 0;
       const netProcurement = totalProcurement - returnVolume;
       const outstandingBalance = (s.opening_balance || 0) + netProcurement - (s.totalPaid || 0);
-      
+
       return {
         ...s,
         totalInvoices,
@@ -42,13 +53,39 @@ export default function SupplierReport() {
         outstandingBalance
       };
     }).sort((a, b) => b.netProcurement - a.netProcurement); // Sort by highest dependency
-  }, [dateRange]);
+  }, [suppliers]);
 
   const totals = supplierData.reduce((acc, curr) => {
     acc.net += curr.netProcurement;
     acc.returns += curr.returnVolume;
     return acc;
   }, { net: 0, returns: 0 });
+
+  const columns = [
+    { header: 'Supplier Name', key: 'name' },
+    { header: 'City', key: 'city' },
+    { header: 'Total Invoices', key: 'totalInvoices', format: 'int' },
+    { header: 'Gross Procurement (₹)', key: 'totalProcurement', format: 'number' },
+    { header: 'Return/Debit Note Vol (₹)', key: 'returnVolume', format: 'number' },
+    { header: 'Net Procurement (₹)', key: 'netProcurement', format: 'number' },
+    { header: 'Pending Payable (₹)', key: 'outstandingBalance', format: 'number' },
+  ];
+  const footerTotals = { netProcurement: totals.net, returnVolume: totals.returns };
+  const subtitle = `Vendor Procurement Analysis • Range: ${dateRange}`;
+  const fileBase = 'supplier-report';
+
+  const handleCsv = () => exportCsv(fileBase, columns, supplierData);
+  const handleExcel = () => exportExcel(fileBase, columns, supplierData, 'Suppliers');
+  const buildSpec = async () => ({
+    title: 'Supplier Report (Procurement by Vendor)',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns,
+    rows: supplierData,
+    totals: footerTotals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -58,8 +95,10 @@ export default function SupplierReport() {
           <div className="page-sub">Evaluate vendor dependency, procurement volume, and return rates</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print</button>
-          <button className="btn btn-outline" onClick={() => alert("Data exported successfully as CSV!")}><Download size={16} /> Export CSV</button>
+          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-outline" onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 
@@ -72,7 +111,7 @@ export default function SupplierReport() {
             <option value="this_year">This Financial Year</option>
           </select>
         </div>
-        <button className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }}>Generate</button>
+        <button className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }} onClick={fetchData}>Generate</button>
       </div>
 
       {/* KPI Dashboard */}

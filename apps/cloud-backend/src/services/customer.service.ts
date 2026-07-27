@@ -1,22 +1,41 @@
 import { db } from '../config/database';
 import { generateCode } from '../utils/codeGenerator';
+import { AppError } from '../utils/AppError';
+
+function buildCustomerData(data: any) {
+  const out: any = {};
+  const fields = [
+    'name', 'type', 'gstin', 'drugLicense', 'phone', 'email', 'address', 'area',
+    'city', 'state', 'pincode', 'salesman', 'creditLimit', 'creditDays',
+    'openingBalance', 'openingBalanceType', 'status',
+  ];
+  for (const f of fields) {
+    if (data[f] !== undefined) out[f] = data[f];
+  }
+  return out;
+}
 
 export class CustomerService {
   async createCustomer(companyId: string, data: any) {
-    const code = data.code || await generateCode('CUST', 'customer');
-    return db.customer.create({
-      data: {
-        ...data,
-        companyId,
-        code
-      }
+    return db.$transaction(async (tx: any) => {
+      const code = data.code || (await generateCode(companyId, 'customer', tx));
+      return tx.customer.create({
+        data: {
+          ...buildCustomerData(data),
+          companyId,
+          code,
+        },
+      });
     });
   }
 
-  async updateCustomer(id: string, data: any) {
+  async updateCustomer(companyId: string, id: string, data: any) {
+    const existing = await db.customer.findFirst({ where: { id, companyId } });
+    if (!existing) throw new AppError('Customer not found', 404);
+
     return db.customer.update({
       where: { id },
-      data
+      data: buildCustomerData(data),
     });
   }
 
@@ -26,25 +45,25 @@ export class CustomerService {
       where.OR = [
         { name: { contains: filters.search, mode: 'insensitive' } },
         { phone: { contains: filters.search } },
-        { gstin: { contains: filters.search } }
+        { gstin: { contains: filters.search } },
       ];
     }
     if (filters.type) where.type = filters.type;
 
     return db.customer.findMany({
       where,
-      orderBy: { name: 'asc' }
+      orderBy: { name: 'asc' },
     });
   }
 
-  async getCustomerById(id: string) {
-    const customer = await db.customer.findUnique({
-      where: { id },
+  async getCustomerById(companyId: string, id: string) {
+    const customer = await db.customer.findFirst({
+      where: { id, companyId },
       include: {
         sales: { select: { netAmount: true, paidAmount: true } },
         receipts: { select: { amount: true } },
-        salesReturns: { select: { netAmount: true } }
-      }
+        salesReturns: { select: { netAmount: true } },
+      },
     });
 
     if (!customer) return null;
@@ -59,7 +78,7 @@ export class CustomerService {
       totalSales,
       totalReceipts,
       totalReturns,
-      currentOutstanding
+      currentOutstanding,
     };
   }
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, protocol, net } from 'electron';
+import { app, BrowserWindow, Tray, protocol, net, session } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
@@ -6,6 +6,7 @@ import { pathToFileURL } from 'url';
 import { setupDbHandlers } from './ipc/db.handler';
 import { setupSyncHandlers } from './ipc/sync.handler';
 import { setupPrintHandlers } from './ipc/print.handler';
+import { setupExportHandlers } from './ipc/export.handler';
 import { setupBackupHandlers } from './ipc/backup.handler';
 import { setupUpdateHandlers } from './ipc/update.handler';
 import { initLocalDb } from './services/localDb.service';
@@ -14,6 +15,57 @@ import { setupTray } from './windows/tray';
 const isDev = !app.isPackaged && !process.argv.includes('--prod');
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+const DEV_ORIGIN = 'http://localhost:5173';
+
+// Resolve the configured API origin for the CSP connect-src allowlist.
+function getApiOrigin(): string {
+  const raw = process.env.VITE_API_BASE_URL || process.env.VITE_CLOUD_API_URL || 'http://localhost:5000';
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return 'http://localhost:5000';
+  }
+}
+
+// Content-Security-Policy: restrict to self + the app:// protocol + configured API.
+// The dev policy also permits the Vite dev server (inline/eval + HMR websocket).
+function buildCsp(): string {
+  const api = getApiOrigin();
+  if (isDev) {
+    return [
+      `default-src 'self' app: ${DEV_ORIGIN}`,
+      `script-src 'self' app: ${DEV_ORIGIN} 'unsafe-inline' 'unsafe-eval'`,
+      "style-src 'self' app: 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' app: data: blob:",
+      "font-src 'self' app: data: https://fonts.gstatic.com",
+      `connect-src 'self' app: ${DEV_ORIGIN} ws://localhost:5173 ${api}`,
+    ].join('; ');
+  }
+  return [
+    "default-src 'self' app:",
+    "script-src 'self' app:",
+    "style-src 'self' app: 'unsafe-inline'",
+    "img-src 'self' app: data:",
+    "font-src 'self' app: data:",
+    `connect-src 'self' app: ${api}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+}
+
+// Apply a CSP response header to every request in the default session.
+function setupContentSecurityPolicy(): void {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [buildCsp()],
+      },
+    });
+  });
+}
 
 // Load .env file variables into process.env for development
 try {
@@ -54,7 +106,18 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
+      // Hardened defaults: enforce same-origin policy, and run the renderer in a
+      // sandboxed process. The preload only uses electron's contextBridge/ipcRenderer,
+      // both of which remain available under the sandbox.
+      webSecurity: true,
+      // Required for backends served over plain http:// on a bare IP (no TLS).
+      // The secure app:// scheme would otherwise trigger a mixed-content block on
+      // the packaged renderer's http API calls. webSecurity stays true and the CSP
+      // connect-src already whitelists the configured API origin, so this only
+      // relaxes the mixed-content rule — not same-origin enforcement. Prefer HTTPS
+      // whenever the backend can provide it.
+      allowRunningInsecureContent: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
     show: false,  // Show window only when content is ready
@@ -72,16 +135,31 @@ async function createWindow() {
     mainWindow.loadURL('app://index.html');
   }
 
-  // Enable DevTools via F12 or Ctrl+Shift+I for debugging network API calls
-  mainWindow.webContents.on('before-input-event', (_event, input) => {
-    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
-      mainWindow?.webContents.toggleDevTools();
+  // DevTools toggle (F12 / Ctrl+Shift+I) — development builds only. Disabled in
+  // packaged production builds so end users cannot open the inspector.
+  if (!app.isPackaged) {
+    mainWindow.webContents.on('before-input-event', (_event, input) => {
+      if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+        mainWindow?.webContents.toggleDevTools();
+      }
+    });
+    mainWindow.webContents.openDevTools();
+  }
+
+  // Navigation hardening: block navigation to any external origin and deny all
+  // attempts to open new windows.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowed = url.startsWith('app://') || (isDev && url.startsWith(DEV_ORIGIN));
+    if (!allowed) {
+      event.preventDefault();
+      console.warn(`Blocked navigation to external origin: ${url}`);
     }
   });
 
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    console.warn(`Blocked new window request: ${url}`);
+    return { action: 'deny' };
+  });
 
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     console.log(`[Renderer] ${message} (${sourceId}:${line})`);
@@ -110,6 +188,7 @@ async function createWindow() {
   setupDbHandlers();
   setupSyncHandlers(mainWindow);
   setupPrintHandlers();
+  setupExportHandlers();
   setupBackupHandlers();
   setupUpdateHandlers(mainWindow);
 }
@@ -119,6 +198,9 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.whenReady().then(() => {
+  // Apply Content-Security-Policy headers to all responses.
+  setupContentSecurityPolicy();
+
   // In packaged app: dist/ is in app.asar.unpacked/ (not inside app.asar)
   // In dev/preview: dist/ is directly under the project root
   const getDistPath = (...parts: string[]) => {

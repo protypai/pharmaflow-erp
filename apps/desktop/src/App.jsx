@@ -61,17 +61,42 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import CompanyManagement from './pages/admin/CompanyManagement';
 import ResetPassword from './pages/admin/ResetPassword';
 import ActivityLogs from './pages/admin/ActivityLogs';
-import AdminSettings from './pages/admin/AdminSettings';
 import AdminLayout from './components/layout/AdminLayout';
 
 import './styles/index.css';
 
+// Auth guard for ERP (user) routes — requires a valid accessToken in localStorage.
+function ProtectedRoute({ children }) {
+  const token = localStorage.getItem('accessToken');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+// Auth guard for the Super Admin portal — requires an adminToken in localStorage.
+function AdminProtectedRoute({ children }) {
+  const adminToken = localStorage.getItem('adminToken');
+  if (!adminToken) {
+    return <Navigate to="/admin/login" replace />;
+  }
+  return children;
+}
+
 function WithLayout({ children }) {
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <ProtectedRoute>
+      <AppLayout>{children}</AppLayout>
+    </ProtectedRoute>
+  );
 }
 
 function WithAdminLayout({ children }) {
-  return <AdminLayout>{children}</AdminLayout>;
+  return (
+    <AdminProtectedRoute>
+      <AdminLayout>{children}</AdminLayout>
+    </AdminProtectedRoute>
+  );
 }
 
 export default function App() {
@@ -88,7 +113,6 @@ export default function App() {
         <Route path="/admin/companies" element={<WithAdminLayout><CompanyManagement /></WithAdminLayout>} />
         <Route path="/admin/reset-password" element={<WithAdminLayout><ResetPassword /></WithAdminLayout>} />
         <Route path="/admin/activity-logs" element={<WithAdminLayout><ActivityLogs /></WithAdminLayout>} />
-        <Route path="/admin/settings" element={<WithAdminLayout><AdminSettings /></WithAdminLayout>} />
 
         {/* ERP Routes */}
         <Route path="/dashboard" element={<WithLayout><Dashboard /></WithLayout>} />
@@ -142,7 +166,8 @@ export default function App() {
         {/* Default */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Unknown routes must NOT bypass auth — send to login (guard redirects onward if authed). */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </HashRouter>
   );

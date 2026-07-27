@@ -1,68 +1,50 @@
 import { Request, Response } from 'express';
+import { asyncHandler } from '../utils/asyncHandler';
+import { sendSuccess } from '../utils/response';
 import { productService } from '../services/product.service';
 
 export class ProductController {
-  async createProduct(req: Request, res: Response) {
-    try {
-      const product = await productService.createProduct(req.body);
-      res.status(201).json(product);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  }
+  createProduct = asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId;
+    const product = await productService.createProduct(companyId, req.body);
+    sendSuccess(res, product, 'Product created', 201);
+  });
 
-  async updateProduct(req: Request, res: Response) {
-    try {
-      const product = await productService.updateProduct(req.params.id, req.body);
-      res.json(product);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  }
+  updateProduct = asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId;
+    const product = await productService.updateProduct(companyId, req.params.id, req.body);
+    sendSuccess(res, product, 'Product updated');
+  });
 
-  async listProducts(req: Request, res: Response) {
-    try {
-      const params = {
-        page: req.query.page ? parseInt(req.query.page as string) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-        search: req.query.search as string,
-        categoryId: req.query.categoryId as string,
-        manufacturerId: req.query.manufacturerId as string
-      };
-      const result = await productService.listProducts(params);
-      res.json(result);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  }
+  listProducts = asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId;
+    const params = {
+      search: req.query.search as string,
+      categoryId: req.query.categoryId as string,
+      manufacturerId: req.query.manufacturerId as string,
+    };
+    const result = await productService.listProducts(companyId, params);
+    sendSuccess(res, result, 'Products fetched');
+  });
 
-  async getProductById(req: Request, res: Response) {
-    try {
-      const product = await productService.getProductById(req.params.id);
-      if (!product) return res.status(404).json({ error: 'Product not found' });
-      res.json(product);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  }
+  getProductById = asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId;
+    const product = await productService.getProductById(companyId, req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    sendSuccess(res, product, 'Product details');
+  });
 
-  async getBatchStockList(req: Request, res: Response) {
-    try {
-      const batches = await productService.getBatchStockList(req.params.id);
-      res.json(batches);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  }
+  getBatchStockList = asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId;
+    const batches = await productService.getBatchStockList(companyId, req.params.id);
+    sendSuccess(res, batches, 'Batches fetched');
+  });
 
-  async getLowStockProducts(req: Request, res: Response) {
-    try {
-      const products = await productService.getLowStockProducts();
-      res.json(products);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  }
+  getLowStockProducts = asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId;
+    const products = await productService.getLowStockProducts(companyId);
+    sendSuccess(res, products, 'Low stock products fetched');
+  });
 }
 
 export const productController = new ProductController();

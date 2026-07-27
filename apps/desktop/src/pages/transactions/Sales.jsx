@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Printer, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Save, Plus, Trash2, Printer, AlertTriangle, ArrowLeft, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
+import { buildInvoiceHtml } from '../../utils/invoiceTemplate';
+import { packSize, toStrips, toBoxesFloat, perStripPrice, formatStock } from '../../utils/units';
 export default function Sales() {
   const navigate = useNavigate();
   const [customerId, setCustomerId] = useState('');
@@ -23,6 +25,7 @@ export default function Sales() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [savedInvoice, setSavedInvoice] = useState(null); // { html, no }
 
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -177,17 +180,18 @@ export default function Sales() {
           if (batchData) {
             updated.batchId = batchData.id;
             updated.expiry = batchData.expiry;
+            // batchData.qty is now current_qty in STRIPS (base unit).
             updated.baseAvailable = Number(batchData.qty);
-            updated.baseMrp = Number(batchData.mrp);
-            updated.baseRate = Number(batchData.mrp);
-            
-            const factor = Number(updated.boxSize) || 10;
+            updated.baseMrp = Number(batchData.mrp); // per strip
+            updated.baseRate = Number(batchData.mrp); // per strip
+
+            const factor = packSize(updated.boxSize);
             if (updated.unit === 'box') {
-              updated.available = Number(batchData.qty);
+              updated.available = Number(toBoxesFloat(batchData.qty, factor).toFixed(2));
               updated.mrp = Number((batchData.mrp * factor).toFixed(2));
               updated.rate = Number((batchData.mrp * factor).toFixed(2));
             } else {
-              updated.available = Number((batchData.qty * factor).toFixed(1));
+              updated.available = Number(batchData.qty);
               updated.mrp = Number(batchData.mrp);
               updated.rate = Number(batchData.mrp);
             }
@@ -198,28 +202,30 @@ export default function Sales() {
       if (field === 'unit') {
         const oldUnit = r.unit || 'box';
         const newUnit = value;
-        const factor = Number(updated.boxSize) || 10;
+        const factor = packSize(updated.boxSize);
+        const baseStrips = r.baseAvailable ?? 0;
         if (oldUnit === 'box' && newUnit === 'strip') {
           updated.rate = Number((r.baseRate || 0).toFixed(2));
           updated.mrp = Number((r.baseMrp || 0).toFixed(2));
-          updated.available = Number(((r.baseAvailable ?? r.available) * factor).toFixed(1));
+          updated.available = Number(baseStrips);
         } else if (oldUnit === 'strip' && newUnit === 'box') {
           updated.rate = Number(((r.baseRate || 0) * factor).toFixed(2));
           updated.mrp = Number(((r.baseMrp || 0) * factor).toFixed(2));
-          updated.available = Number(r.baseAvailable ?? (r.available / factor));
+          updated.available = Number(toBoxesFloat(baseStrips, factor).toFixed(2));
         }
       }
 
       if (field === 'boxSize') {
-        const newFactor = Number(value) || 10;
+        const newFactor = packSize(value);
+        const baseStrips = r.baseAvailable ?? 0;
         if (r.unit === 'box') {
           updated.rate = Number(((r.baseRate || 0) * newFactor).toFixed(2));
           updated.mrp = Number(((r.baseMrp || 0) * newFactor).toFixed(2));
-          updated.available = r.baseAvailable || r.available;
+          updated.available = Number(toBoxesFloat(baseStrips, newFactor).toFixed(2));
         } else {
           updated.rate = Number(r.baseRate || 0);
           updated.mrp = Number(r.baseMrp || 0);
-          updated.available = Number(((r.baseAvailable ?? 0) * newFactor).toFixed(1));
+          updated.available = Number(baseStrips);
         }
       }
       
@@ -236,6 +242,7 @@ export default function Sales() {
   const handleSave = async () => {
     setErrorMsg('');
     setSuccessMsg('');
+    setSavedInvoice(null);
 
     if (!customerId || !invoiceNo || !invoiceDate) {
       setErrorMsg("Customer, Invoice No, and Invoice Date are required.");
@@ -248,16 +255,13 @@ export default function Sales() {
       return;
     }
 
-    // Validate overstock
+    // Validate overstock (everything compared in STRIPS)
     for (const row of validRows) {
-      const isBox = row.unit === 'box';
-      const packMultiplier = Number(row.boxSize) || 10;
-      const totalBoxesNeeded = isBox 
-        ? (Number(row.qty || 0) + Number(row.free || 0)) 
-        : (Number(row.qty || 0) + Number(row.free || 0)) / packMultiplier;
-      const availBoxes = row.baseAvailable ?? (isBox ? row.available : row.available / packMultiplier);
-      if (totalBoxesNeeded > availBoxes) {
-        setErrorMsg(`Total quantity (${isBox ? totalBoxesNeeded + ' Boxes' : (Number(row.qty||0)+Number(row.free||0)) + ' Strips'}) for batch ${row.batch} exceeds available stock (${availBoxes} Boxes).`);
+      const packMultiplier = packSize(row.boxSize);
+      const totalStripsNeeded = toStrips(row.qty, row.unit, packMultiplier) + toStrips(row.free, row.unit, packMultiplier);
+      const availStrips = Number(row.baseAvailable ?? toStrips(row.available, row.unit, packMultiplier));
+      if (totalStripsNeeded > availStrips) {
+        setErrorMsg(`Total quantity (${totalStripsNeeded} Strips) for batch ${row.batch} exceeds available stock (${availStrips} Strips).`);
         return;
       }
     }
@@ -306,28 +310,28 @@ export default function Sales() {
       // 2. Insert items and update batches
       const syncItems = []; // Collect sync payloads to run after db transaction
       for (const row of validRows) {
-        const isBox = row.unit === 'box';
-        const packMultiplier = Number(row.boxSize) || 10;
-        const billedBoxes = isBox ? Number(row.qty || 0) : Number(row.qty || 0) / packMultiplier;
-        const freeBoxes = isBox ? Number(row.free || 0) : Number(row.free || 0) / packMultiplier;
-        const totalDeductBoxes = billedBoxes + freeBoxes;
-        const stripRate = isBox ? Number(row.rate || 0) / packMultiplier : Number(row.rate || 0);
-        const stripMrp = isBox ? Number(row.mrp || 0) / packMultiplier : Number(row.mrp || 0);
-        const availBoxes = row.baseAvailable ?? (isBox ? row.available : row.available / packMultiplier);
+        const packMultiplier = packSize(row.boxSize);
+        // All persisted quantities are whole STRIPS.
+        const billedStrips = toStrips(row.qty, row.unit, packMultiplier);
+        const freeStrips = toStrips(row.free, row.unit, packMultiplier);
+        const totalDeductStrips = billedStrips + freeStrips;
+        const stripRate = perStripPrice(row.rate, row.unit, packMultiplier);
+        const stripMrp = perStripPrice(row.mrp, row.unit, packMultiplier);
+        const availStrips = Number(row.baseAvailable ?? toStrips(row.available, row.unit, packMultiplier));
 
-        // Deduct from Batch
+        // Deduct from Batch (strips)
         operations.push({
-          sql: `UPDATE batches SET 
-            current_qty = current_qty - ?, 
-            updated_at = datetime('now') 
+          sql: `UPDATE batches SET
+            current_qty = current_qty - ?,
+            updated_at = datetime('now')
             WHERE id = ?`,
-          params: [totalDeductBoxes, row.batchId]
+          params: [totalDeductStrips, row.batchId]
         });
 
         syncItems.push({
           tableName: 'Batch',
           operation: 'update',
-          payload: { id: row.batchId, currentQty: availBoxes - totalDeductBoxes }
+          payload: { id: row.batchId, currentQty: availStrips - totalDeductStrips }
         });
 
         // Insert Sale Item
@@ -338,7 +342,7 @@ export default function Sales() {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
             saleItemId,
-            saleId, row.product, row.batchId, billedBoxes, freeBoxes, stripMrp, stripRate, stripRate, Number(row.disc || 0), Number(row.gst || 0), row.amount
+            saleId, row.product, row.batchId, billedStrips, freeStrips, stripMrp, stripRate, stripRate, Number(row.disc || 0), Number(row.gst || 0), row.amount
           ]
         });
 
@@ -350,8 +354,8 @@ export default function Sales() {
             saleId,
             productId: row.product,
             batchId: row.batchId,
-            qty: billedBoxes,
-            freeQty: freeBoxes,
+            qty: billedStrips,
+            freeQty: freeStrips,
             mrp: stripMrp,
             ptr: stripRate,
             salePrice: stripRate,
@@ -413,7 +417,69 @@ export default function Sales() {
       }
 
       setSuccessMsg(`Sales Invoice ${invoiceNo} saved successfully!`);
-      
+
+      // Build a printable GST tax-invoice from the saved data (before we reset the form).
+      try {
+        const companyRes = await window.pharmaAPI.db.query("SELECT * FROM companies LIMIT 1");
+        const company = companyRes?.data?.[0] || {};
+
+        const partyRes = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE id = ?", [customerId]);
+        const party = partyRes?.data?.[0] || {};
+
+        const prodIds = [...new Set(validRows.map(r => r.product))];
+        const metaMap = {};
+        if (prodIds.length) {
+          const placeholders = prodIds.map(() => '?').join(',');
+          const metaRes = await window.pharmaAPI.db.query(
+            `SELECT p.id, p.hsn_code, p.packing, m.name AS mfg_name
+             FROM products p
+             LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
+             WHERE p.id IN (${placeholders})`,
+            prodIds
+          );
+          (metaRes?.data || []).forEach(m => { metaMap[m.id] = m; });
+        }
+
+        const invItems = validRows.map(r => {
+          const meta = metaMap[r.product] || {};
+          const pack = packSize(r.boxSize);
+          // Invoice shows quantities in STRIPS and prices PER STRIP (amount unchanged).
+          return {
+            mfg: meta.mfg_name || '',
+            name: r.productName,
+            hsn: meta.hsn_code || '',
+            pack: meta.packing || `1x${pack}`,
+            batch: r.batch,
+            exp: r.expiry,
+            qty: toStrips(r.qty, r.unit, pack),
+            free: toStrips(r.free, r.unit, pack),
+            mrp: perStripPrice(r.mrp, r.unit, pack),
+            pts: '',
+            ptr: perStripPrice(r.rate, r.unit, pack),
+            amount: r.amount,
+            gst: r.gst,
+            disc: r.disc
+          };
+        });
+
+        const html = buildInvoiceHtml({
+          type: 'sales',
+          company,
+          party,
+          invoice: {
+            no: invoiceNo,
+            date: invoiceDate,
+            type: paymentMode,
+            discount: totals.disc,
+            netPayable: totals.net
+          },
+          items: invItems
+        });
+        setSavedInvoice({ html, no: invoiceNo });
+      } catch (invErr) {
+        console.error('Failed to build sales invoice for print/PDF:', invErr);
+      }
+
       // Reset form
       setCustomerId('');
       setInvoiceNo('INV-' + Date.now().toString().slice(-6));
@@ -480,8 +546,23 @@ export default function Sales() {
       )}
 
       {successMsg && (
-        <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '0.75rem 1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <strong>Success:</strong> {successMsg}
+        <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '0.75rem 1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <strong>Success:</strong> <span style={{ flex: 1 }}>{successMsg}</span>
+          {savedInvoice && (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => window.pharmaAPI.print.invoice(savedInvoice.html)}>
+                <Printer size={14} /> Print
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={async () => {
+                const res = await window.pharmaAPI.export.pdf(savedInvoice.html, 'Invoice_' + savedInvoice.no);
+                if (res && res.success === false && !res.canceled) {
+                  setErrorMsg('Failed to export PDF.');
+                }
+              }}>
+                <Download size={14} /> Download PDF
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -544,12 +625,11 @@ export default function Sales() {
             <tbody>
               {rows.map((r) => {
                 const prod = productsList.find(p => p.id === r.product);
-                const isBox = r.unit === 'box';
-                const packMultiplier = Number(r.boxSize) || 10;
-                const totalBoxesNeeded = isBox ? (Number(r.qty || 0) + Number(r.free || 0)) : (Number(r.qty || 0) + Number(r.free || 0)) / packMultiplier;
-                const availBoxes = r.baseAvailable ?? (isBox ? r.available : r.available / packMultiplier);
-                const overStock = totalBoxesNeeded > availBoxes;
-                const availText = isBox ? `${availBoxes} Boxes (${Number((availBoxes * packMultiplier).toFixed(0))} Strips)` : `${r.available} Strips (${availBoxes} Boxes)`;
+                const packMultiplier = packSize(r.boxSize);
+                const totalStripsNeeded = toStrips(r.qty, r.unit, packMultiplier) + toStrips(r.free, r.unit, packMultiplier);
+                const availStrips = Number(r.baseAvailable ?? toStrips(r.available, r.unit, packMultiplier));
+                const overStock = totalStripsNeeded > availStrips;
+                const availText = formatStock(availStrips, packMultiplier, 'Strip');
 
                 return (
                   <tr key={r.id} style={{ background: overStock ? '#FEF2F2' : 'transparent' }}>
@@ -583,7 +663,7 @@ export default function Sales() {
                               >
                                 <div style={{ fontWeight: 500 }}>{p.name}</div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                                  In Stock: {p.batches.reduce((sum, b) => sum + Number(b.qty), 0)} Boxes ({p.batches.length} batches)
+                                  In Stock: {p.batches.reduce((sum, b) => sum + Number(b.qty), 0)} Strips ({p.batches.length} batches)
                                 </div>
                               </div>
                             ))}
@@ -597,12 +677,12 @@ export default function Sales() {
                       <select className="form-select form-input-sm" value={r.batch} onChange={e => updateRow(r.id, 'batch', e.target.value)} disabled={!r.product}>
                         <option value="">Select Batch</option>
                         {prod && prod.batches.map(b => (
-                          <option key={b.id} value={b.batch}>{b.batch} ({b.qty} Boxes)</option>
+                          <option key={b.id} value={b.batch}>{b.batch} ({b.qty} Strips)</option>
                         ))}
                       </select>
                     </td>
                     <td><input type="text" className="form-input form-input-sm" value={r.expiry} readOnly style={{ background: '#F8FAFC' }} /></td>
-                    <td><input type="text" className="form-input form-input-sm" value={availText} readOnly style={{ background: '#F8FAFC', color: availBoxes === 0 ? 'var(--danger)' : 'inherit', fontSize: '11px', fontWeight: 600 }} /></td>
+                    <td><input type="text" className="form-input form-input-sm" value={availText} readOnly style={{ background: '#F8FAFC', color: availStrips === 0 ? 'var(--danger)' : 'inherit', fontSize: '11px', fontWeight: 600 }} /></td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         <input type="number" className="form-input form-input-sm" min="1" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} style={{ borderColor: overStock ? 'var(--danger)' : 'var(--border)', fontWeight: 600 }} />

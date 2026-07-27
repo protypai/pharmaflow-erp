@@ -215,15 +215,16 @@ export default function SalesReturn() {
           reason: mapReturnReason(returnReason)
         });
 
-        // Increase stock if salable return
+        // Increase stock if salable return (qty is in STRIPS, whole numbers)
         if (returnReason.includes("Salable")) {
+          const returnStrips = Math.round(Number(row.qty) || 0);
           await window.pharmaAPI.db.run(`
             UPDATE batches SET current_qty = current_qty + ? WHERE id = ?
-          `, [row.qty, batchData.id]);
-          
+          `, [returnStrips, batchData.id]);
+
           await syncEntity('Batch', 'update', {
             id: batchData.id,
-            currentQty: batchData.current_qty + Number(row.qty)
+            currentQty: Number(batchData.current_qty) + returnStrips
           });
         }
       }
@@ -311,7 +312,7 @@ export default function SalesReturn() {
                 <th style={{ width: '250px' }}>Product</th>
                 <th style={{ width: '150px' }}>Batch</th>
                 <th style={{ width: '100px' }}>Expiry</th>
-                <th style={{ width: '100px' }}>Return Qty</th>
+                <th style={{ width: '100px' }}>Return Qty (Strips)</th>
                 <th style={{ width: '120px' }}>Billed Rate (₹)</th>
                 <th style={{ width: '100px' }}>Disc %</th>
                 <th style={{ width: '100px' }}>GST%</th>

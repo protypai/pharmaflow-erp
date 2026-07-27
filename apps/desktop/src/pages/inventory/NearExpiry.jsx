@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, ArrowRightLeft, Printer } from 'lucide-react';
+import { formatStock } from '../../utils/units';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -71,17 +72,19 @@ export default function NearExpiry() {
             ...b,
             productName: p.name,
             productCode: p.code,
+            conversionFactor: p.conversion_factor,
+            saleUnit: p.sale_unit,
             daysRemaining: daysDiff,
-            stockValue: b.qty * b.ptr, 
+            stockValue: b.qty * b.ptr,
             supplierName: suppliers.length > 0 ? suppliers[numId % suppliers.length].name : 'Unknown Supplier'
           });
         }
       });
     });
-    
+
     // Sort by most urgent (fewest days remaining)
     return expiring.sort((a, b) => a.daysRemaining - b.daysRemaining);
-  }, [daysFilter]);
+  }, [daysFilter, products, suppliers]);
 
   const totalValueAtRisk = getExpiringBatches.reduce((sum, b) => sum + b.stockValue, 0);
 
@@ -136,7 +139,7 @@ export default function NearExpiry() {
               <tr key={`${b.productCode}-${b.batch}`} style={{ background: b.daysRemaining <= 30 ? '#FEF2F2' : 'transparent' }}>
                 <td style={{ fontWeight: 600 }}>{b.productName}</td>
                 <td>{b.batch}</td>
-                <td style={{ fontWeight: 600 }}>{b.qty}</td>
+                <td style={{ fontWeight: 600 }}>{formatStock(b.qty, b.conversionFactor, b.saleUnit)}</td>
                 <td style={{ color: 'var(--danger)', fontWeight: 500 }}>{b.expiry}</td>
                 <td>
                   <span style={{ 

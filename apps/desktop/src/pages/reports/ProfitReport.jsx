@@ -1,32 +1,45 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, TrendingUp, BarChart3 } from 'lucide-react';
+import { Search, Printer, Download, FileText, TrendingUp, BarChart3 } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
+  getCompanyProfile, dateRangeBounds,
+} from '../../utils/export';
 
 
 export default function ProfitReport() {
   const [products, set_products] = useState([]);
   const [categories, set_categories] = useState([]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const res_products = await window.pharmaAPI.db.query(`
-        SELECT p.*, c.name as categoryName,
-               SUM(si.qty) as qtySold,
-               SUM(si.net_amount) as salesRevenue,
-               SUM(si.qty * si.ptr) as cogs
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN sale_items si ON p.id = si.product_id
-        GROUP BY p.id
-      `);
-      set_products(res_products?.data || []);
-      const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
-      set_categories(res_categories?.data || []);
-    };
-    fetchData();
-  }, []);
-
   const [groupBy, setGroupBy] = useState('product'); // 'product' or 'category'
   const [dateRange, setDateRange] = useState('this_month');
+
+  const fetchData = async () => {
+    const params = [];
+    const { start, end } = dateRangeBounds(dateRange);
+    // Restrict sale_items to lines whose parent sale falls within the range.
+    const saleFilter = (start && end)
+      ? 'AND si.sale_id IN (SELECT id FROM sales WHERE date BETWEEN ? AND ?)'
+      : '';
+    if (start && end) params.push(start, end);
+
+    const res_products = await window.pharmaAPI.db.query(`
+      SELECT p.*, c.name as categoryName,
+             SUM(si.qty) as qtySold,
+             SUM(si.net_amount) as salesRevenue,
+             SUM(si.qty * si.ptr) as cogs
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN sale_items si ON p.id = si.product_id ${saleFilter}
+      GROUP BY p.id
+    `, params);
+    set_products(res_products?.data || []);
+    const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
+    set_categories(res_categories?.data || []);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [dateRange]);
 
   // Mock Profit Data Calculation
   const profitData = useMemo(() => {
@@ -85,7 +98,7 @@ export default function ProfitReport() {
 
     // Sort by highest Gross Profit
     return data.sort((a, b) => b.grossProfit - a.grossProfit);
-  }, [groupBy, dateRange]);
+  }, [groupBy, products, categories]);
 
   const totals = profitData.reduce((acc, curr) => {
     acc.revenue += curr.salesRevenue;
@@ -95,6 +108,38 @@ export default function ProfitReport() {
   }, { revenue: 0, cogs: 0, gp: 0 });
 
   const averageMargin = totals.revenue > 0 ? (totals.gp / totals.revenue) * 100 : 0;
+
+  const marginFmt = (v) => `${(Number(v) || 0).toFixed(1)}%`;
+  const columns = [
+    { header: groupBy === 'product' ? 'Product Name' : 'Category Name', key: 'entityName' },
+    { header: 'Details', key: 'details' },
+    { header: 'Qty Sold', key: 'qtySold', format: 'int' },
+    { header: 'Sales Revenue (₹)', key: 'salesRevenue', format: 'number' },
+    { header: 'COGS (₹)', key: 'cogs', format: 'number' },
+    { header: 'Gross Profit (₹)', key: 'grossProfit', format: 'number' },
+    { header: 'Margin %', key: 'marginPercent', format: marginFmt },
+  ];
+  const footerTotals = {
+    salesRevenue: totals.revenue,
+    cogs: totals.cogs,
+    grossProfit: totals.gp,
+    marginPercent: averageMargin,
+  };
+  const subtitle = `Profit & Margin (${groupBy === 'product' ? 'By Product' : 'By Category'}) • Range: ${dateRange}`;
+  const fileBase = 'profit-report';
+
+  const handleCsv = () => exportCsv(fileBase, columns, profitData);
+  const handleExcel = () => exportExcel(fileBase, columns, profitData, 'Profit');
+  const buildSpec = async () => ({
+    title: 'Profit & Margin Analysis',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns,
+    rows: profitData,
+    totals: footerTotals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -106,8 +151,10 @@ export default function ProfitReport() {
           <div className="page-sub" style={{ color: '#475569' }}>Track Gross Profit (GP) and margins to identify your most lucrative items</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Report</button>
-          <button className="btn btn-primary"><Download size={16} /> Export Excel</button>
+          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-primary" onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 

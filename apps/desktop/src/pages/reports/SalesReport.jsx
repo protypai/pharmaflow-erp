@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, TrendingUp, Calendar } from 'lucide-react';
+import { Search, Printer, Download, FileText, TrendingUp, Calendar } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
+  getCompanyProfile, dateRangeBounds,
+} from '../../utils/export';
 
 
 export default function SalesReport() {
@@ -14,31 +18,40 @@ export default function SalesReport() {
   }, []);
 
   const [dateRange, setDateRange] = useState('this_month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [customerId, setCustomerId] = useState('');
 
   const [salesData, setSalesData] = useState([]);
 
+  const fetchSales = async () => {
+    try {
+      const where = [];
+      const params = [];
+      const { start, end } = dateRangeBounds(dateRange, customStart, customEnd);
+      if (start && end) { where.push('s.date BETWEEN ? AND ?'); params.push(start, end); }
+      if (customerId) { where.push('s.customer_id = ?'); params.push(customerId); }
+
+      const query = `
+        SELECT s.date, s.invoice_no as id, c.name as customerName, s.subtotal as gross,
+               s.discount_amount as discount, (s.cgst_amount + s.sgst_amount + s.igst_amount) as gst,
+               s.net_amount as net,
+               (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as items
+        FROM sales s
+        LEFT JOIN customers c ON s.customer_id = c.id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY s.date DESC
+      `;
+      const res = await window.pharmaAPI.db.query(query, params);
+      setSalesData(res?.data || []);
+    } catch (err) {
+      console.error("Failed to fetch sales data:", err);
+    }
+  };
+
   useEffect(() => {
-    const fetchSales = async () => {
-      try {
-        const query = `
-          SELECT s.date, s.invoice_no as id, c.name as customerName, s.subtotal as gross, 
-                 s.discount_amount as discount, (s.cgst_amount + s.sgst_amount + s.igst_amount) as gst, 
-                 s.net_amount as net, 
-                 (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as items
-          FROM sales s
-          LEFT JOIN customers c ON s.customer_id = c.id
-          ${customerId ? `WHERE s.customer_id = '${customerId}'` : ''}
-          ORDER BY s.date DESC
-        `;
-        const res = await window.pharmaAPI.db.query(query);
-        setSalesData(res?.data || []);
-      } catch (err) {
-        console.error("Failed to fetch sales data:", err);
-      }
-    };
     fetchSales();
-  }, [customerId, dateRange]);
+  }, [customerId, dateRange, customStart, customEnd]);
 
   const totals = salesData.reduce((acc, curr) => {
     acc.gross += curr.gross;
@@ -50,6 +63,33 @@ export default function SalesReport() {
 
   const avgOrderValue = salesData.length > 0 ? totals.net / salesData.length : 0;
 
+  const columns = [
+    { header: 'Date', key: 'date' },
+    { header: 'Invoice No', key: 'id' },
+    { header: 'Customer Name', key: 'customerName' },
+    { header: 'Items', key: 'items', format: 'int' },
+    { header: 'Gross (₹)', key: 'gross', format: 'number' },
+    { header: 'Discount (₹)', key: 'discount', format: 'number' },
+    { header: 'GST (₹)', key: 'gst', format: 'number' },
+    { header: 'Net Amount (₹)', key: 'net', format: 'number' },
+  ];
+
+  const subtitle = `Sales Register • Range: ${dateRange}${customerId ? ' • Filtered by customer' : ''}`;
+  const fileBase = 'sales-report';
+
+  const handleCsv = () => exportCsv(fileBase, columns, salesData);
+  const handleExcel = () => exportExcel(fileBase, columns, salesData, 'Sales');
+  const buildSpec = async () => ({
+    title: 'Sales Report (Revenue Analysis)',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns,
+    rows: salesData,
+    totals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
+
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <div className="card-header">
@@ -58,8 +98,10 @@ export default function SalesReport() {
           <div className="page-sub">Track daily/monthly revenue trends and invoice details</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print</button>
-          <button className="btn btn-outline" onClick={() => alert("Data exported successfully as CSV!")}><Download size={16} /> Export CSV</button>
+          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-outline" onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 
@@ -74,6 +116,18 @@ export default function SalesReport() {
             <option value="custom">Custom Range...</option>
           </select>
         </div>
+        {dateRange === 'custom' && (
+          <>
+            <div style={{ width: '160px' }}>
+              <label className="form-label">From</label>
+              <input type="date" className="form-input" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+            </div>
+            <div style={{ width: '160px' }}>
+              <label className="form-label">To</label>
+              <input type="date" className="form-input" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+            </div>
+          </>
+        )}
         <div style={{ flex: 1, maxWidth: '300px' }}>
           <label className="form-label">Filter by Customer</label>
           <select className="form-select" value={customerId} onChange={e => setCustomerId(e.target.value)}>
@@ -81,7 +135,7 @@ export default function SalesReport() {
             {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-        <button className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }}>Generate</button>
+        <button className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }} onClick={fetchSales}>Generate</button>
       </div>
 
       {/* KPI Dashboard */}

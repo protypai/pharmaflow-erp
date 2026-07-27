@@ -7,8 +7,24 @@ export default function StockAdjustment() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_products = await window.pharmaAPI.db.query("SELECT * FROM products");
-      set_products(res_products?.data || []);
+      // Load products with their batches. current_qty is in STRIPS (base unit).
+      const res_products = await window.pharmaAPI.db.query(`
+        SELECT p.*,
+        json_group_array(json_object(
+          'id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date,
+          'mrp', b.mrp, 'ptr', b.ptr, 'qty', b.current_qty
+        )) as batches
+        FROM products p
+        LEFT JOIN batches b ON p.id = b.product_id
+        GROUP BY p.id
+      `);
+      const formatted = (res_products?.data || []).map(p => ({
+        ...p,
+        batches: p.batches && typeof p.batches === 'string'
+          ? JSON.parse(p.batches).filter(b => b.id)
+          : []
+      }));
+      set_products(formatted);
     };
     fetchData();
   }, []);
@@ -35,7 +51,7 @@ export default function StockAdjustment() {
       }
       
       if (field === 'batch' && r.product) {
-        const prod = products.find(p => p.id === parseInt(r.product));
+        const prod = products.find(p => p.id.toString() === r.product.toString());
         if (prod) {
           const batchData = prod.batches.find(b => b.batch === value);
           if (batchData) {
@@ -104,17 +120,19 @@ export default function StockAdjustment() {
       });
 
       for (const row of validRows) {
-        const prod = products.find(p => p.id === parseInt(row.product));
+        const prod = products.find(p => p.id.toString() === row.product.toString());
         const batchData = prod?.batches.find(b => b.batch === row.batch);
-        
+
         if (batchData) {
+          // Actual (counted) qty is in STRIPS; store as a whole number.
+          const actualStrips = Math.round(Number(row.actualQty) || 0);
           await window.pharmaAPI.db.run(`
             UPDATE batches SET current_qty = ? WHERE id = ?
-          `, [Number(row.actualQty), batchData.id]);
-          
+          `, [actualStrips, batchData.id]);
+
           await syncEntity('Batch', 'update', {
             id: batchData.id,
-            currentQty: Number(row.actualQty)
+            currentQty: actualStrips
           });
         }
       }
@@ -175,15 +193,15 @@ export default function StockAdjustment() {
               <tr>
                 <th style={{ width: '300px' }}>Product</th>
                 <th style={{ width: '200px' }}>Batch</th>
-                <th style={{ width: '150px' }}>System Qty</th>
-                <th style={{ width: '150px' }}>Actual Qty (Input)</th>
+                <th style={{ width: '150px' }}>System Qty (Strips)</th>
+                <th style={{ width: '150px' }}>Actual Qty (Strips)</th>
                 <th style={{ width: '150px' }}>Difference (+/-)</th>
                 <th style={{ width: '40px' }}></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
-                const prod = products.find(p => p.id === parseInt(r.product));
+                const prod = products.find(p => p.id.toString() === r.product.toString());
                 return (
                   <tr key={r.id}>
                     <td>
@@ -196,7 +214,7 @@ export default function StockAdjustment() {
                       <select className="form-select form-input-sm" value={r.batch} onChange={e => updateRow(r.id, 'batch', e.target.value)} disabled={!r.product}>
                         <option value="">Select Batch</option>
                         {prod && prod.batches.map(b => (
-                          <option key={b.id} value={b.batch}>{b.batch} ({b.qty} in system)</option>
+                          <option key={b.id} value={b.batch}>{b.batch} ({b.qty} Strips in system)</option>
                         ))}
                       </select>
                     </td>

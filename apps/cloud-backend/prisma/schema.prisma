@@ -181,6 +181,24 @@ model SuperAdmin {
   lastLoginAt  DateTime?
 }
 
+model ActivityLog {
+  id         String   @id @default(cuid())
+  companyId  String? // nullable — admin/global actions have no company scope
+  actorType  String // 'superadmin' | 'user'
+  actorId    String?
+  actorEmail String?
+  action     String // 'admin.login' | 'auth.login' | 'company.approve' | ...
+  targetType String?
+  targetId   String?
+  detail     String? // short human-readable summary
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([companyId])
+  @@index([action])
+}
+
 // ─── Masters ──────────────────────────────────────────────────────────────────
 
 model Manufacturer {

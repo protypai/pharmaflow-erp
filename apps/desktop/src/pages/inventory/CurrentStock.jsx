@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Printer, Download, Package } from 'lucide-react';
+import { formatStock } from '../../utils/units';
 
 
 export default function CurrentStock() {
@@ -143,12 +144,12 @@ export default function CurrentStock() {
                 </td>
                 <td>{prod.rack}</td>
                 <td>
-                  <div style={{ fontWeight: 600, color: prod.totalQty < prod.minStock ? 'var(--danger)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    {prod.totalQty}
-                    {prod.totalQty < prod.minStock && <span title="Low Stock" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }}></span>}
+                  <div style={{ fontWeight: 600, color: prod.totalQty < prod.min_stock ? 'var(--danger)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    {formatStock(prod.totalQty, prod.conversion_factor, prod.sale_unit)}
+                    {prod.totalQty < prod.min_stock && <span title="Low Stock" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }}></span>}
                   </div>
                 </td>
-                <td style={{ color: 'var(--text-secondary)' }}>{prod.saleUnit}</td>
+                <td style={{ color: 'var(--text-secondary)' }}>{prod.sale_unit}</td>
                 <td style={{ textAlign: 'right' }}>{prod.avgPtr.toFixed(2)}</td>
                 <td style={{ textAlign: 'right' }}>{prod.avgMrp.toFixed(2)}</td>
                 <td style={{ fontWeight: 600, textAlign: 'right' }}>₹ {prod.totalValuePTR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>

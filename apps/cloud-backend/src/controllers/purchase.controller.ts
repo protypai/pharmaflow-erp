@@ -21,8 +21,9 @@ export const listPurchases = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getPurchaseById = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
   const { id } = req.params;
-  const purchase = await purchaseService.getPurchaseById(id);
+  const purchase = await purchaseService.getPurchaseById(companyId, id);
   if (!purchase) return res.status(404).json({ success: false, message: 'Purchase not found' });
   sendSuccess(res, purchase, 'Purchase details');
 });

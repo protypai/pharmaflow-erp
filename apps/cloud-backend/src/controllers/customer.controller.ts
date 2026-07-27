@@ -10,8 +10,9 @@ export const createCustomer = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const updateCustomer = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
   const { id } = req.params;
-  const customer = await customerService.updateCustomer(id, req.body);
+  const customer = await customerService.updateCustomer(companyId, id, req.body);
   sendSuccess(res, customer, 'Customer updated');
 });
 
@@ -26,8 +27,9 @@ export const listCustomers = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getCustomerById = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
   const { id } = req.params;
-  const customer = await customerService.getCustomerById(id);
+  const customer = await customerService.getCustomerById(companyId, id);
   if (!customer) return res.status(404).json({ success: false, message: 'Customer not found' });
   sendSuccess(res, customer, 'Customer details');
 });

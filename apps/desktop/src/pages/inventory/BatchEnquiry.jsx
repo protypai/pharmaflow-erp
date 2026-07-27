@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, History, Package } from 'lucide-react';
+import { formatStock } from '../../utils/units';
 
 
 export default function BatchEnquiry() {
@@ -9,14 +10,15 @@ export default function BatchEnquiry() {
   useEffect(() => {
     const fetchData = async () => {
       const res_products = await window.pharmaAPI.db.query(`
-        SELECT p.id as p_id, p.name, p.code, b.id as b_id, b.batch_no as batch, b.expiry_date as expiry, b.mrp, b.current_qty as qty, b.created_at as inwardDate
+        SELECT p.id as p_id, p.name, p.code, p.conversion_factor, p.sale_unit,
+               b.id as b_id, b.batch_no as batch, b.expiry_date as expiry, b.mrp, b.current_qty as qty, b.created_at as inwardDate
         FROM products p
         LEFT JOIN batches b ON p.id = b.product_id
       `);
-      
+
       const prodMap = {};
       (res_products?.data || []).forEach(row => {
-        if (!prodMap[row.p_id]) prodMap[row.p_id] = { id: row.p_id, name: row.name, code: row.code, batches: [] };
+        if (!prodMap[row.p_id]) prodMap[row.p_id] = { id: row.p_id, name: row.name, code: row.code, conversion_factor: row.conversion_factor, sale_unit: row.sale_unit, batches: [] };
         if (row.b_id) {
           prodMap[row.p_id].batches.push({
             id: row.b_id, batch: row.batch, expiry: row.expiry, mrp: row.mrp, qty: row.qty, inwardDate: row.inwardDate
@@ -106,7 +108,7 @@ export default function BatchEnquiry() {
                     <td>{enriched.expiry}</td>
                     <td>
                       <span style={{ fontWeight: 600, color: enriched.qty === 0 ? 'var(--danger)' : 'inherit' }}>
-                        {enriched.qty}
+                        {formatStock(enriched.qty, batch.product.conversion_factor, batch.product.sale_unit)}
                       </span>
                     </td>
                     <td>{enriched.mrp.toFixed(2)}</td>

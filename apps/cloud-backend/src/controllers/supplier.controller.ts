@@ -10,8 +10,9 @@ export const createSupplier = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const updateSupplier = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
   const { id } = req.params;
-  const supplier = await supplierService.updateSupplier(id, req.body);
+  const supplier = await supplierService.updateSupplier(companyId, id, req.body);
   sendSuccess(res, supplier, 'Supplier updated');
 });
 
@@ -25,8 +26,9 @@ export const listSuppliers = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getSupplierById = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
   const { id } = req.params;
-  const supplier = await supplierService.getSupplierById(id);
+  const supplier = await supplierService.getSupplierById(companyId, id);
   if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });
   sendSuccess(res, supplier, 'Supplier details');
 });

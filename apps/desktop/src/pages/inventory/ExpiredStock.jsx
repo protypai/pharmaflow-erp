@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShieldAlert, Trash2, Printer, ArrowRightLeft } from 'lucide-react';
+import { formatStock } from '../../utils/units';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -67,15 +68,17 @@ export default function ExpiredStock() {
             ...b,
             productName: p.name,
             productCode: p.code,
+            conversionFactor: p.conversion_factor,
+            saleUnit: p.sale_unit,
             stockValue: b.qty * b.ptr,
             supplierName: suppliers.length > 0 ? suppliers[numId % suppliers.length].name : 'Unknown Supplier'
           });
         }
       });
     });
-    
+
     return expired;
-  }, []);
+  }, [products, suppliers]);
 
   const totalFinancialLoss = getExpiredBatches.reduce((sum, b) => sum + b.stockValue, 0);
 
@@ -124,15 +127,15 @@ export default function ExpiredStock() {
                 <td style={{ fontWeight: 600 }}>{b.productName}</td>
                 <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{b.batch}</td>
                 <td>
-                  <span style={{ 
-                    background: 'var(--danger)', 
-                    color: 'white', 
-                    padding: '0.2rem 0.5rem', 
-                    borderRadius: '12px', 
+                  <span style={{
+                    background: 'var(--danger)',
+                    color: 'white',
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '12px',
                     fontSize: '0.75rem',
                     fontWeight: 600
                   }}>
-                    {b.qty} Locked
+                    {formatStock(b.qty, b.conversionFactor, b.saleUnit)} Locked
                   </span>
                 </td>
                 <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{b.expiry}</td>

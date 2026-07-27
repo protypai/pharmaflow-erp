@@ -21,8 +21,9 @@ export const listSales = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getSaleById = asyncHandler(async (req: Request, res: Response) => {
+  const companyId = req.user!.companyId;
   const { id } = req.params;
-  const sale = await salesService.getSaleById(id);
+  const sale = await salesService.getSaleById(companyId, id);
   if (!sale) return res.status(404).json({ success: false, message: 'Sale not found' });
   sendSuccess(res, sale, 'Sale details');
 });

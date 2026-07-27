@@ -206,7 +206,7 @@ export default function CompanyManagement() {
                           <Clock size={12} /> Pending Approval
                         </span>
                       ) : company.isActive ? (
-                        <span className="chip chip-active">Active ({company.subscriptionStatus || 'active'})</span>
+                        <span className="chip chip-active">Active</span>
                       ) : (
                         <span className="chip chip-danger">Inactive</span>
                       )}

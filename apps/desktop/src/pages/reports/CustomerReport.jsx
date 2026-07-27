@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, Users } from 'lucide-react';
+import { Search, Printer, Download, FileText, Users } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml, getCompanyProfile,
+} from '../../utils/export';
 
 
 export default function CustomerReport() {
@@ -45,13 +48,39 @@ export default function CustomerReport() {
       if (!minOrderFilter) return true;
       return c.totalRevenue >= parseInt(minOrderFilter);
     }).sort((a, b) => b.totalRevenue - a.totalRevenue); // Sort by highest revenue
-  }, [minOrderFilter]);
+  }, [minOrderFilter, customers]);
 
   const totals = customerData.reduce((acc, curr) => {
     acc.revenue += curr.totalRevenue;
     acc.outstanding += curr.outstandingBalance;
     return acc;
   }, { revenue: 0, outstanding: 0 });
+
+  const columns = [
+    { header: 'Customer Name', key: 'name' },
+    { header: 'Contact', key: 'phone' },
+    { header: 'Area', key: 'area' },
+    { header: 'Total Orders', key: 'totalOrders', format: 'int' },
+    { header: 'Avg Order Value (₹)', key: 'avgOrderValue', format: 'number' },
+    { header: 'Total Revenue (₹)', key: 'totalRevenue', format: 'number' },
+    { header: 'Current Outstanding (₹)', key: 'outstandingBalance', format: 'number' },
+  ];
+  const footerTotals = { totalRevenue: totals.revenue, outstandingBalance: totals.outstanding };
+  const subtitle = `Customer Sales Analysis${minOrderFilter ? ` • Min revenue ₹${minOrderFilter}` : ''}`;
+  const fileBase = 'customer-report';
+
+  const handleCsv = () => exportCsv(fileBase, columns, customerData);
+  const handleExcel = () => exportExcel(fileBase, columns, customerData, 'Customers');
+  const buildSpec = async () => ({
+    title: 'Customer Report (Sales by Client)',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns,
+    rows: customerData,
+    totals: footerTotals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -61,8 +90,10 @@ export default function CustomerReport() {
           <div className="page-sub">Identify top buyers, revenue concentration, and credit risks</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print</button>
-          <button className="btn btn-outline" onClick={() => alert("Data exported successfully as CSV!")}><Download size={16} /> Export CSV</button>
+          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-outline" onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 

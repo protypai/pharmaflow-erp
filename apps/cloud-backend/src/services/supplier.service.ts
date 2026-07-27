@@ -1,22 +1,40 @@
 import { db } from '../config/database';
 import { generateCode } from '../utils/codeGenerator';
+import { AppError } from '../utils/AppError';
+
+function buildSupplierData(data: any) {
+  const out: any = {};
+  const fields = [
+    'name', 'gstin', 'drugLicense', 'phone', 'email', 'address', 'city', 'state',
+    'pincode', 'creditDays', 'creditLimit', 'openingBalance', 'openingBalanceType', 'status',
+  ];
+  for (const f of fields) {
+    if (data[f] !== undefined) out[f] = data[f];
+  }
+  return out;
+}
 
 export class SupplierService {
   async createSupplier(companyId: string, data: any) {
-    const code = data.code || await generateCode('SUP', 'supplier');
-    return db.supplier.create({
-      data: {
-        ...data,
-        companyId,
-        code
-      }
+    return db.$transaction(async (tx: any) => {
+      const code = data.code || (await generateCode(companyId, 'supplier', tx));
+      return tx.supplier.create({
+        data: {
+          ...buildSupplierData(data),
+          companyId,
+          code,
+        },
+      });
     });
   }
 
-  async updateSupplier(id: string, data: any) {
+  async updateSupplier(companyId: string, id: string, data: any) {
+    const existing = await db.supplier.findFirst({ where: { id, companyId } });
+    if (!existing) throw new AppError('Supplier not found', 404);
+
     return db.supplier.update({
       where: { id },
-      data
+      data: buildSupplierData(data),
     });
   }
 
@@ -26,24 +44,24 @@ export class SupplierService {
       where.OR = [
         { name: { contains: filters.search, mode: 'insensitive' } },
         { phone: { contains: filters.search } },
-        { gstin: { contains: filters.search } }
+        { gstin: { contains: filters.search } },
       ];
     }
 
     return db.supplier.findMany({
       where,
-      orderBy: { name: 'asc' }
+      orderBy: { name: 'asc' },
     });
   }
 
-  async getSupplierById(id: string) {
-    const supplier = await db.supplier.findUnique({
-      where: { id },
+  async getSupplierById(companyId: string, id: string) {
+    const supplier = await db.supplier.findFirst({
+      where: { id, companyId },
       include: {
         purchases: { select: { netAmount: true, paidAmount: true } },
         payments: { select: { amount: true } },
-        purchaseReturns: { select: { netAmount: true } }
-      }
+        purchaseReturns: { select: { netAmount: true } },
+      },
     });
 
     if (!supplier) return null;
@@ -58,7 +76,7 @@ export class SupplierService {
       totalPurchases,
       totalPayments,
       totalReturns,
-      currentPayable
+      currentPayable,
     };
   }
 }

@@ -1,19 +1,59 @@
 import { db } from '../config/database';
 import { generateCode } from '../utils/codeGenerator';
 import { AppError } from '../utils/AppError';
+import { computeLine, computeHeader, GstType } from '../utils/taxCalculator';
+
+function isIgstLine(item: any): boolean {
+  return item.isIgst === true || (Number(item.igst) > 0 && !(Number(item.cgst) > 0));
+}
 
 export class SalesService {
   async createSale(companyId: string, data: any) {
-    const invoiceNo = data.invoiceNo || await generateCode('SAL', 'product');
+    const gstType: GstType = data.gstType === 'inclusive' ? 'inclusive' : 'exclusive';
 
     return db.$transaction(async (tx: any) => {
-      // Validate batch stock before selling
+      // Generate invoice number inside the transaction, per-company (safe under concurrency).
+      const invoiceNo = data.invoiceNo || (await generateCode(companyId, 'sale', tx));
+
+      // Validate stock: free goods are also dispensed, so guard against qty + freeQty.
+      const computedItems = [];
       for (const item of data.items) {
+        const freeQty = Number(item.freeQty) || 0;
+        const qty = Number(item.qty) || 0;
+        const totalOut = qty + freeQty;
+
         const batch = await tx.batch.findUnique({ where: { id: item.batchId } });
-        if (!batch || batch.currentQty < item.qty) {
-          throw new AppError(`Insufficient stock for batch ${batch?.batchNo || item.batchId}`, 400);
+        if (!batch) {
+          throw new AppError(`Batch not found: ${item.batchId}`, 400);
         }
+        if (batch.currentQty < totalOut) {
+          throw new AppError(`Insufficient stock for batch ${batch.batchNo || item.batchId}`, 400);
+        }
+
+        // Recompute taxable / tax / net server-side (never trust client totals).
+        const computed = computeLine(
+          {
+            qty,
+            unitPrice: Number(item.salePrice) || 0,
+            discPercent: item.discPercent,
+            discAmount: item.discAmount,
+            gstRate: Number(item.gstRate) || 0,
+            isIgst: isIgstLine(item),
+          },
+          gstType,
+        );
+
+        computedItems.push({ item, qty, freeQty, computed });
       }
+
+      const header = computeHeader(
+        computedItems.map((ci) => ({
+          qty: ci.qty,
+          unitPrice: Number(ci.item.salePrice) || 0,
+          computed: ci.computed,
+        })),
+        Number(data.roundOff) || 0,
+      );
 
       const sale = await tx.sale.create({
         data: {
@@ -22,45 +62,46 @@ export class SalesService {
           customerId: data.customerId,
           date: new Date(data.date),
           salesman: data.salesman,
-          gstType: data.gstType || 'exclusive',
-          subtotal: data.subtotal,
-          discountAmount: data.discountAmount || 0,
-          taxableAmount: data.taxableAmount,
-          cgstAmount: data.cgstAmount || 0,
-          sgstAmount: data.sgstAmount || 0,
-          igstAmount: data.igstAmount || 0,
-          netAmount: data.netAmount,
-          roundOff: data.roundOff || 0,
+          gstType,
+          subtotal: header.subtotal,
+          discountAmount: header.discountAmount,
+          taxableAmount: header.taxableAmount,
+          cgstAmount: header.cgstAmount,
+          sgstAmount: header.sgstAmount,
+          igstAmount: header.igstAmount,
+          netAmount: header.netAmount,
+          roundOff: Number(data.roundOff) || 0,
           paymentMode: data.paymentMode || 'credit',
-          paidAmount: data.paidAmount || 0,
+          paidAmount: Number(data.paidAmount) || 0,
           notes: data.notes,
           items: {
-            create: data.items.map((item: any) => ({
+            create: computedItems.map(({ item, qty, freeQty, computed }) => ({
               productId: item.productId,
               batchId: item.batchId,
-              qty: item.qty,
-              mrp: item.mrp,
-              ptr: item.ptr,
-              salePrice: item.salePrice,
-              discPercent: item.discPercent || 0,
-              discAmount: item.discAmount || 0,
-              gstRate: item.gstRate,
-              cgst: item.cgst || 0,
-              sgst: item.sgst || 0,
-              igst: item.igst || 0,
-              taxableAmt: item.taxableAmt,
-              netAmount: item.netAmount
-            }))
-          }
+              qty,
+              freeQty,
+              mrp: Number(item.mrp) || 0,
+              ptr: Number(item.ptr) || 0,
+              salePrice: Number(item.salePrice) || 0,
+              discPercent: Number(item.discPercent) || 0,
+              discAmount: computed.discAmount,
+              gstRate: computed.gstRate,
+              cgst: computed.cgst,
+              sgst: computed.sgst,
+              igst: computed.igst,
+              taxableAmt: computed.taxableAmt,
+              netAmount: computed.netAmount,
+            })),
+          },
         },
-        include: { items: true }
+        include: { items: true },
       });
 
-      // Deduct stock from batches
-      for (const item of data.items) {
+      // Deduct batch stock by qty + freeQty so dispensed free goods leave inventory.
+      for (const { item, qty, freeQty } of computedItems) {
         await tx.batch.update({
           where: { id: item.batchId },
-          data: { currentQty: { decrement: item.qty } }
+          data: { currentQty: { decrement: qty + freeQty } },
         });
       }
 
@@ -68,7 +109,10 @@ export class SalesService {
     });
   }
 
-  async listSales(companyId: string, filters: { customerId?: string; startDate?: Date; endDate?: Date }) {
+  async listSales(
+    companyId: string,
+    filters: { customerId?: string; startDate?: Date; endDate?: Date },
+  ) {
     const where: any = { companyId };
     if (filters.customerId) where.customerId = filters.customerId;
     if (filters.startDate || filters.endDate) {
@@ -81,19 +125,19 @@ export class SalesService {
       where,
       include: {
         customer: { select: { name: true, gstin: true } },
-        items: { include: { product: { select: { name: true } } } }
+        items: { include: { product: { select: { name: true } } } },
       },
-      orderBy: { date: 'desc' }
+      orderBy: { date: 'desc' },
     });
   }
 
-  async getSaleById(id: string) {
-    return db.sale.findUnique({
-      where: { id },
+  async getSaleById(companyId: string, id: string) {
+    return db.sale.findFirst({
+      where: { id, companyId },
       include: {
         customer: true,
-        items: { include: { product: true, batch: true } }
-      }
+        items: { include: { product: true, batch: true } },
+      },
     });
   }
 }

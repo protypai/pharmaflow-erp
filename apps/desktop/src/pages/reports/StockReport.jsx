@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, PackageSearch } from 'lucide-react';
+import { Search, Printer, Download, FileText, PackageSearch } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml, getCompanyProfile,
+} from '../../utils/export';
+import { formatStock } from '../../utils/units';
 
 
 export default function StockReport() {
@@ -75,6 +79,33 @@ export default function StockReport() {
     return acc;
   }, { qty: 0, value: 0 });
 
+  const columns = [
+    { header: 'Item Code', key: 'code' },
+    { header: 'Product Name', key: 'name' },
+    { header: 'Category', key: 'category' },
+    { header: 'Manufacturer', key: 'manufacturer' },
+    { header: 'Rack', key: 'rack' },
+    { header: 'Available Qty', key: 'totalQty', format: 'int' },
+    { header: 'Avg Unit Cost (PTR)', key: 'avgPtr', format: 'number' },
+    { header: 'Total Value (₹)', key: 'stockValue', format: 'number' },
+  ];
+  const footerTotals = { totalQty: totals.qty, stockValue: totals.value };
+  const subtitle = 'Stock Valuation (PTR) as on ' + new Date().toLocaleDateString('en-IN');
+  const fileBase = 'stock-statement';
+
+  const handleCsv = () => exportCsv(fileBase, columns, stockData);
+  const handleExcel = () => exportExcel(fileBase, columns, stockData, 'Stock');
+  const buildSpec = async () => ({
+    title: 'Stock Statement (Valuation Report)',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns,
+    rows: stockData,
+    totals: footerTotals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
+
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <div className="card-header">
@@ -83,8 +114,10 @@ export default function StockReport() {
           <div className="page-sub">Audit physical vs system stock and total warehouse valuation</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print</button>
-          <button className="btn btn-outline"><Download size={16} /> Export Excel</button>
+          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-outline" onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 
@@ -155,7 +188,7 @@ export default function StockReport() {
                 <td style={{ fontSize: '0.85rem' }}>{row.manufacturer}</td>
                 <td style={{ color: 'var(--text-secondary)' }}>{row.rack}</td>
                 <td style={{ textAlign: 'center', fontWeight: 700, color: row.totalQty === 0 ? 'var(--danger)' : 'inherit' }}>
-                  {row.totalQty} {row.saleUnit}
+                  {formatStock(row.totalQty, row.conversion_factor, row.sale_unit)}
                 </td>
                 <td style={{ textAlign: 'right' }}>{row.avgPtr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)' }}>

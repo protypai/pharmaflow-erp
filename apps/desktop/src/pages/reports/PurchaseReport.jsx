@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, ShoppingCart } from 'lucide-react';
+import { Search, Printer, Download, FileText, ShoppingCart } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
+  getCompanyProfile, dateRangeBounds,
+} from '../../utils/export';
 
 
 export default function PurchaseReport() {
@@ -14,31 +18,40 @@ export default function PurchaseReport() {
   }, []);
 
   const [dateRange, setDateRange] = useState('this_month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [supplierId, setSupplierId] = useState('');
 
   const [purchaseData, setPurchaseData] = useState([]);
 
+  const fetchPurchases = async () => {
+    try {
+      const where = [];
+      const params = [];
+      const { start, end } = dateRangeBounds(dateRange, customStart, customEnd);
+      if (start && end) { where.push('p.invoice_date BETWEEN ? AND ?'); params.push(start, end); }
+      if (supplierId) { where.push('p.supplier_id = ?'); params.push(supplierId); }
+
+      const query = `
+        SELECT p.invoice_date as date, p.entry_no as id, s.name as supplierName, p.subtotal as gross,
+               p.discount_amount as discount, (p.cgst_amount + p.sgst_amount + p.igst_amount) as gst,
+               p.net_amount as net,
+               (SELECT COUNT(*) FROM purchase_items WHERE purchase_id = p.id) as items
+        FROM purchases p
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY p.invoice_date DESC
+      `;
+      const res = await window.pharmaAPI.db.query(query, params);
+      setPurchaseData(res?.data || []);
+    } catch (err) {
+      console.error("Failed to fetch purchase data:", err);
+    }
+  };
+
   useEffect(() => {
-    const fetchPurchases = async () => {
-      try {
-        const query = `
-          SELECT p.invoice_date as date, p.entry_no as id, s.name as supplierName, p.subtotal as gross, 
-                 p.discount_amount as discount, (p.cgst_amount + p.sgst_amount + p.igst_amount) as gst, 
-                 p.net_amount as net, 
-                 (SELECT COUNT(*) FROM purchase_items WHERE purchase_id = p.id) as items
-          FROM purchases p
-          LEFT JOIN suppliers s ON p.supplier_id = s.id
-          ${supplierId ? `WHERE p.supplier_id = '${supplierId}'` : ''}
-          ORDER BY p.invoice_date DESC
-        `;
-        const res = await window.pharmaAPI.db.query(query);
-        setPurchaseData(res?.data || []);
-      } catch (err) {
-        console.error("Failed to fetch purchase data:", err);
-      }
-    };
     fetchPurchases();
-  }, [supplierId, dateRange]);
+  }, [supplierId, dateRange, customStart, customEnd]);
 
   const totals = purchaseData.reduce((acc, curr) => {
     acc.gross += curr.gross;
@@ -48,6 +61,33 @@ export default function PurchaseReport() {
     return acc;
   }, { gross: 0, discount: 0, gst: 0, net: 0 });
 
+  const columns = [
+    { header: 'Date', key: 'date' },
+    { header: 'Purchase Bill No', key: 'id' },
+    { header: 'Supplier Name', key: 'supplierName' },
+    { header: 'Items', key: 'items', format: 'int' },
+    { header: 'Gross (₹)', key: 'gross', format: 'number' },
+    { header: 'CD/Sch (₹)', key: 'discount', format: 'number' },
+    { header: 'GST (₹)', key: 'gst', format: 'number' },
+    { header: 'Net Amount (₹)', key: 'net', format: 'number' },
+  ];
+
+  const subtitle = `Purchase Register • Range: ${dateRange}${supplierId ? ' • Filtered by supplier' : ''}`;
+  const fileBase = 'purchase-report';
+
+  const handleCsv = () => exportCsv(fileBase, columns, purchaseData);
+  const handleExcel = () => exportExcel(fileBase, columns, purchaseData, 'Purchases');
+  const buildSpec = async () => ({
+    title: 'Purchase Report (Procurement Analysis)',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns,
+    rows: purchaseData,
+    totals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
+
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <div className="card-header">
@@ -56,8 +96,10 @@ export default function PurchaseReport() {
           <div className="page-sub">Audit procurement costs, supplier invoices, and input tax</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print</button>
-          <button className="btn btn-outline" onClick={() => alert("Data exported successfully as CSV!")}><Download size={16} /> Export CSV</button>
+          <button className="btn btn-outline" onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-outline" onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 
@@ -69,8 +111,21 @@ export default function PurchaseReport() {
             <option value="this_week">This Week</option>
             <option value="this_month">This Month</option>
             <option value="last_month">Last Month</option>
+            <option value="custom">Custom Range...</option>
           </select>
         </div>
+        {dateRange === 'custom' && (
+          <>
+            <div style={{ width: '160px' }}>
+              <label className="form-label">From</label>
+              <input type="date" className="form-input" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+            </div>
+            <div style={{ width: '160px' }}>
+              <label className="form-label">To</label>
+              <input type="date" className="form-input" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+            </div>
+          </>
+        )}
         <div style={{ flex: 1, maxWidth: '300px' }}>
           <label className="form-label">Filter by Supplier</label>
           <select className="form-select" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
@@ -78,7 +133,7 @@ export default function PurchaseReport() {
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-        <button className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }}>Generate</button>
+        <button className="btn btn-primary" style={{ padding: '0.5rem 1.5rem' }} onClick={fetchPurchases}>Generate</button>
       </div>
 
       {/* KPI Dashboard */}

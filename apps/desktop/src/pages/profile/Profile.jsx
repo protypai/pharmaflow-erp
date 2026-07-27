@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, User, Building2, FileText, Banknote, ShieldCheck } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { INDIAN_STATES, gstCodeForState } from '../../data/indianStates';
 
 export default function Profile() {
   const [activeTab, setActiveTab] = useState('company');
@@ -110,21 +111,22 @@ export default function Profile() {
         upiId: company.upi_id
       });
 
+      // The hardened sync push requires record_id (entity id) and company_id on every queue row.
       const syncSql = `
-        INSERT INTO sync_queue (id, table_name, operation, payload, is_synced, app_version)
-        VALUES (?, 'Company', 'update', ?, 0, ?)
+        INSERT INTO sync_queue (id, table_name, operation, record_id, company_id, payload, is_synced, app_version)
+        VALUES (?, ?, 'update', ?, ?, ?, 0, ?)
       `;
       const currentVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.30';
-      await window.pharmaAPI.db.run(syncSql, [uuidv4(), cloudPayload, currentVersion]);
+      await window.pharmaAPI.db.run(syncSql, [uuidv4(), 'Company', company.id, company.id, cloudPayload, currentVersion]);
 
       // Update User if needed
       await window.pharmaAPI.db.run(`UPDATE users SET name = ? WHERE id = ?`, [user.name, user.id]);
-      
+
       const userPayload = JSON.stringify({
         id: user.id,
         name: user.name
       });
-      await window.pharmaAPI.db.run(syncSql.replace('Company', 'User'), [uuidv4(), userPayload, currentVersion]);
+      await window.pharmaAPI.db.run(syncSql, [uuidv4(), 'User', user.id, company.id, userPayload, currentVersion]);
 
       alert('Profile updated and synced successfully!');
     } catch (err) {
@@ -225,10 +227,20 @@ export default function Profile() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">State</label>
-                    <select className="form-select" name="state" value={company.state || 'MH'} onChange={handleCompanyChange}>
-                      <option value="MH">Maharashtra</option>
-                      <option value="GJ">Gujarat</option>
-                      <option value="DL">Delhi</option>
+                    <select
+                      className="form-select"
+                      name="state"
+                      value={company.state || ''}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        // Auto-fill the GST state code to match the selected state.
+                        setCompany({ ...company, state: code, state_code: gstCodeForState(code) || company.state_code });
+                      }}
+                    >
+                      <option value="">Select State…</option>
+                      {INDIAN_STATES.map((s) => (
+                        <option key={s.code} value={s.code}>{s.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="form-group">

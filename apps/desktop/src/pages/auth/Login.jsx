@@ -14,6 +14,15 @@ export default function Login() {
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
 
+  // Show a reason if we were bounced here by a forced logout (e.g. account deactivated).
+  useEffect(() => {
+    const reason = localStorage.getItem('logoutReason');
+    if (reason) {
+      setError(reason);
+      localStorage.removeItem('logoutReason');
+    }
+  }, []);
+
   // Auto-login check
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -234,9 +243,20 @@ export default function Login() {
                   [user.company.id, user.company.name, user.company.shortName || user.company.name, user.email]
                 );
               }
+              // Store a bcrypt hash (never the plaintext) so offline login can
+              // verify with bcrypt.compare. The cloud response does not return the
+              // password hash, so we derive it locally from the just-verified password.
+              let localPasswordHash = '';
+              if (window.pharmaAPI?.auth?.hashPassword) {
+                try {
+                  localPasswordHash = await window.pharmaAPI.auth.hashPassword(password);
+                } catch (hashErr) {
+                  console.warn('Failed to hash password for local storage:', hashErr);
+                }
+              }
               await window.pharmaAPI.db.run(
                 'INSERT OR REPLACE INTO users (id, company_id, name, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
-                [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, password, user.role || 'admin']
+                [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, localPasswordHash, user.role || 'admin']
               );
 
               // Initial Cloud Restore check
@@ -269,16 +289,16 @@ export default function Login() {
 
       if (cloudSuccess) return;
 
-      // 2. Fallback to local SQLite DB if cloud unavailable
-      if (window.pharmaAPI?.db) {
-        const response = await window.pharmaAPI.db.query(
-          'SELECT id, name, email, company_id as companyId, role FROM users WHERE email = ? AND password_hash = ? AND is_active = 1',
-          [username, password]
-        );
-
-        const users = response?.data;
-        if (users && users.length > 0) {
-          localStorage.setItem('user', JSON.stringify(users[0]));
+      // 2. Fallback to local SQLite DB if cloud unavailable.
+      // Never compare plaintext against the stored hash — verify via bcrypt in the
+      // electron main process (auth:verifyLocalPassword).
+      if (window.pharmaAPI?.auth?.verifyLocalPassword) {
+        const verifyRes = await window.pharmaAPI.auth.verifyLocalPassword(username, password);
+        if (verifyRes?.success && verifyRes.user) {
+          localStorage.setItem('user', JSON.stringify(verifyRes.user));
+          // Offline mode has no cloud JWT; set a local session marker so the
+          // client-side route guard permits access while disconnected.
+          localStorage.setItem('accessToken', 'offline-session');
           navigate('/dashboard');
           return;
         }

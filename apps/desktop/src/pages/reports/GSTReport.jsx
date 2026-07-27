@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Printer, Download, FileText, AlertCircle } from 'lucide-react';
+import {
+  exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
+  getCompanyProfile, periodBounds,
+} from '../../utils/export';
 
 export default function GSTReport() {
   const [reportType, setReportType] = useState('gstr3b');
@@ -12,48 +16,97 @@ export default function GSTReport() {
   });
   const [hsnData, setHsnData] = useState([]);
 
-  useEffect(() => {
-    const fetchGST = async () => {
-      try {
-        const salesRes = await window.pharmaAPI.db.query("SELECT SUM(subtotal) as salesValue, SUM(cgst_amount) as outputCGST, SUM(sgst_amount) as outputSGST, SUM(igst_amount) as outputIGST FROM sales");
-        const purchRes = await window.pharmaAPI.db.query("SELECT SUM(subtotal) as purchaseValue, SUM(cgst_amount) as inputCGST, SUM(sgst_amount) as inputSGST, SUM(igst_amount) as inputIGST FROM purchases");
-        
-        const s = salesRes?.data?.[0] || {};
-        const p = purchRes?.data?.[0] || {};
-        
-        setGstSummary({
-          salesValue: s.salesValue || 0,
-          outputCGST: s.outputCGST || 0,
-          outputSGST: s.outputSGST || 0,
-          outputIGST: s.outputIGST || 0,
-          purchaseValue: p.purchaseValue || 0,
-          inputCGST: p.inputCGST || 0,
-          inputSGST: p.inputSGST || 0,
-          inputIGST: p.inputIGST || 0,
-        });
+  const fetchGST = async () => {
+    try {
+      const { start, end } = periodBounds(period);
+      const saleWhere = (start && end) ? 'WHERE date BETWEEN ? AND ?' : '';
+      const purchWhere = (start && end) ? 'WHERE invoice_date BETWEEN ? AND ?' : '';
+      const dateParams = (start && end) ? [start, end] : [];
 
-        const hsnRes = await window.pharmaAPI.db.query(`
-          SELECT p.hsn_code as hsn, p.gst_rate || '%' as slab,
-                 SUM(si.taxable_amt) as taxable,
-                 SUM(si.cgst) as cgst,
-                 SUM(si.sgst) as sgst,
-                 SUM(si.igst) as igst,
-                 SUM(si.cgst + si.sgst + si.igst) as total
-          FROM products p
-          JOIN sale_items si ON p.id = si.product_id
-          GROUP BY p.hsn_code, p.gst_rate
-        `);
-        setHsnData(hsnRes?.data || []);
-      } catch (err) {
-        console.error("Failed to fetch GST data:", err);
-      }
-    };
+      const salesRes = await window.pharmaAPI.db.query(
+        `SELECT SUM(subtotal) as salesValue, SUM(cgst_amount) as outputCGST, SUM(sgst_amount) as outputSGST, SUM(igst_amount) as outputIGST FROM sales ${saleWhere}`,
+        dateParams
+      );
+      const purchRes = await window.pharmaAPI.db.query(
+        `SELECT SUM(subtotal) as purchaseValue, SUM(cgst_amount) as inputCGST, SUM(sgst_amount) as inputSGST, SUM(igst_amount) as inputIGST FROM purchases ${purchWhere}`,
+        dateParams
+      );
+
+      const s = salesRes?.data?.[0] || {};
+      const p = purchRes?.data?.[0] || {};
+
+      setGstSummary({
+        salesValue: s.salesValue || 0,
+        outputCGST: s.outputCGST || 0,
+        outputSGST: s.outputSGST || 0,
+        outputIGST: s.outputIGST || 0,
+        purchaseValue: p.purchaseValue || 0,
+        inputCGST: p.inputCGST || 0,
+        inputSGST: p.inputSGST || 0,
+        inputIGST: p.inputIGST || 0,
+      });
+
+      const hsnFilter = (start && end)
+        ? 'WHERE si.sale_id IN (SELECT id FROM sales WHERE date BETWEEN ? AND ?)'
+        : '';
+      const hsnRes = await window.pharmaAPI.db.query(`
+        SELECT p.hsn_code as hsn, p.gst_rate || '%' as slab,
+               SUM(si.taxable_amt) as taxable,
+               SUM(si.cgst) as cgst,
+               SUM(si.sgst) as sgst,
+               SUM(si.igst) as igst,
+               SUM(si.cgst + si.sgst + si.igst) as total
+        FROM products p
+        JOIN sale_items si ON p.id = si.product_id
+        ${hsnFilter}
+        GROUP BY p.hsn_code, p.gst_rate
+      `, dateParams);
+      setHsnData(hsnRes?.data || []);
+    } catch (err) {
+      console.error("Failed to fetch GST data:", err);
+    }
+  };
+
+  useEffect(() => {
     fetchGST();
   }, [period]);
 
   const totalOutput = (gstSummary.outputCGST || 0) + (gstSummary.outputSGST || 0) + (gstSummary.outputIGST || 0);
   const totalInput = (gstSummary.inputCGST || 0) + (gstSummary.inputSGST || 0) + (gstSummary.inputIGST || 0);
   const netPayable = totalOutput - totalInput;
+
+  const hsnColumns = [
+    { header: 'HSN Code', key: 'hsn' },
+    { header: 'Tax Slab', key: 'slab' },
+    { header: 'Total Taxable Value (₹)', key: 'taxable', format: 'number' },
+    { header: 'Central Tax (CGST)', key: 'cgst', format: 'number' },
+    { header: 'State Tax (SGST)', key: 'sgst', format: 'number' },
+    { header: 'Integrated Tax (IGST)', key: 'igst', format: 'number' },
+    { header: 'Total Tax Amount', key: 'total', format: 'number' },
+  ];
+  const hsnTotals = hsnData.reduce((acc, r) => {
+    acc.taxable += (r.taxable || 0);
+    acc.cgst += (r.cgst || 0);
+    acc.sgst += (r.sgst || 0);
+    acc.igst += (r.igst || 0);
+    acc.total += (r.total || 0);
+    return acc;
+  }, { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 });
+  const subtitle = `GST HSN-wise Slab Summary • Period: ${period}`;
+  const fileBase = `gst-hsn-summary-${period}`;
+
+  const handleCsv = () => exportCsv(fileBase, hsnColumns, hsnData);
+  const handleExcel = () => exportExcel(fileBase, hsnColumns, hsnData, 'HSN Summary');
+  const buildSpec = async () => ({
+    title: 'GST Compliance Report (HSN Summary)',
+    company: await getCompanyProfile(),
+    subtitle,
+    columns: hsnColumns,
+    rows: hsnData,
+    totals: hsnTotals,
+  });
+  const handlePdf = async () => exportPdf(fileBase, await buildSpec());
+  const handlePrint = async () => printHtml(buildReportHtml(await buildSpec()));
 
   return (
     <div className="card" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -65,8 +118,10 @@ export default function GSTReport() {
           <div className="page-sub" style={{ color: '#15803D' }}>Generate GSTR-1, GSTR-2, and GSTR-3B summaries for CA filing</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" style={{ borderColor: '#166534', color: '#166534' }}><Printer size={16} /> Print Return</button>
-          <button className="btn btn-primary" style={{ background: '#166534' }}><Download size={16} /> Export JSON for Portal</button>
+          <button className="btn btn-outline" style={{ borderColor: '#166534', color: '#166534' }} onClick={handlePrint}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" style={{ borderColor: '#166534', color: '#166534' }} onClick={handlePdf}><FileText size={16} /> PDF</button>
+          <button className="btn btn-outline" style={{ borderColor: '#166534', color: '#166534' }} onClick={handleCsv}><Download size={16} /> CSV</button>
+          <button className="btn btn-primary" style={{ background: '#166534' }} onClick={handleExcel}><Download size={16} /> Excel</button>
         </div>
       </div>
 
@@ -88,7 +143,7 @@ export default function GSTReport() {
             <option value="q1_2025">Q1 (Apr-Jun 2025)</option>
           </select>
         </div>
-        <button className="btn btn-outline" style={{ padding: '0.5rem 1.5rem' }}>Refresh</button>
+        <button className="btn btn-outline" style={{ padding: '0.5rem 1.5rem' }} onClick={fetchGST}>Refresh</button>
       </div>
 
       <div className="card-body no-pad" style={{ flex: 1, overflowY: 'auto' }}>

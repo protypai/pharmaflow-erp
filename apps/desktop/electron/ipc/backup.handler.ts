@@ -2,6 +2,7 @@ import { ipcMain, app, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../services/logger';
+import { reportBackup } from '../services/syncQueue.service';
 
 export function setupBackupHandlers(): void {
   ipcMain.handle('backup:create', async (_event, destination?: string) => {
@@ -26,9 +27,11 @@ export function setupBackupHandlers(): void {
       const backupPath = path.join(backupDir, backupName);
       fs.copyFileSync(dbPath, backupPath);
       logger.info(`Backup created: ${backupPath}`);
+      reportBackup(true).catch(() => {});
       return { success: true, path: backupPath };
     } catch (err: any) {
       logger.error('Backup failed', { error: err.message });
+      reportBackup(false, err.message).catch(() => {});
       return { success: false, error: err.message };
     }
   });

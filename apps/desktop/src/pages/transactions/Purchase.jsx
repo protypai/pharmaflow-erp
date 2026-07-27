@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Printer, Calculator, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Save, Plus, Trash2, Printer, Calculator, AlertTriangle, ArrowLeft, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
+import { buildInvoiceHtml } from '../../utils/invoiceTemplate';
+import { packSize, toStrips, perStripPrice } from '../../utils/units';
+import { toIsoExpiry } from '../../utils/dates';
 export default function Purchase() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([
@@ -20,6 +23,7 @@ export default function Purchase() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [savedInvoice, setSavedInvoice] = useState(null); // { html, no }
 
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -113,6 +117,7 @@ export default function Purchase() {
   const handleSave = async () => {
     setErrorMsg('');
     setSuccessMsg('');
+    setSavedInvoice(null);
 
     if (!supplierId || !invoiceNo || !invoiceDate) {
       setErrorMsg("Supplier, Invoice No, and Invoice Date are required.");
@@ -170,17 +175,17 @@ export default function Purchase() {
       // 2. Insert items and update batches
       for (const row of validRows) {
         const batchId = 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-        const isBox = (row.priceUnit || 'strip') === 'box';
-        const packMultiplier = Number(row.boxSize) || 10;
-        
-        // Database current_qty always records Boxes
-        const stockQty = Number(row.qty) || 0;
-        
-        // Database prices always record Price per Strip
-        const unitPurchasePrice = isBox ? Number(((Number(row.invPrice) || 0) / packMultiplier).toFixed(2)) : Number(row.invPrice) || 0;
-        const saveMrp = isBox ? Number(((Number(row.mrp) || 0) / packMultiplier).toFixed(2)) : Number(row.mrp) || 0;
-        const savePtr = isBox ? Number(((Number(row.ptr) || 0) / packMultiplier).toFixed(2)) : Number(row.ptr) || 0;
-        const savePts = isBox ? Number(((Number(row.pts) || 0) / packMultiplier).toFixed(2)) : Number(row.pts) || 0;
+        const priceUnit = row.priceUnit || 'strip';
+        const packMultiplier = packSize(row.boxSize);
+
+        // Purchase qty is entered in BOXES; stock is stored in STRIPS (base unit).
+        const stockQty = toStrips(Number(row.qty) || 0, 'box', packMultiplier);
+
+        // Database prices always record Price per Strip.
+        const unitPurchasePrice = Number(perStripPrice(row.invPrice, priceUnit, packMultiplier).toFixed(2));
+        const saveMrp = Number(perStripPrice(row.mrp, priceUnit, packMultiplier).toFixed(2));
+        const savePtr = Number(perStripPrice(row.ptr, priceUnit, packMultiplier).toFixed(2));
+        const savePts = Number(perStripPrice(row.pts, priceUnit, packMultiplier).toFixed(2));
         
         // Upsert Batch
         operations.push({
@@ -206,7 +211,7 @@ export default function Purchase() {
             id: batchId,
             productId: row.product,
             batchNo: row.batch,
-            expiryDate: row.expiry || '12/99',
+            expiryDate: toIsoExpiry(row.expiry || '12/99'),
             mrp: saveMrp,
             ptr: savePtr,
             pts: savePts,
@@ -302,7 +307,70 @@ export default function Purchase() {
       }
 
       setSuccessMsg(`Purchase Invoice ${invoiceNo} saved successfully! Entry No: ${entryNo}`);
-      
+
+      // Build a printable GST tax-invoice from the saved purchase (before reset).
+      try {
+        const companyRes = await window.pharmaAPI.db.query("SELECT * FROM companies LIMIT 1");
+        const company = companyRes?.data?.[0] || {};
+
+        const partyRes = await window.pharmaAPI.db.query("SELECT * FROM suppliers WHERE id = ?", [supplierId]);
+        const party = partyRes?.data?.[0] || {};
+
+        const prodIds = [...new Set(validRows.map(r => r.product))];
+        const metaMap = {};
+        if (prodIds.length) {
+          const placeholders = prodIds.map(() => '?').join(',');
+          const metaRes = await window.pharmaAPI.db.query(
+            `SELECT p.id, p.hsn_code, p.packing, m.name AS mfg_name
+             FROM products p
+             LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
+             WHERE p.id IN (${placeholders})`,
+            prodIds
+          );
+          (metaRes?.data || []).forEach(m => { metaMap[m.id] = m; });
+        }
+
+        const invItems = validRows.map(r => {
+          const meta = metaMap[r.product] || {};
+          const pu = r.priceUnit || 'strip';
+          const pack = packSize(r.boxSize);
+          // Invoice shows quantities in STRIPS and prices PER STRIP (amount unchanged).
+          return {
+            mfg: meta.mfg_name || '',
+            name: r.productName,
+            hsn: meta.hsn_code || '',
+            pack: meta.packing || `1x${pack}`,
+            batch: r.batch,
+            exp: r.expiry,
+            qty: toStrips(r.qty, 'box', pack),
+            free: 0,
+            mrp: perStripPrice(r.mrp, pu, pack),
+            pts: perStripPrice(r.pts, pu, pack),
+            ptr: perStripPrice(r.ptr, pu, pack),
+            amount: r.amount,
+            gst: r.gst,
+            disc: r.disc
+          };
+        });
+
+        const html = buildInvoiceHtml({
+          type: 'purchase',
+          company,
+          party,
+          invoice: {
+            no: invoiceNo,
+            date: invoiceDate,
+            type: paymentMode,
+            discount: totals.disc,
+            netPayable: totals.net
+          },
+          items: invItems
+        });
+        setSavedInvoice({ html, no: invoiceNo });
+      } catch (invErr) {
+        console.error('Failed to build purchase invoice for print/PDF:', invErr);
+      }
+
       // Reset form
       setSupplierId('');
       setInvoiceNo('');
@@ -339,8 +407,23 @@ export default function Purchase() {
       )}
 
       {successMsg && (
-        <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '0.75rem 1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <strong>Success:</strong> {successMsg}
+        <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '0.75rem 1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <strong>Success:</strong> <span style={{ flex: 1 }}>{successMsg}</span>
+          {savedInvoice && (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-outline btn-sm" onClick={() => window.pharmaAPI.print.invoice(savedInvoice.html)}>
+                <Printer size={14} /> Print
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={async () => {
+                const res = await window.pharmaAPI.export.pdf(savedInvoice.html, 'Invoice_' + savedInvoice.no);
+                if (res && res.success === false && !res.canceled) {
+                  setErrorMsg('Failed to export PDF.');
+                }
+              }}>
+                <Download size={14} /> Download PDF
+              </button>
+            </div>
+          )}
         </div>
       )}
 
