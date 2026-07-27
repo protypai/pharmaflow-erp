@@ -37,6 +37,35 @@ export default function AdminDashboard() {
   const inactiveCompanies = adminCompanies.filter(c => !c.isActive || c.subscriptionStatus === 'inactive').length;
   const trialCompanies = adminCompanies.filter(c => c.subscriptionStatus === 'trial').length;
 
+  // Real backup metrics calculation
+  let healthyBackups = 0;
+  let overdueBackups = 0;
+  let criticalBackups = 0;
+
+  adminCompanies.forEach(c => {
+    if (!c.lastBackup) {
+      criticalBackups++;
+    } else {
+      const lastBackupDate = new Date(c.lastBackup);
+      const timeDiffMs = new Date().getTime() - lastBackupDate.getTime();
+      const hoursDiff = timeDiffMs / (1000 * 60 * 60);
+      
+      if (c.unsyncedCount > 0 || c.lastSyncError) {
+        if (hoursDiff > 24) {
+          criticalBackups++;
+        } else {
+          overdueBackups++;
+        }
+      } else {
+        healthyBackups++;
+      }
+    }
+  });
+
+  const todayStr = new Date().toDateString();
+  const todayActivityCount = adminActivityLogs.filter(log => new Date(log.createdAt).toDateString() === todayStr).length;
+  const totalSyncRecords = adminCompanies.reduce((acc, c) => acc + (c.totalSyncCount || 0), 0);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* KPIs */}
@@ -69,7 +98,7 @@ export default function AdminDashboard() {
                 System Activity Today
               </div>
               <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.5rem' }}>
-                142
+                {todayActivityCount}
               </div>
             </div>
             <div style={{ padding: '0.75rem', background: 'var(--info-light)', borderRadius: 'var(--radius)', color: 'var(--info-dark)' }}>
@@ -77,8 +106,7 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            <span>Logins: 45</span>
-            <span>API Calls: 12.4k</span>
+            <span>Total Sync Records: {totalSyncRecords}</span>
           </div>
         </div>
 
@@ -89,7 +117,7 @@ export default function AdminDashboard() {
                 Backup Status
               </div>
               <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.5rem' }}>
-                5 <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>/ 6</span>
+                {healthyBackups} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>/ {adminCompanies.length}</span>
               </div>
             </div>
             <div style={{ padding: '0.75rem', background: 'var(--success-light)', borderRadius: 'var(--radius)', color: 'var(--success-dark)' }}>
@@ -97,8 +125,8 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', fontSize: '0.8rem' }}>
-            <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}><CheckCircle2 size={14} /> 5 Completed</span>
-            <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldAlert size={14} /> 1 Overdue</span>
+            <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}><CheckCircle2 size={14} /> {healthyBackups} Completed</span>
+            <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldAlert size={14} /> {overdueBackups + criticalBackups} Issue</span>
           </div>
         </div>
       </div>
@@ -124,12 +152,12 @@ export default function AdminDashboard() {
                   {adminActivityLogs.slice(0, 6).map(log => (
                     <tr key={log.id}>
                       <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {log.time || (log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : 'N/A')}
+                        {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('en-IN') : 'N/A'}
                       </td>
-                      <td style={{ fontWeight: 500 }}>{log.company || log.companyId || 'System'}</td>
+                      <td style={{ fontWeight: 500 }}>{log.company?.name || log.companyId || 'System'}</td>
                       <td>
-                        <span style={{ fontSize: '0.8rem' }}>{log.action || log.operation || 'Activity Log'}</span>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{log.details || log.tableName || ''}</div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{(log.operation || 'Sync').toUpperCase()}</span>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{log.tableName || ''}</div>
                       </td>
                     </tr>
                   ))}
@@ -157,18 +185,21 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {adminCompanies.map(c => {
-                    const isOverdue = c.lastBackup ? (c.lastBackup.includes('2025-06') || c.lastBackup.includes('2025-07-18')) : false;
+                    const isCritical = !c.lastBackup || c.lastSyncError;
+                    const isOverdue = c.unsyncedCount > 0;
                     return (
                       <tr key={c.id}>
                         <td style={{ fontWeight: 500 }}>{c.name}</td>
                         <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Clock size={12} /> {c.lastBackup || 'No backup yet'}
+                            <Clock size={12} /> {c.lastBackup ? new Date(c.lastBackup).toLocaleString('en-IN') : 'Never'}
                           </div>
                         </td>
                         <td>
-                          {isOverdue ? (
-                            <span className="badge badge-danger">Overdue</span>
+                          {isCritical ? (
+                            <span className="badge badge-danger">Critical</span>
+                          ) : isOverdue ? (
+                            <span className="badge badge-warning">Overdue</span>
                           ) : (
                             <span className="badge badge-success">OK</span>
                           )}

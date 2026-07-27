@@ -32,11 +32,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = Sidebar;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = __importStar(require("react"));
 const react_router_dom_1 = require("react-router-dom");
+const SyncStatusCard_1 = __importDefault(require("../common/SyncStatusCard"));
 const lucide_react_1 = require("lucide-react");
 const navConfig = [
     {
@@ -162,7 +166,7 @@ function Sidebar({ collapsed, onToggle }) {
                     const isOpen = openGroups[item.label];
                     const isActive = isGroupActive(item);
                     return ((0, jsx_runtime_1.jsxs)("div", { className: "sidebar-group", children: [(0, jsx_runtime_1.jsxs)("div", { className: `sidebar-group-header${isActive ? ' active' : ''}`, onClick: () => !collapsed && toggleGroup(item.label), title: collapsed ? item.label : '', children: [(0, jsx_runtime_1.jsx)("span", { className: "sidebar-group-icon", children: (0, jsx_runtime_1.jsx)(item.icon, { size: 16 }) }), !collapsed && ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [(0, jsx_runtime_1.jsx)("span", { className: "sidebar-group-label", children: item.label }), (0, jsx_runtime_1.jsx)(lucide_react_1.ChevronRight, { size: 14, className: `sidebar-group-chevron${isOpen ? ' open' : ''}` })] }))] }), !collapsed && ((0, jsx_runtime_1.jsx)("div", { className: `sidebar-group-items${isOpen ? ' open' : ''}`, children: item.children.map((child) => ((0, jsx_runtime_1.jsxs)(react_router_dom_1.NavLink, { to: child.path, className: ({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`, children: [(0, jsx_runtime_1.jsx)("span", { className: "sidebar-item-dot" }), child.label] }, child.path))) }))] }, item.label));
-                }) }), (0, jsx_runtime_1.jsxs)("div", { className: "sidebar-footer", onClick: () => {
+                }) }), !collapsed && ((0, jsx_runtime_1.jsx)("div", { className: "px-4 mb-3 shrink-0", children: (0, jsx_runtime_1.jsx)(SyncStatusCard_1.default, {}) })), (0, jsx_runtime_1.jsxs)("div", { className: "sidebar-footer", onClick: () => {
                     if (typeof window !== 'undefined') {
                         window.location.href = '/profile';
                     }

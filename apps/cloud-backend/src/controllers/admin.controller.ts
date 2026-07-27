@@ -16,6 +16,14 @@ export const getCompanies = asyncHandler(async (_req: Request, res: Response) =>
         orderBy: { createdAt: 'desc' },
         take: 1,
         select: { createdAt: true, isSynced: true, syncError: true }
+      },
+      clientSyncHealth: {
+        select: {
+          id: true, deviceId: true, deviceName: true,
+          appVersion: true, lastSyncTime: true, lastSuccessSync: true,
+          status: true, errorMessage: true, pendingRecords: true,
+          osPlatform: true, updatedAt: true
+        }
       }
     },
     orderBy: { createdAt: 'desc' },
@@ -46,6 +54,7 @@ export const getCompanies = asyncHandler(async (_req: Request, res: Response) =>
       lastBackup: latestSync ? latestSync.createdAt : null,
       lastSyncSynced: latestSync ? latestSync.isSynced : null,
       lastSyncError: latestSync ? latestSync.syncError : null,
+      devices: c.clientSyncHealth || [],
     };
   }));
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import SyncStatusCard from '../common/SyncStatusCard';
 import {
   LayoutDashboard, Package, Users, Truck, Building2, Tag, Grid3X3,
   ShoppingCart, ArrowLeftRight, Receipt, Wallet, BarChart3,
@@ -209,6 +210,13 @@ export default function Sidebar({ collapsed, onToggle }) {
           );
         })}
       </nav>
+
+      {/* Sync Status Card */}
+      {!collapsed && (
+        <div className="px-4 mb-3 shrink-0">
+          <SyncStatusCard />
+        </div>
+      )}
 
       <div 
         className="sidebar-footer" 

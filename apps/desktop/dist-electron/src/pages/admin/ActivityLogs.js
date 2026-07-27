@@ -69,17 +69,42 @@ function ActivityLogs() {
     const [companyFilter, setCompanyFilter] = (0, react_1.useState)('');
     const [typeFilter, setTypeFilter] = (0, react_1.useState)('');
     const [searchQuery, setSearchQuery] = (0, react_1.useState)('');
-    const filteredLogs = adminActivityLogs.filter(log => {
-        const compName = log.company || log.companyId || '';
-        const actName = log.action || log.operation || '';
-        const detName = log.details || log.tableName || '';
-        if (companyFilter && compName !== companyFilter)
+    const formatLog = (log) => {
+        const dateObj = new Date(log.createdAt);
+        const date = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const time = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const company = log.company?.name || log.companyId || 'Unknown';
+        let type = 'master';
+        const table = (log.tableName || '').toLowerCase();
+        if (table.includes('sale'))
+            type = 'sale';
+        else if (table.includes('purchase'))
+            type = 'purchase';
+        else if (table.includes('receipt') || table.includes('payment'))
+            type = 'receipt';
+        else if (table.includes('login'))
+            type = 'login';
+        const action = `${(log.operation || 'SYNC').toUpperCase()} ${log.tableName || 'Record'}`;
+        const details = `Device: ${log.deviceId || 'N/A'} (v${log.appVersion || '1.0.0'})`;
+        return {
+            id: log.id,
+            date,
+            time,
+            company,
+            type,
+            action,
+            details
+        };
+    };
+    const formattedLogs = adminActivityLogs.map(formatLog);
+    const filteredLogs = formattedLogs.filter(log => {
+        if (companyFilter && log.company !== companyFilter)
             return false;
         if (typeFilter && log.type !== typeFilter)
             return false;
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            return compName.toLowerCase().includes(q) || actName.toLowerCase().includes(q) || detName.toLowerCase().includes(q);
+            return log.company.toLowerCase().includes(q) || log.action.toLowerCase().includes(q) || log.details.toLowerCase().includes(q);
         }
         return true;
     });
@@ -94,5 +119,5 @@ function ActivityLogs() {
             default: return 'badge-gray';
         }
     };
-    return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", style: { fontSize: '1.1rem' }, children: "Global Activity Audit Trail" }), (0, jsx_runtime_1.jsx)("div", { className: "search-bar", children: (0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search logs..." })] }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "filter-bar", children: [(0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Filter, { size: 16 }), " Filters:"] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: companyFilter, onChange: e => setCompanyFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Companies" }), adminCompanies.map(c => (0, jsx_runtime_1.jsx)("option", { value: c.name, children: c.name }, c.id))] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: typeFilter, onChange: e => setTypeFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Activity Types" }), (0, jsx_runtime_1.jsx)("option", { value: "sale", children: "Sales" }), (0, jsx_runtime_1.jsx)("option", { value: "purchase", children: "Purchases" }), (0, jsx_runtime_1.jsx)("option", { value: "receipt", children: "Receipts / Payments" }), (0, jsx_runtime_1.jsx)("option", { value: "login", children: "Logins" }), (0, jsx_runtime_1.jsx)("option", { value: "backup", children: "Backups" }), (0, jsx_runtime_1.jsx)("option", { value: "master", children: "Master Updates" })] }), (0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", style: { maxWidth: '220px' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Calendar, { size: 14, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Date Range", defaultValue: "Today" })] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { children: "Date & Time" }), (0, jsx_runtime_1.jsx)("th", { children: "Company" }), (0, jsx_runtime_1.jsx)("th", { children: "Action Category" }), (0, jsx_runtime_1.jsx)("th", { children: "Activity Description" }), (0, jsx_runtime_1.jsx)("th", { children: "Details" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filteredLogs.map(log => ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsxs)("td", { style: { whiteSpace: 'nowrap' }, children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 500 }, children: log.date }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: log.time })] }), (0, jsx_runtime_1.jsx)("td", { style: { fontWeight: 500, color: 'var(--text-primary)' }, children: log.company }), (0, jsx_runtime_1.jsx)("td", { children: (0, jsx_runtime_1.jsx)("span", { className: `badge ${getBadgeColor(log.type)}`, children: log.type.toUpperCase() }) }), (0, jsx_runtime_1.jsx)("td", { style: { fontWeight: 500 }, children: log.action }), (0, jsx_runtime_1.jsx)("td", { style: { color: 'var(--text-secondary)' }, children: log.details })] }, log.id))) })] }) })] }));
+    return ((0, jsx_runtime_1.jsxs)("div", { className: "card", style: { height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }, children: [(0, jsx_runtime_1.jsxs)("div", { className: "card-header", children: [(0, jsx_runtime_1.jsx)("h2", { className: "card-title", style: { fontSize: '1.1rem' }, children: "Global Activity Audit Trail" }), (0, jsx_runtime_1.jsx)("div", { className: "search-bar", children: (0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Search, { size: 16, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Search logs...", value: searchQuery, onChange: e => setSearchQuery(e.target.value) })] }) })] }), (0, jsx_runtime_1.jsxs)("div", { className: "filter-bar", children: [(0, jsx_runtime_1.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Filter, { size: 16 }), " Filters:"] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: companyFilter, onChange: e => setCompanyFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Companies" }), adminCompanies.map(c => (0, jsx_runtime_1.jsx)("option", { value: c.name, children: c.name }, c.id))] }), (0, jsx_runtime_1.jsxs)("select", { className: "form-select", value: typeFilter, onChange: e => setTypeFilter(e.target.value), children: [(0, jsx_runtime_1.jsx)("option", { value: "", children: "All Activity Types" }), (0, jsx_runtime_1.jsx)("option", { value: "sale", children: "Sales" }), (0, jsx_runtime_1.jsx)("option", { value: "purchase", children: "Purchases" }), (0, jsx_runtime_1.jsx)("option", { value: "receipt", children: "Receipts / Payments" }), (0, jsx_runtime_1.jsx)("option", { value: "login", children: "Logins" }), (0, jsx_runtime_1.jsx)("option", { value: "backup", children: "Backups" }), (0, jsx_runtime_1.jsx)("option", { value: "master", children: "Master Updates" })] }), (0, jsx_runtime_1.jsxs)("div", { className: "search-input-wrap", style: { maxWidth: '220px' }, children: [(0, jsx_runtime_1.jsx)(lucide_react_1.Calendar, { size: 14, className: "search-icon" }), (0, jsx_runtime_1.jsx)("input", { type: "text", className: "form-input", placeholder: "Date Range", defaultValue: "Today" })] })] }), (0, jsx_runtime_1.jsx)("div", { className: "card-body no-pad", style: { flex: 1, overflowY: 'auto' }, children: (0, jsx_runtime_1.jsxs)("table", { className: "data-table", children: [(0, jsx_runtime_1.jsx)("thead", { children: (0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsx)("th", { children: "Date & Time" }), (0, jsx_runtime_1.jsx)("th", { children: "Company" }), (0, jsx_runtime_1.jsx)("th", { children: "Action Category" }), (0, jsx_runtime_1.jsx)("th", { children: "Activity Description" }), (0, jsx_runtime_1.jsx)("th", { children: "Details" })] }) }), (0, jsx_runtime_1.jsx)("tbody", { children: filteredLogs.map(log => ((0, jsx_runtime_1.jsxs)("tr", { children: [(0, jsx_runtime_1.jsxs)("td", { style: { whiteSpace: 'nowrap' }, children: [(0, jsx_runtime_1.jsx)("div", { style: { fontWeight: 500 }, children: log.date }), (0, jsx_runtime_1.jsx)("div", { style: { fontSize: '0.75rem', color: 'var(--text-secondary)' }, children: log.time })] }), (0, jsx_runtime_1.jsx)("td", { style: { fontWeight: 500, color: 'var(--text-primary)' }, children: log.company }), (0, jsx_runtime_1.jsx)("td", { children: (0, jsx_runtime_1.jsx)("span", { className: `badge ${getBadgeColor(log.type)}`, children: log.type.toUpperCase() }) }), (0, jsx_runtime_1.jsx)("td", { style: { fontWeight: 500 }, children: log.action }), (0, jsx_runtime_1.jsx)("td", { style: { color: 'var(--text-secondary)' }, children: log.details })] }, log.id))) })] }) })] }));
 }

@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { pushPendingQueue, getPendingCount } from '../services/syncQueue.service';
+import { pushPendingQueue, getPendingCount, getLocalSyncStatus, getOrCreateDeviceId } from '../services/syncQueue.service';
 import { logger } from '../services/logger';
 import keytar from 'keytar';
 
@@ -45,11 +45,24 @@ export function setupSyncHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('sync:status', async () => {
-    return { pending: getPendingCount() };
+    const status = getLocalSyncStatus();
+    return {
+      pending: getPendingCount(),
+      ...status
+    };
   });
 
-  // Auto-sync every 5 minutes when online
-  setInterval(async () => {
+  ipcMain.handle('app:version', () => {
+    return process.env.VITE_APP_VERSION || '1.0.52';
+  });
+
+  ipcMain.handle('app:deviceId', () => {
+    return getOrCreateDeviceId();
+  });
+
+
+  // Auto-sync helper function
+  const autoSync = async () => {
     try {
       const token = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
       const refreshToken = await keytar.getPassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME);
@@ -61,5 +74,11 @@ export function setupSyncHandlers(mainWindow: BrowserWindow): void {
     } catch {
       // Silent fail — offline or auth expired
     }
-  }, 5 * 60 * 1000);
+  };
+
+  // Trigger sync on startup after 5 seconds
+  setTimeout(autoSync, 5000);
+
+  // Auto-sync every 5 minutes when online
+  setInterval(autoSync, 5 * 60 * 1000);
 }

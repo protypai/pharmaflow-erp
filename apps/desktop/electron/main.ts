@@ -15,6 +15,26 @@ const isDev = !app.isPackaged && !process.argv.includes('--prod');
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
+// Load .env file variables into process.env for development
+try {
+  const envPath = path.join(app.getAppPath(), '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    envContent.split('\n').forEach(line => {
+      const parts = line.split('=');
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const value = parts.slice(1).join('=').trim();
+        if (key && !key.startsWith('#')) {
+          process.env[key] = value;
+        }
+      }
+    });
+  }
+} catch (err) {
+  console.warn('Failed to load local .env file in main process:', err);
+}
+
 async function createWindow() {
   // Initialize local SQLite database
   await initLocalDb();

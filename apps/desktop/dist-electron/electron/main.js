@@ -17,6 +17,26 @@ const tray_1 = require("./windows/tray");
 const isDev = !electron_1.app.isPackaged && !process.argv.includes('--prod');
 let mainWindow = null;
 let tray = null;
+// Load .env file variables into process.env for development
+try {
+    const envPath = path_1.default.join(electron_1.app.getAppPath(), '.env');
+    if (fs_1.default.existsSync(envPath)) {
+        const envContent = fs_1.default.readFileSync(envPath, 'utf8');
+        envContent.split('\n').forEach(line => {
+            const parts = line.split('=');
+            if (parts.length >= 2) {
+                const key = parts[0].trim();
+                const value = parts.slice(1).join('=').trim();
+                if (key && !key.startsWith('#')) {
+                    process.env[key] = value;
+                }
+            }
+        });
+    }
+}
+catch (err) {
+    console.warn('Failed to load local .env file in main process:', err);
+}
 async function createWindow() {
     // Initialize local SQLite database
     await (0, localDb_service_1.initLocalDb)();

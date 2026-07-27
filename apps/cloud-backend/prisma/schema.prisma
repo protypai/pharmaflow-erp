@@ -136,6 +136,7 @@ model Company {
   journals         Journal[]
   stockAdjustments StockAdjustment[]
   syncQueue        SyncQueue[]
+  clientSyncHealth ClientSyncHealth[]
 }
 
 model User {
@@ -664,3 +665,23 @@ model SyncQueue {
   @@index([companyId, isSynced])
   @@index([createdAt])
 }
+
+model ClientSyncHealth {
+  id              String    @id @default(cuid())
+  companyId       String
+  deviceId        String    @unique
+  deviceName      String?
+  appVersion      String
+  lastSyncTime    DateTime  @default(now())
+  lastSuccessSync DateTime?
+  status          String    // 'Success' | 'Failed' | 'Syncing'
+  errorMessage    String?
+  pendingRecords  Int       @default(0)
+  osPlatform      String?
+  updatedAt       DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+

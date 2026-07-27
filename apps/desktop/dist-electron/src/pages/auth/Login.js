@@ -270,7 +270,7 @@ function Login() {
                 return;
             // 2. Fallback to local SQLite DB if cloud unavailable
             if (window.pharmaAPI?.db) {
-                const response = await window.pharmaAPI.db.query('SELECT id, name, company_id as companyId, role FROM users WHERE email = ? AND password_hash = ? AND is_active = 1', [username, password]);
+                const response = await window.pharmaAPI.db.query('SELECT id, name, email, company_id as companyId, role FROM users WHERE email = ? AND password_hash = ? AND is_active = 1', [username, password]);
                 const users = response?.data;
                 if (users && users.length > 0) {
                     localStorage.setItem('user', JSON.stringify(users[0]));

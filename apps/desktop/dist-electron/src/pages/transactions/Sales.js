@@ -287,7 +287,7 @@ function Sales() {
             }
             catch (e) { }
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE email = ?", [user.email]);
+            const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
             if (!userRes?.data?.length)
                 throw new Error("Admin user not found in local DB");
             const companyId = userRes.data[0].company_id;

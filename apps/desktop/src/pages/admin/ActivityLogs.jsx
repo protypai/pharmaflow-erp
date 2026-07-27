@@ -32,15 +32,41 @@ export default function ActivityLogs() {
   const [typeFilter, setTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredLogs = adminActivityLogs.filter(log => {
-    const compName = log.company || log.companyId || '';
-    const actName = log.action || log.operation || '';
-    const detName = log.details || log.tableName || '';
-    if (companyFilter && compName !== companyFilter) return false;
+  const formatLog = (log) => {
+    const dateObj = new Date(log.createdAt);
+    const date = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const time = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const company = log.company?.name || log.companyId || 'Unknown';
+    
+    let type = 'master';
+    const table = (log.tableName || '').toLowerCase();
+    if (table.includes('sale')) type = 'sale';
+    else if (table.includes('purchase')) type = 'purchase';
+    else if (table.includes('receipt') || table.includes('payment')) type = 'receipt';
+    else if (table.includes('login')) type = 'login';
+    
+    const action = `${(log.operation || 'SYNC').toUpperCase()} ${log.tableName || 'Record'}`;
+    const details = `Device: ${log.deviceId || 'N/A'} (v${log.appVersion || '1.0.0'})`;
+    
+    return {
+      id: log.id,
+      date,
+      time,
+      company,
+      type,
+      action,
+      details
+    };
+  };
+
+  const formattedLogs = adminActivityLogs.map(formatLog);
+
+  const filteredLogs = formattedLogs.filter(log => {
+    if (companyFilter && log.company !== companyFilter) return false;
     if (typeFilter && log.type !== typeFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return compName.toLowerCase().includes(q) || actName.toLowerCase().includes(q) || detName.toLowerCase().includes(q);
+      return log.company.toLowerCase().includes(q) || log.action.toLowerCase().includes(q) || log.details.toLowerCase().includes(q);
     }
     return true;
   });
@@ -64,7 +90,13 @@ export default function ActivityLogs() {
         <div className="search-bar">
           <div className="search-input-wrap">
             <Search size={16} className="search-icon" />
-            <input type="text" className="form-input" placeholder="Search logs..." />
+            <input 
+              type="text" 
+              className="form-input" 
+              placeholder="Search logs..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
       </div>

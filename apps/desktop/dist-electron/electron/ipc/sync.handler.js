@@ -52,10 +52,20 @@ function setupSyncHandlers(mainWindow) {
         }
     });
     electron_1.ipcMain.handle('sync:status', async () => {
-        return { pending: (0, syncQueue_service_1.getPendingCount)() };
+        const status = (0, syncQueue_service_1.getLocalSyncStatus)();
+        return {
+            pending: (0, syncQueue_service_1.getPendingCount)(),
+            ...status
+        };
     });
-    // Auto-sync every 5 minutes when online
-    setInterval(async () => {
+    electron_1.ipcMain.handle('app:version', () => {
+        return process.env.VITE_APP_VERSION || '1.0.52';
+    });
+    electron_1.ipcMain.handle('app:deviceId', () => {
+        return (0, syncQueue_service_1.getOrCreateDeviceId)();
+    });
+    // Auto-sync helper function
+    const autoSync = async () => {
         try {
             const token = await keytar_1.default.getPassword(SERVICE_NAME, ACCOUNT_NAME);
             const refreshToken = await keytar_1.default.getPassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME);
@@ -69,5 +79,9 @@ function setupSyncHandlers(mainWindow) {
         catch {
             // Silent fail — offline or auth expired
         }
-    }, 5 * 60 * 1000);
+    };
+    // Trigger sync on startup after 5 seconds
+    setTimeout(autoSync, 5000);
+    // Auto-sync every 5 minutes when online
+    setInterval(autoSync, 5 * 60 * 1000);
 }
