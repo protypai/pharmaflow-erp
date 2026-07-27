@@ -50,7 +50,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           if ($tag.StartsWith("v")) { $tag = $tag.Substring(1) }
-          npm version $tag --no-git-tag-version
+          npm version $tag --no-git-tag-version --allow-same-version
         working-directory: apps/desktop
 
       - name: Build Electron .exe Installers (x64, ia32, arm64)
