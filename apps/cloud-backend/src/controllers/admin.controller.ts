@@ -11,11 +11,45 @@ export const getCompanies = asyncHandler(async (_req: Request, res: Response) =>
       gstin: true, phone: true, email: true, address: true,
       subscriptionStatus: true, subscriptionExpiry: true,
       isActive: true, createdAt: true,
-      _count: { select: { sales: true, purchases: true } },
+      _count: { select: { sales: true, purchases: true, syncQueue: true } },
+      syncQueue: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { createdAt: true, isSynced: true, syncError: true }
+      }
     },
     orderBy: { createdAt: 'desc' },
   });
-  sendSuccess(res, companies, 'Companies fetched');
+
+  const companiesWithSyncStats = await Promise.all(companies.map(async (c) => {
+    const unsyncedCount = await db.syncQueue.count({
+      where: { companyId: c.id, isSynced: false }
+    });
+    const latestSync = c.syncQueue[0] || null;
+    return {
+      id: c.id,
+      name: c.name,
+      city: c.city,
+      state: c.state,
+      gstin: c.gstin,
+      phone: c.phone,
+      email: c.email,
+      address: c.address,
+      subscriptionStatus: c.subscriptionStatus,
+      subscriptionExpiry: c.subscriptionExpiry,
+      isActive: c.isActive,
+      createdAt: c.createdAt,
+      salesCount: c._count.sales,
+      purchasesCount: c._count.purchases,
+      totalSyncCount: c._count.syncQueue,
+      unsyncedCount,
+      lastBackup: latestSync ? latestSync.createdAt : null,
+      lastSyncSynced: latestSync ? latestSync.isSynced : null,
+      lastSyncError: latestSync ? latestSync.syncError : null,
+    };
+  }));
+
+  sendSuccess(res, companiesWithSyncStats, 'Companies fetched');
 });
 
 export const toggleCompany = asyncHandler(async (req: Request, res: Response) => {
@@ -96,6 +130,7 @@ export const getActivityLogs = asyncHandler(async (req: Request, res: Response) 
       id: true, companyId: true, tableName: true,
       operation: true, deviceId: true, appVersion: true,
       isSynced: true, syncedAt: true, createdAt: true,
+      company: { select: { name: true } }
     },
   });
   sendSuccess(res, logs, 'Activity logs');

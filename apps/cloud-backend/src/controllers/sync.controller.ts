@@ -58,7 +58,7 @@ export const getInitialSyncData = asyncHandler(async (req: Request, res: Respons
     db.receipt.findMany({ where: { companyId } }),
     db.payment.findMany({ where: { companyId } }),
     db.stockAdjustment.findMany({ where: { companyId } }),
-    db.stockAdjustmentItem.findMany({ where: { stockAdjustment: { companyId } } }),
+    db.stockAdjustmentItem.findMany({ where: { adjustment: { companyId } } }),
     db.journal.findMany({ where: { companyId } }),
     db.journalEntry.findMany({ where: { journal: { companyId } } })
   ]);
