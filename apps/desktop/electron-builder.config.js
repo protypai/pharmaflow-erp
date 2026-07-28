@@ -11,6 +11,7 @@ module.exports = {
     'dist-electron/**/*',
     'node_modules/**/*',
     'package.json',
+    '.env.production',
   ],
   asarUnpack: [
     '**/*.node',

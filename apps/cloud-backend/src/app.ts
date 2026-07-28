@@ -30,6 +30,9 @@ app.locals.db = db;
 app.use(helmet());
 const allowedOrigins = [
   env.CORS_ORIGIN,
+  // TEMP hardcoded production origin — remove once the CORS_ORIGIN secret/var is set.
+  // Not sensitive (public endpoint, already in nginx.conf + deploy workflow).
+  'https://sagarpharma.duckdns.org',
   'http://localhost:5173',
   'http://localhost:3000',
   'app://.'

@@ -8,6 +8,10 @@ apps/desktop/dist-electron/
 .env
 .env.production
 .env.local
+
+# Exception: the desktop production build config is NOT a secret — it only holds
+# the public API endpoint, and the packaged build needs it committed.
+!apps/desktop/.env.production
 *.db
 *.db-shm
 *.db-wal

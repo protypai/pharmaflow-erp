@@ -90,9 +90,12 @@ function setupContentSecurityPolicy(): void {
   });
 }
 
-// Load .env file variables into process.env for development
+// Load env into process.env so the main process (CSP connect-src, sync URL) uses
+// the same API origin as the renderer. Packaged builds read the bundled
+// .env.production; dev reads the local .env.
 try {
-  const envPath = path.join(app.getAppPath(), '.env');
+  const envFile = app.isPackaged ? '.env.production' : '.env';
+  const envPath = path.join(app.getAppPath(), envFile);
   if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, 'utf8');
     envContent.split('\n').forEach(line => {
@@ -133,13 +136,6 @@ async function createWindow() {
       // sandboxed process. The preload only uses electron's contextBridge/ipcRenderer,
       // both of which remain available under the sandbox.
       webSecurity: !isDev,
-      // Required for backends served over plain http:// on a bare IP (no TLS).
-      // The secure app:// scheme would otherwise trigger a mixed-content block on
-      // the packaged renderer's http API calls. webSecurity stays true and the CSP
-      // connect-src already whitelists the configured API origin, so this only
-      // relaxes the mixed-content rule — not same-origin enforcement. Prefer HTTPS
-      // whenever the backend can provide it.
-      allowRunningInsecureContent: true,
       sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
