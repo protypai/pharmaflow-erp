@@ -13,7 +13,7 @@ export function setupPrintHandlers(): void {
 
       printWindow.webContents.once('did-finish-load', () => {
         printWindow.webContents.print(
-          { silent: true, printBackground: true },
+          { silent: true, printBackground: true, landscape: true },
           (success, reason) => {
             printWindow.close();
             if (success) {

@@ -4,6 +4,7 @@ import {
   exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
   getCompanyProfile, dateRangeBounds,
 } from '../../utils/export';
+import { exportPastInvoice } from '../../utils/invoiceTemplate';
 
 
 export default function PurchaseReport() {
@@ -33,7 +34,7 @@ export default function PurchaseReport() {
       if (supplierId) { where.push('p.supplier_id = ?'); params.push(supplierId); }
 
       const query = `
-        SELECT p.invoice_date as date, p.entry_no as id, s.name as supplierName, p.subtotal as gross,
+        SELECT p.id as purchaseId, p.invoice_date as date, p.invoice_no as id, p.invoice_no as billNo, s.name as supplierName, p.subtotal as gross,
                p.discount_amount as discount, (p.cgst_amount + p.sgst_amount + p.igst_amount) as gst,
                p.net_amount as net,
                (SELECT COUNT(*) FROM purchase_items WHERE purchase_id = p.id) as items
@@ -164,15 +165,16 @@ export default function PurchaseReport() {
               <th style={{ width: '120px', textAlign: 'right' }}>CD/Sch (₹)</th>
               <th style={{ width: '120px', textAlign: 'right' }}>GST (₹)</th>
               <th style={{ width: '150px', textAlign: 'right' }}>Net Amount (₹)</th>
+              <th style={{ width: '110px', textAlign: 'center' }}>Invoice</th>
             </tr>
           </thead>
           <tbody>
             {purchaseData.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>No purchases found for this period.</td></tr>
+              <tr><td colSpan="9" style={{ textAlign: 'center', padding: '2rem' }}>No purchases found for this period.</td></tr>
             ) : purchaseData.map((row) => (
               <tr key={row.id}>
                 <td>{row.date}</td>
-                <td style={{ color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }}>{row.id}</td>
+                <td style={{ color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }} title="Click to download purchase invoice" onClick={() => exportPastInvoice('purchase', row.purchaseId || row.id, 'pdf')}>{row.billNo || row.id}</td>
                 <td style={{ fontWeight: 500 }}>{row.supplierName}</td>
                 <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{row.items}</td>
                 <td style={{ textAlign: 'right' }}>{row.gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -180,6 +182,26 @@ export default function PurchaseReport() {
                 <td style={{ textAlign: 'right' }}>{row.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700, color: '#B91C1C' }}>
                   {row.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0 }}
+                      title="Download PDF Invoice"
+                      onClick={() => exportPastInvoice('purchase', row.purchaseId || row.id, 'pdf')}
+                    >
+                      <Download size={14} color="var(--primary)" />
+                    </button>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0 }}
+                      title="Print Invoice"
+                      onClick={() => exportPastInvoice('purchase', row.purchaseId || row.id, 'print')}
+                    >
+                      <Printer size={14} color="#475569" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -193,6 +215,7 @@ export default function PurchaseReport() {
               <td style={{ textAlign: 'right', color: '#B91C1C', fontSize: '1.1rem' }}>
                 ₹ {totals.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
+              <td></td>
             </tr>
           </tfoot>
         </table>

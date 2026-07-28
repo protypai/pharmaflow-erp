@@ -306,7 +306,7 @@ export default function Purchase() {
         await syncEntity(item.tableName, item.operation, item.payload);
       }
 
-      setSuccessMsg(`Purchase Invoice ${invoiceNo} saved successfully! Entry No: ${entryNo}`);
+      setSuccessMsg(`Purchase Invoice "${invoiceNo}" saved successfully!`);
 
       // Build a printable GST tax-invoice from the saved purchase (before reset).
       try {

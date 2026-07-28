@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, AlertTriangle, ArrowLeft, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
-import { buildInvoiceHtml } from '../../utils/invoiceTemplate';
+import { buildInvoiceHtml, normalizeInvoiceNumbers } from '../../utils/invoiceTemplate';
 import { packSize, toStrips, toBoxesFloat, perStripPrice, formatStock } from '../../utils/units';
 export default function Sales() {
   const navigate = useNavigate();
@@ -26,6 +26,30 @@ export default function Sales() {
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState(null); // { html, no }
+
+  const fetchNextInvoiceNo = async () => {
+    try {
+      await normalizeInvoiceNumbers();
+      const res = await window.pharmaAPI.db.query("SELECT invoice_no FROM sales");
+      let maxNum = 0;
+      if (res?.data && res.data.length > 0) {
+        res.data.forEach(row => {
+          if (!row.invoice_no) return;
+          const match = row.invoice_no.match(/\d+$/);
+          if (match) {
+            const num = parseInt(match[0], 10);
+            if (!isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          }
+        });
+      }
+      setInvoiceNo(`INV-${maxNum + 1}`);
+    } catch (err) {
+      console.error("Error fetching sequential invoice no:", err);
+      setInvoiceNo('INV-1');
+    }
+  };
 
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -73,8 +97,8 @@ export default function Sales() {
     };
     fetchMasterData();
     
-    // Auto-generate invoice number based on timestamp for simplicity
-    setInvoiceNo('INV-' + Date.now().toString().slice(-6));
+    // Auto-generate sequential invoice number starting from 1
+    fetchNextInvoiceNo();
   }, []);
 
   // Handle Customer Selection
@@ -482,7 +506,7 @@ export default function Sales() {
 
       // Reset form
       setCustomerId('');
-      setInvoiceNo('INV-' + Date.now().toString().slice(-6));
+      fetchNextInvoiceNo();
       setDoctorName('');
       setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
       

@@ -4,6 +4,7 @@ import {
   exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
   getCompanyProfile, dateRangeBounds,
 } from '../../utils/export';
+import { exportPastInvoice, normalizeInvoiceNumbers } from '../../utils/invoiceTemplate';
 
 
 export default function SalesReport() {
@@ -26,6 +27,7 @@ export default function SalesReport() {
 
   const fetchSales = async () => {
     try {
+      await normalizeInvoiceNumbers();
       const where = [];
       const params = [];
       const { start, end } = dateRangeBounds(dateRange, customStart, customEnd);
@@ -33,7 +35,7 @@ export default function SalesReport() {
       if (customerId) { where.push('s.customer_id = ?'); params.push(customerId); }
 
       const query = `
-        SELECT s.date, s.invoice_no as id, c.name as customerName, s.subtotal as gross,
+        SELECT s.id as saleId, s.date, s.invoice_no as id, c.name as customerName, s.subtotal as gross,
                s.discount_amount as discount, (s.cgst_amount + s.sgst_amount + s.igst_amount) as gst,
                s.net_amount as net,
                (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as items
@@ -170,15 +172,16 @@ export default function SalesReport() {
               <th style={{ width: '120px', textAlign: 'right' }}>Discount (₹)</th>
               <th style={{ width: '120px', textAlign: 'right' }}>GST (₹)</th>
               <th style={{ width: '150px', textAlign: 'right' }}>Net Amount (₹)</th>
+              <th style={{ width: '110px', textAlign: 'center' }}>Invoice</th>
             </tr>
           </thead>
           <tbody>
             {salesData.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>No sales found for this period.</td></tr>
+              <tr><td colSpan="9" style={{ textAlign: 'center', padding: '2rem' }}>No sales found for this period.</td></tr>
             ) : salesData.map((row) => (
               <tr key={row.id}>
                 <td>{row.date}</td>
-                <td style={{ color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }}>{row.id}</td>
+                <td style={{ color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }} title="Click to download invoice" onClick={() => exportPastInvoice('sales', row.saleId || row.id, 'pdf')}>{row.id}</td>
                 <td style={{ fontWeight: 500 }}>{row.customerName}</td>
                 <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{row.items}</td>
                 <td style={{ textAlign: 'right' }}>{row.gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -186,6 +189,26 @@ export default function SalesReport() {
                 <td style={{ textAlign: 'right' }}>{row.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700, color: '#15803D' }}>
                   {row.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0 }}
+                      title="Download PDF Invoice"
+                      onClick={() => exportPastInvoice('sales', row.saleId || row.id, 'pdf')}
+                    >
+                      <Download size={14} color="var(--primary)" />
+                    </button>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0 }}
+                      title="Print Invoice"
+                      onClick={() => exportPastInvoice('sales', row.saleId || row.id, 'print')}
+                    >
+                      <Printer size={14} color="#475569" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -199,6 +222,7 @@ export default function SalesReport() {
               <td style={{ textAlign: 'right', color: '#15803D', fontSize: '1.1rem' }}>
                 ₹ {totals.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
+              <td></td>
             </tr>
           </tfoot>
         </table>

@@ -62,10 +62,12 @@ export function setupExportHandlers(): void {
     try {
       const buffer: Buffer = await new Promise((resolve, reject) => {
         pdfWindow!.webContents.once('did-finish-load', () => {
+          const isLandscape = html.includes('landscape') || defaultFileName.toLowerCase().includes('invoice');
           pdfWindow!.webContents
             .printToPDF({
               printBackground: true,
               pageSize: 'A4',
+              landscape: isLandscape,
               margins: { marginType: 'default' },
             })
             .then(resolve)
