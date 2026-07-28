@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Building2, Key, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Search, Building2, Key, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 
 export default function CompanyManagement() {
@@ -55,6 +55,26 @@ export default function CompanyManagement() {
       }
     } catch (err) {
       console.error('Approve error:', err);
+      alert('Failed to connect to backend.');
+    }
+  };
+
+  const handleResync = async (companyId, name) => {
+    if (!window.confirm(`Ask all devices for "${name}" to retry their stuck (parked) records on their next sync?`)) return;
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/companies/${companyId}/resync`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert('Re-sync requested. Devices will un-park and re-push their stuck records on the next sync (within ~5 min).');
+      } else {
+        alert(data.message || 'Failed to request re-sync');
+      }
+    } catch (err) {
+      console.error('Resync error:', err);
       alert('Failed to connect to backend.');
     }
   };
@@ -243,6 +263,16 @@ export default function CompanyManagement() {
                           >
                             {company.isActive ? <XCircle size={14} /> : <CheckCircle size={14} />}
                             {company.isActive ? ' Deactivate' : ' Activate'}
+                          </button>
+                        )}
+                        {company.isActive && (
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => handleResync(company.id, company.name)}
+                            title="Ask this company's devices to retry stuck (parked) records"
+                            style={{ fontSize: '0.78rem' }}
+                          >
+                            <RefreshCw size={14} /> Retry Sync
                           </button>
                         )}
                         <button

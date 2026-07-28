@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import bcrypt from 'bcryptjs';
-import { pushPendingQueue, pullChanges, getPendingCount, getLocalSyncStatus, getOrCreateDeviceId, AccountDisabledError } from '../services/syncQueue.service';
+import { pushPendingQueue, pullChanges, getPendingCount, getLocalSyncStatus, getOrCreateDeviceId, AccountDisabledError, maybeApplyResync } from '../services/syncQueue.service';
 import { queryDb } from '../services/localDb.service';
 import { logger } from '../services/logger';
 import keytar from 'keytar';
@@ -152,6 +152,17 @@ export function setupSyncHandlers(mainWindow: BrowserWindow): void {
       emitTokenRefreshed(pushResult.newAccessToken);
       if (pushResult.success > 0 || pushResult.failed > 0) {
         mainWindow.webContents.send('sync:complete', pushResult);
+      }
+
+      // Super Admin requested a re-sync → un-park dead-lettered records and push
+      // them again (recovers records that got parked after an earlier bug).
+      if (maybeApplyResync(pushResult.resyncRequestedAt)) {
+        const retryToken = pushResult.newAccessToken || token;
+        const retryResult = await pushPendingQueue(retryToken, refreshToken || undefined);
+        emitTokenRefreshed(retryResult.newAccessToken);
+        if (retryResult.success > 0 || retryResult.failed > 0) {
+          mainWindow.webContents.send('sync:complete', retryResult);
+        }
       }
 
       // Pull deltas after push, using the freshest token available.

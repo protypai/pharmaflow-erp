@@ -1,6 +1,7 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
+import UpdateNotification from './components/common/UpdateNotification';
 
 // Auth
 import Login from './pages/auth/Login';
@@ -102,6 +103,7 @@ function WithAdminLayout({ children }) {
 export default function App() {
   return (
     <HashRouter>
+      <UpdateNotification />
       <Routes>
         {/* Auth */}
         <Route path="/login" element={<Login />} />

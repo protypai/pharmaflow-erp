@@ -181,6 +181,12 @@ export const saveSyncHealth = asyncHandler(async (req: Request, res: Response) =
     },
   });
 
-  sendSuccess(res, {}, 'Sync health saved');
+  // Tell the device whether the Super Admin has requested a re-sync (un-park of
+  // dead-lettered records). The device compares this to what it last handled.
+  const company = await db.company.findUnique({
+    where: { id: companyId },
+    select: { resyncRequestedAt: true },
+  });
+  sendSuccess(res, { resyncRequestedAt: company?.resyncRequestedAt || null }, 'Sync health saved');
 });
 

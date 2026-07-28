@@ -117,6 +117,9 @@ model Company {
   subscriptionStatus SubscriptionStatus @default(trial)
   subscriptionExpiry DateTime?
   isActive           Boolean            @default(true)
+  // Super Admin sets this to request that devices un-park (retry) their
+  // dead-lettered sync records — e.g. after a fix is deployed.
+  resyncRequestedAt  DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 

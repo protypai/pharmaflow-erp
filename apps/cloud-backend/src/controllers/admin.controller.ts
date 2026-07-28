@@ -26,7 +26,7 @@ const resolveActor = async (req: Request): Promise<{ id?: string; email?: string
 // Map the frontend Activity Logs filter values to concrete audit actions.
 const ACTIVITY_FILTER_MAP: Record<string, string[]> = {
   login: ['admin.login', 'auth.login'],
-  company: ['company.approve', 'company.toggle', 'company.subscription'],
+  company: ['company.approve', 'company.toggle', 'company.subscription', 'company.resync_requested'],
   password: ['user.password_reset'],
   // Failures & errors — one place to review everything that went wrong.
   errors: ['admin.login_failed', 'auth.login_failed', 'sync.failed', 'sync.rejected', 'sync.partial', 'backup.failed'],
@@ -258,6 +258,25 @@ export const resetUserPassword = asyncHandler(async (req: Request, res: Response
   });
 
   sendSuccess(res, { email: target.email }, `Password reset for ${target.email}`);
+});
+
+// Super Admin requests that a company's devices un-park (retry) their
+// dead-lettered sync records — e.g. after a fix is deployed. Devices pick this up
+// on their next sync-health ping and re-push the parked records.
+export const requestResync = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const company = await db.company.update({
+    where: { id },
+    data: { resyncRequestedAt: new Date() },
+  });
+  const actor = await resolveActor(req);
+  await logActivity({
+    companyId: id, actorType: 'superadmin', actorId: actor.id, actorEmail: actor.email,
+    action: 'company.resync_requested', targetType: 'company', targetId: id,
+    detail: `Re-sync requested for ${company.name} — devices will retry parked records`,
+    ipAddress: req.ip,
+  });
+  sendSuccess(res, { resyncRequestedAt: company.resyncRequestedAt }, 'Re-sync requested — devices will retry on next sync');
 });
 
 export const getActivityLogs = asyncHandler(async (req: Request, res: Response) => {

@@ -15,6 +15,10 @@ import { setupTray } from './windows/tray';
 const isDev = !app.isPackaged && !process.argv.includes('--prod');
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+// When true, the window is allowed to actually close (real quit) instead of
+// hiding to the tray. Set before an update install / explicit Quit so the app
+// fully exits and the installer can replace the locked .exe.
+let isQuitting = false;
 
 // Load .env variables into process.env in dev mode so the main process knows
 // about VITE_CLOUD_API_URL and does not block it in Content-Security-Policy.
@@ -199,8 +203,12 @@ async function createWindow() {
   });
 
   mainWindow.on('close', (e) => {
-    e.preventDefault();
-    mainWindow?.hide();
+    // Normal ✕ hides to tray; a real quit (update install / tray Quit) is allowed
+    // through so the app fully exits and the installer isn't blocked by a lock.
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow?.hide();
+    }
   });
 
   // Setup tray
@@ -282,5 +290,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  mainWindow?.removeAllListeners('close');
+  // Ensure a full, clean exit: allow the window to close and remove the tray so
+  // no lingering process keeps the .exe locked during an update install.
+  isQuitting = true;
+  try { tray?.destroy(); } catch { /* ignore */ }
+  tray = null;
 });

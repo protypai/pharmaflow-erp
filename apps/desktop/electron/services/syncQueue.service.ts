@@ -41,6 +41,7 @@ export interface PushResult {
   success: number;
   failed: number;
   newAccessToken?: string;
+  resyncRequestedAt?: string | null;
 }
 
 // Thrown when the server reports the user/company has been deactivated by the
@@ -149,6 +150,52 @@ function setPullCursor(cursor: string): void {
   }
 }
 
+// --- Dead-letter recovery (admin-triggered "Retry stuck records") -------------
+
+// Un-park dead-lettered rows (is_synced = 2) back to pending so they retry.
+// Returns how many were revived.
+export function unparkDeadLetters(): number {
+  try {
+    const db = getDb();
+    const info = db.prepare(
+      `UPDATE sync_queue SET is_synced = ${SYNCED_PENDING}, retry_count = 0, next_retry_at = NULL, sync_error = NULL WHERE is_synced = ${SYNCED_DEAD}`
+    ).run();
+    return info.changes || 0;
+  } catch (err: any) {
+    logger.error('Failed to un-park dead-lettered records', { error: err.message });
+    return 0;
+  }
+}
+
+function getResyncHandledAt(): string | null {
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT resync_handled_at FROM sync_status WHERE id = "current"').get() as any;
+    return row?.resync_handled_at || null;
+  } catch { return null; }
+}
+
+function setResyncHandledAt(iso: string): void {
+  try {
+    getDb().prepare(`UPDATE sync_status SET resync_handled_at = ? WHERE id = 'current'`).run(iso);
+  } catch (err: any) {
+    logger.error('Failed to persist resync_handled_at', { error: err.message });
+  }
+}
+
+// If the Super Admin requested a re-sync (newer than what we last handled),
+// un-park the dead-lettered records so the next push retries them. Returns true
+// if anything was revived (caller should push again).
+export function maybeApplyResync(resyncRequestedAt: string | null | undefined): boolean {
+  if (!resyncRequestedAt) return false;
+  const handled = getResyncHandledAt();
+  if (handled && new Date(resyncRequestedAt).getTime() <= new Date(handled).getTime()) return false;
+  const revived = unparkDeadLetters();
+  setResyncHandledAt(resyncRequestedAt);
+  logger.info(`Admin re-sync requested — un-parked ${revived} dead-lettered record(s)`);
+  return revived > 0;
+}
+
 export function addToSyncQueue(tableName: string, operation: 'create' | 'update' | 'delete', payload: any): void {
   const db = getDb();
   const id = uuidv4();
@@ -158,11 +205,13 @@ export function addToSyncQueue(tableName: string, operation: 'create' | 'update'
   `).run(id, tableName, operation, payload.id ?? null, payload.companyId ?? payload.company_id ?? null, JSON.stringify(payload), APP_VERSION);
 }
 
-async function sendTelemetryHealth(accessToken: string, status: 'Success' | 'Partial' | 'Failed' | 'Syncing', errorMessage?: string | null): Promise<void> {
+// Posts device health and returns the server's resyncRequestedAt (or null) so the
+// caller can un-park dead-lettered records when the Super Admin requests a retry.
+async function sendTelemetryHealth(accessToken: string, status: 'Success' | 'Partial' | 'Failed' | 'Syncing', errorMessage?: string | null): Promise<string | null> {
   try {
     const deviceId = getOrCreateDeviceId();
     const pendingCount = getPendingCount();
-    await axios.post(
+    const res = await axios.post(
       `${getApiUrl()}/api/sync/health`,
       {
         deviceId,
@@ -174,8 +223,10 @@ async function sendTelemetryHealth(accessToken: string, status: 'Success' | 'Par
       },
       { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 15000 }
     );
+    return res.data?.data?.resyncRequestedAt || null;
   } catch (err: any) {
     logger.warn('Failed to send sync health telemetry to cloud', { error: err.message });
+    return null;
   }
 }
 
@@ -314,17 +365,18 @@ export async function pushPendingQueue(accessToken: string, refreshToken?: strin
 
   if (pending.length === 0) {
     updateLocalSyncStatus('Success', 0);
-    sendTelemetryHealth(accessToken, 'Success').catch(() => {});
-    return { success: 0, failed: 0 };
+    const resyncRequestedAt = await sendTelemetryHealth(accessToken, 'Success').catch(() => null);
+    return { success: 0, failed: 0, resyncRequestedAt };
   }
 
   const items = buildPushItems(pending);
   let newAccessToken: string | undefined;
+  let resyncRequestedAt: string | null = null;
 
   const doPush = async (token: string) => {
     const response = await axios.post(
       `${getApiUrl()}/api/v1/sync/push`,
-      { items },
+      { items, appVersion: APP_VERSION, deviceId: getOrCreateDeviceId() },
       { headers: { Authorization: `Bearer ${token}` }, timeout: 30000 }
     );
     return response.data?.data as {
@@ -383,13 +435,13 @@ export async function pushPendingQueue(accessToken: string, refreshToken?: strin
         ? `${failedCount} failed — ${distinctErrors.join(' | ')}`.slice(0, 500)
         : `${failedCount} record(s) failed to sync`;
       updateLocalSyncStatus('Partial', successCount, detail);
-      sendTelemetryHealth(newAccessToken || accessToken, 'Partial', detail).catch(() => {});
+      resyncRequestedAt = await sendTelemetryHealth(newAccessToken || accessToken, 'Partial', detail).catch(() => null);
     } else {
       updateLocalSyncStatus('Success', successCount);
-      sendTelemetryHealth(newAccessToken || accessToken, 'Success').catch(() => {});
+      resyncRequestedAt = await sendTelemetryHealth(newAccessToken || accessToken, 'Success').catch(() => null);
     }
 
-    return { success: successCount, failed: failedCount, newAccessToken };
+    return { success: successCount, failed: failedCount, newAccessToken, resyncRequestedAt };
   } catch (err: any) {
     // Account disabled: not a retryable/transport failure — surface it so the
     // IPC layer can force a logout. Do NOT back off the rows (nothing is wrong

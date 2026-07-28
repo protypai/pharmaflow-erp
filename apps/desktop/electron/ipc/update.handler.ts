@@ -30,7 +30,10 @@ export function setupUpdateHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('update:install', () => {
-    autoUpdater.quitAndInstall();
+    // quitAndInstall triggers app.quit() → 'before-quit' sets the quitting flag and
+    // tears down the tray, so the app fully exits (no locked .exe) and relaunches.
+    // (false = show installer, true = relaunch after install)
+    autoUpdater.quitAndInstall(false, true);
   });
 
   // Check for updates on startup (production only)
