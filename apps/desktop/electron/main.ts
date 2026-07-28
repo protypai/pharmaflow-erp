@@ -16,6 +16,29 @@ const isDev = !app.isPackaged && !process.argv.includes('--prod');
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
+// Load .env variables into process.env in dev mode so the main process knows
+// about VITE_CLOUD_API_URL and does not block it in Content-Security-Policy.
+if (isDev) {
+  try {
+    const envPath = path.join(app.getAppPath(), '.env');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      content.split('\n').forEach((line) => {
+        const parts = line.split('=');
+        if (parts.length >= 2) {
+          const key = parts[0].trim();
+          let val = parts.slice(1).join('=').trim();
+          if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+          if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+          process.env[key] = val;
+        }
+      });
+    }
+  } catch (err: any) {
+    console.error('Failed to load local .env file in main process:', err.message);
+  }
+}
+
 const DEV_ORIGIN = 'http://localhost:5173';
 
 // Resolve the configured API origin for the CSP connect-src allowlist.
@@ -109,7 +132,7 @@ async function createWindow() {
       // Hardened defaults: enforce same-origin policy, and run the renderer in a
       // sandboxed process. The preload only uses electron's contextBridge/ipcRenderer,
       // both of which remain available under the sandbox.
-      webSecurity: true,
+      webSecurity: !isDev,
       // Required for backends served over plain http:// on a bare IP (no TLS).
       // The secure app:// scheme would otherwise trigger a mixed-content block on
       // the packaged renderer's http API calls. webSecurity stays true and the CSP

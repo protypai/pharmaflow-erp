@@ -28,8 +28,23 @@ app.locals.db = db;
 
 // Security
 app.use(helmet());
+const allowedOrigins = [
+  env.CORS_ORIGIN,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'app://.'
+].filter(Boolean);
+
 app.use(cors({
-  origin: env.CORS_ORIGIN,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    // Allow if origin is explicitly allowed or if allowedOrigins contains a wildcard
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
