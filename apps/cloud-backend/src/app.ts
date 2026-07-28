@@ -41,8 +41,10 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    // Allow if origin is explicitly allowed or if allowedOrigins contains a wildcard
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    // The desktop app runs on the custom app:// scheme and its origin is
+    // "app://index.html" (not exactly "app://."), so allow ANY app:// origin —
+    // it is always our own Electron client.
+    if (origin.startsWith('app://') || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
