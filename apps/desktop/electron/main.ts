@@ -42,12 +42,15 @@ if (isDev) {
 const DEV_ORIGIN = 'http://localhost:5173';
 
 // Resolve the configured API origin for the CSP connect-src allowlist.
+// Packaged builds fall back to the production host (never localhost) so the CSP
+// can't block the real API even if .env.production fails to load.
 function getApiOrigin(): string {
-  const raw = process.env.VITE_API_BASE_URL || process.env.VITE_CLOUD_API_URL || 'http://localhost:5000';
+  const fallback = app.isPackaged ? 'https://sagarpharma.duckdns.org' : 'http://localhost:5000';
+  const raw = process.env.VITE_API_BASE_URL || process.env.VITE_CLOUD_API_URL || fallback;
   try {
     return new URL(raw).origin;
   } catch {
-    return 'http://localhost:5000';
+    return fallback;
   }
 }
 

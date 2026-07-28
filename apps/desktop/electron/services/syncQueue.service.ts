@@ -9,8 +9,21 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Never hardcode a production host. Configure VITE_API_BASE_URL (or legacy
 // VITE_CLOUD_API_URL) in the environment; fall back to a local dev backend.
-const API_URL = process.env.VITE_API_BASE_URL || process.env.VITE_CLOUD_API_URL || 'http://localhost:5000';
-const APP_VERSION = process.env.VITE_APP_VERSION || '1.0.0';
+// Resolve the API base URL LAZILY (at call time). The main process loads
+// .env.production AFTER this module is imported, so evaluating it at import time
+// would wrongly fall back to localhost in a packaged build (which is exactly why
+// packaged apps "synced" locally but nothing reached the cloud). Packaged builds
+// fall back to the production host — never localhost — so background sync can't
+// silently POST to a dead localhost.
+function getApiUrl(): string {
+  return (
+    process.env.VITE_API_BASE_URL ||
+    process.env.VITE_CLOUD_API_URL ||
+    (app.isPackaged ? 'https://sagarpharma.duckdns.org' : 'http://localhost:5000')
+  );
+}
+// Real installed version (from package.json), not a hardcoded default.
+const APP_VERSION = app.getVersion();
 const SERVICE_NAME = 'PharmaFlowERP';
 const ACCOUNT_NAME = 'access_token';
 
@@ -150,7 +163,7 @@ async function sendTelemetryHealth(accessToken: string, status: 'Success' | 'Par
     const deviceId = getOrCreateDeviceId();
     const pendingCount = getPendingCount();
     await axios.post(
-      `${API_URL}/api/sync/health`,
+      `${getApiUrl()}/api/sync/health`,
       {
         deviceId,
         appVersion: APP_VERSION,
@@ -173,7 +186,7 @@ export async function reportBackup(success: boolean, error?: string): Promise<vo
     const token = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
     if (!token) return;
     await axios.post(
-      `${API_URL}/api/sync/health`,
+      `${getApiUrl()}/api/sync/health`,
       {
         deviceId: getOrCreateDeviceId(),
         appVersion: APP_VERSION,
@@ -310,7 +323,7 @@ export async function pushPendingQueue(accessToken: string, refreshToken?: strin
 
   const doPush = async (token: string) => {
     const response = await axios.post(
-      `${API_URL}/api/v1/sync/push`,
+      `${getApiUrl()}/api/v1/sync/push`,
       { items },
       { headers: { Authorization: `Bearer ${token}` }, timeout: 30000 }
     );
@@ -332,7 +345,7 @@ export async function pushPendingQueue(accessToken: string, refreshToken?: strin
         logger.info('Access token expired during sync push, attempting refresh...');
         try {
           const refreshRes = await axios.post(
-            `${API_URL}/api/v1/auth/refresh`,
+            `${getApiUrl()}/api/v1/auth/refresh`,
             { refreshToken },
             { timeout: 15000 }
           );
@@ -480,7 +493,7 @@ export async function pullChanges(accessToken: string, refreshToken?: string): P
   let newAccessToken: string | undefined;
 
   const doPull = async (token: string) => {
-    const url = `${API_URL}/api/v1/sync/changes` + (since ? `?since=${encodeURIComponent(since)}` : '');
+    const url = `${getApiUrl()}/api/v1/sync/changes` + (since ? `?since=${encodeURIComponent(since)}` : '');
     const response = await axios.get(url, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 30000,
@@ -497,7 +510,7 @@ export async function pullChanges(accessToken: string, refreshToken?: string): P
       logger.info('Access token expired during sync pull, attempting refresh...');
       try {
         const refreshRes = await axios.post(
-          `${API_URL}/api/v1/auth/refresh`,
+          `${getApiUrl()}/api/v1/auth/refresh`,
           { refreshToken },
           { timeout: 15000 }
         );
