@@ -190,6 +190,7 @@ export default function AdminDashboard() {
                   <tr>
                     <th>Company</th>
                     <th>Last Backup</th>
+                    <th>Version</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -204,6 +205,11 @@ export default function AdminDashboard() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Clock size={12} /> {c.lastBackup ? new Date(c.lastBackup).toLocaleString('en-IN') : 'Never'}
                           </div>
+                        </td>
+                        <td style={{ fontSize: '0.8rem' }}>
+                          {c.appVersion
+                            ? <span className="badge badge-info">v{c.appVersion}</span>
+                            : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                         </td>
                         <td>
                           {isCritical ? (

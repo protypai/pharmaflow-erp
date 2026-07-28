@@ -36,6 +36,18 @@ export const pushSync = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  // Log a successful backup event so the Super Admin's "Backups" view shows a
+  // per-store history (not just the last-sync time). Throttled to 1/min per
+  // company so rapid saves don't flood the audit trail.
+  if (result.successCount > 0) {
+    if (!(await hasRecentActivity(companyId, 'backup.synced', 1))) {
+      await logActivity({
+        companyId, actorType: 'user', action: 'backup.synced', targetType: 'device', targetId: deviceId || null,
+        detail: `${result.successCount} record(s) backed up to cloud (v${appVersion || '?'})`,
+      });
+    }
+  }
+
   sendSuccess(
     res,
     result,

@@ -8,6 +8,7 @@ const TYPE_FILTERS = [
   { value: 'login', label: 'Logins' },
   { value: 'company', label: 'Company Actions' },
   { value: 'password', label: 'Password Resets' },
+  { value: 'backups', label: 'Backups' },
   { value: 'errors', label: 'Errors & Failures' },
 ];
 
@@ -19,7 +20,7 @@ const actionMeta = (action) => {
   }
   if (action === 'admin.login' || action === 'auth.login') return { type: 'login', badge: 'badge-info' };
   if (action === 'user.password_reset') return { type: 'password', badge: 'badge-warning' };
-  if (action === 'backup.completed') return { type: 'backup', badge: 'badge-primary' };
+  if (action === 'backup.synced' || action === 'backup.completed') return { type: 'backup', badge: 'badge-success' };
   if (action && action.startsWith('company.')) return { type: 'company', badge: 'badge-primary' };
   return { type: 'other', badge: 'badge-gray' };
 };

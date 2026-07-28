@@ -30,6 +30,8 @@ const ACTIVITY_FILTER_MAP: Record<string, string[]> = {
   password: ['user.password_reset'],
   // Failures & errors — one place to review everything that went wrong.
   errors: ['admin.login_failed', 'auth.login_failed', 'sync.failed', 'sync.rejected', 'sync.partial', 'backup.failed'],
+  // Backups — every cloud backup (success + failure) per store, with error detail.
+  backups: ['backup.synced', 'backup.completed', 'backup.failed', 'sync.rejected', 'sync.failed', 'sync.partial'],
 };
 
 export const getCompanies = asyncHandler(async (_req: Request, res: Response) => {
@@ -62,9 +64,14 @@ export const getCompanies = asyncHandler(async (_req: Request, res: Response) =>
       where: { companyId: c.id, isSynced: false }
     });
     const latestSync = c.syncQueue[0] || null;
+    // Most-recently-active device → its reported app version (to spot old builds).
+    const latestDevice = (c.clientSyncHealth || [])
+      .slice()
+      .sort((a: any, b: any) => new Date(b.lastSyncTime || 0).getTime() - new Date(a.lastSyncTime || 0).getTime())[0] || null;
     return {
       id: c.id,
       name: c.name,
+      appVersion: latestDevice?.appVersion || null,
       city: c.city,
       state: c.state,
       gstin: c.gstin,
