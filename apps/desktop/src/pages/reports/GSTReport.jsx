@@ -24,11 +24,19 @@ export default function GSTReport() {
       const dateParams = (start && end) ? [start, end] : [];
 
       const salesRes = await window.pharmaAPI.db.query(
-        `SELECT SUM(subtotal) as salesValue, SUM(cgst_amount) as outputCGST, SUM(sgst_amount) as outputSGST, SUM(igst_amount) as outputIGST FROM sales ${saleWhere}`,
+        `SELECT SUM(subtotal) as salesValue, 
+                SUM(net_amount - taxable_amount)/2 as outputCGST, 
+                SUM(net_amount - taxable_amount)/2 as outputSGST, 
+                0 as outputIGST 
+         FROM sales ${saleWhere}`,
         dateParams
       );
       const purchRes = await window.pharmaAPI.db.query(
-        `SELECT SUM(subtotal) as purchaseValue, SUM(cgst_amount) as inputCGST, SUM(sgst_amount) as inputSGST, SUM(igst_amount) as inputIGST FROM purchases ${purchWhere}`,
+        `SELECT SUM(subtotal) as purchaseValue, 
+                SUM(net_amount - taxable_amount)/2 as inputCGST, 
+                SUM(net_amount - taxable_amount)/2 as inputSGST, 
+                0 as inputIGST 
+         FROM purchases ${purchWhere}`,
         dateParams
       );
 
@@ -51,11 +59,11 @@ export default function GSTReport() {
         : '';
       const hsnRes = await window.pharmaAPI.db.query(`
         SELECT p.hsn_code as hsn, p.gst_rate || '%' as slab,
-               SUM(si.taxable_amt) as taxable,
-               SUM(si.cgst) as cgst,
-               SUM(si.sgst) as sgst,
-               SUM(si.igst) as igst,
-               SUM(si.cgst + si.sgst + si.igst) as total
+               SUM(si.net_amount / (1 + (si.gst_rate / 100.0))) as taxable,
+               SUM((si.net_amount - (si.net_amount / (1 + (si.gst_rate / 100.0)))) / 2) as cgst,
+               SUM((si.net_amount - (si.net_amount / (1 + (si.gst_rate / 100.0)))) / 2) as sgst,
+               0 as igst,
+               SUM(si.net_amount - (si.net_amount / (1 + (si.gst_rate / 100.0)))) as total
         FROM products p
         JOIN sale_items si ON p.id = si.product_id
         ${hsnFilter}

@@ -137,7 +137,7 @@ export default function Receipts() {
         }
       }
       setCustomerId('');
-      setAmountReceived(0);
+      setAmountReceived('');
       setChequeNo('');
       setBankName('');
       setBills([]);
@@ -156,7 +156,7 @@ export default function Receipts() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Receipt</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={allocatedTotal > (Number(amountReceived)||0)}><Save size={16} /> Save Receipt</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={!amountReceived || Number(amountReceived) <= 0 || allocatedTotal > (Number(amountReceived)||0)}><Save size={16} /> Save Receipt</button>
         </div>
       </div>
 
@@ -180,7 +180,7 @@ export default function Receipts() {
                   <label className="form-label">Total Amount Received (₹) <span className="text-danger">*</span></label>
                   <div className="search-input-wrap" style={{ width: '100%' }}>
                     <IndianRupee size={16} className="search-icon" color="var(--success)" />
-                    <input type="number" className="form-input" value={amountReceived || ''} onChange={e => setAmountReceived(e.target.value)} style={{ fontWeight: 600, fontSize: '1.1rem' }} />
+                    <input type="number" className="form-input" value={amountReceived === 0 ? '' : amountReceived} onChange={e => setAmountReceived(e.target.value)} style={{ fontWeight: 600, fontSize: '1.1rem' }} />
                   </div>
                 </div>
                 <div style={{ flex: 1 }}>

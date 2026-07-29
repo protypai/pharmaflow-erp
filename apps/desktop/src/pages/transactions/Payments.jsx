@@ -137,7 +137,7 @@ export default function Payments() {
         }
       }
       setSupplierId('');
-      setAmountPaid(0);
+      setAmountPaid('');
       setChequeNo('');
       setUtrNo('');
       setBills([]);
@@ -156,7 +156,7 @@ export default function Payments() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Voucher</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={allocatedTotal > (Number(amountPaid)||0)}><Save size={16} /> Save Payment</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={!amountPaid || Number(amountPaid) <= 0 || allocatedTotal > (Number(amountPaid)||0)}><Save size={16} /> Save Payment</button>
         </div>
       </div>
 
@@ -180,7 +180,7 @@ export default function Payments() {
                   <label className="form-label">Total Amount Paid (₹) <span className="text-danger">*</span></label>
                   <div className="search-input-wrap" style={{ width: '100%' }}>
                     <IndianRupee size={16} className="search-icon" color="var(--danger)" />
-                    <input type="number" className="form-input" value={amountPaid || ''} onChange={e => setAmountPaid(e.target.value)} style={{ fontWeight: 600, fontSize: '1.1rem' }} />
+                    <input type="number" className="form-input" value={amountPaid === 0 ? '' : amountPaid} onChange={e => setAmountPaid(e.target.value)} style={{ fontWeight: 600, fontSize: '1.1rem' }} />
                   </div>
                 </div>
                 <div style={{ flex: 1 }}>

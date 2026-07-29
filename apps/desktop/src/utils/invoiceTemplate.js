@@ -126,12 +126,12 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
 
     return `<tr>
       <td class="ln">${esc(val(it.mfg))}</td>
-      <td class="ln" style="font-weight:bold; font-size:13.5px;">${esc(val(it.name))}</td>
+      <td class="ln" style="font-weight:bold; white-space:normal;">${esc(val(it.name))}</td>
       <td class="ln">${esc(val(it.hsn))}</td>
       <td class="ln">${esc(val(it.pack))}</td>
       <td class="ln">${esc(val(it.batch))}</td>
       <td class="ln">${esc(val(it.exp))}</td>
-      <td class="r" style="font-weight:bold; font-size:13.5px;">${qtyInt(it.qty)}</td>
+      <td class="r" style="font-weight:bold;">${qtyInt(it.qty)}</td>
       <td class="r">${qtyInt(it.free)}</td>
       <td class="r">${money(it.mrp)}</td>
       <td class="r">${ptsVal}</td>
@@ -155,8 +155,18 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   const dlLine2 = val(party.drug_license2);
   const titleText = isPurchase ? 'PURCHASE INVOICE' : 'INVOICE / TAX INVOICE';
 
+  let formattedDate = val(invoice.date, '');
+  if (typeof formattedDate === 'string' && formattedDate.includes('T')) {
+    const d = new Date(formattedDate);
+    if (!isNaN(d)) {
+      formattedDate = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    } else {
+      formattedDate = formattedDate.split('T')[0];
+    }
+  }
+
   return `<!-- PharmaFlow ${isPurchase ? 'Purchase' : 'Sales'} Landscape Invoice -->
-<div class="invoice-container" style="font-family:'Courier New',Courier,monospace;color:#000;background:#fff;width:275mm;margin:0 auto;padding:6mm 8mm;box-sizing:border-box;font-size:11px;line-height:1.3;">
+<div class="invoice-container" style="font-family:'Courier New',Courier,monospace;color:#000;background:#fff;width:275mm;min-height:185mm;margin:0 auto;padding:6mm 8mm;box-sizing:border-box;font-size:13px;line-height:1.4;display:flex;flex-direction:column;">
   <style>
     @page {
       size: A4 landscape;
@@ -164,11 +174,11 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
     }
     @media print {
       body { margin: 0; padding: 0; background: #fff; color: #000; -webkit-print-color-adjust: exact; }
-      .invoice-container { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+      .invoice-container { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; min-height: 100vh !important; }
     }
-    .inv-table { width: 100%; border-collapse: collapse; margin: 3px 0; }
-    .inv-table th, .inv-table td { border: none; padding: 4px 4px; font-size: 13px; vertical-align: top; }
-    .inv-table th { text-align: left; font-weight: bold; font-size: 12.5px; }
+    .inv-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+    .inv-table th, .inv-table td { border: none; padding: 6px 6px; font-size: 16px; vertical-align: top; white-space: nowrap; }
+    .inv-table th { text-align: left; font-weight: bold; font-size: 16px; }
     .inv-table td.c { text-align: center; }
     .inv-table td.r, .inv-table th.r { text-align: right; }
     .inv-table td.ln { text-align: left; }
@@ -178,13 +188,14 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   </style>
 
   <!-- Top Title & Company details -->
-  <div style="text-align:center; font-size:11px; font-weight:bold; letter-spacing:2px;">${titleText}</div>
-  <div style="text-align:center; font-size:18px; font-weight:bold; margin-top:3px; margin-bottom:6px; letter-spacing:1px;">${companyName.toUpperCase()}</div>
+  <div style="flex: 1;">
+  <div style="text-align:center; font-size:14px; font-weight:bold; letter-spacing:2px;">${titleText}</div>
+  <div style="text-align:center; font-size:24px; font-weight:bold; margin-top:4px; margin-bottom:8px; letter-spacing:1px;">${companyName.toUpperCase()}</div>
 
-  <table class="no-border" style="width:100%; margin-bottom:2px;">
+  <table class="no-border" style="width:100%; margin-bottom:4px;">
     <tr>
-      <td style="width:60%; vertical-align:top;">
-        <div style="font-weight:bold;">${esc(val(company.address))}</div>
+      <td style="width:60%; vertical-align:top; font-size:13px;">
+        <div style="font-weight:bold; font-size:15px;">${esc(val(company.address))}</div>
         <div>${[company.city, company.pincode].filter(Boolean).join(' - ')}${company.state ? ', ' + esc(company.state) : ''}</div>
         <div>${company.phone ? 'Phone No:' + esc(company.phone) : ''}${company.phone && company.email ? '  ' : ''}${company.email ? 'Email:' + esc(company.email) : ''}</div>
       </td>
@@ -217,16 +228,16 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
       </td>
       <td style="width:35%; vertical-align:top; padding-right:15px;">
         <table class="no-border" style="width:100%;">
-          <tr><td style="width:70px; font-weight:bold;">GSTIN :</td><td>${esc(val(party.gstin, ''))}</td></tr>
-          <tr><td style="font-weight:bold;">DL NO1 :</td><td>${esc(val(dlLine1, ''))}</td></tr>
-          <tr><td style="font-weight:bold;">DL NO2 :</td><td>${esc(val(dlLine2, ''))}</td></tr>
+          <tr><td style="width:80px; font-weight:bold; white-space:nowrap;">GSTIN</td><td>: ${esc(val(party.gstin, ''))}</td></tr>
+          <tr><td style="font-weight:bold; white-space:nowrap;">DL NO1</td><td>: ${esc(val(dlLine1, ''))}</td></tr>
+          <tr><td style="font-weight:bold; white-space:nowrap;">DL NO2</td><td>: ${esc(val(dlLine2, ''))}</td></tr>
         </table>
       </td>
       <td style="width:25%; vertical-align:top;">
         <table class="no-border" style="width:100%;">
-          <tr><td style="width:85px; font-weight:bold;">Invoice No</td><td>: <b>${esc(val(invoice.no))}</b></td></tr>
-          <tr><td style="font-weight:bold;">Inv Dt</td><td>: ${esc(val(invoice.date))}</td></tr>
-          <tr><td style="font-weight:bold;">Type</td><td>: ${esc(val(invoice.type, 'Credit'))}</td></tr>
+          <tr><td style="width:90px; font-weight:bold; white-space:nowrap;">Invoice No</td><td>: <b>${esc(val(invoice.no))}</b></td></tr>
+          <tr><td style="font-weight:bold; white-space:nowrap;">Inv Dt</td><td>: ${esc(formattedDate)}</td></tr>
+          <tr><td style="font-weight:bold; white-space:nowrap;">Type</td><td>: ${esc(val(invoice.type, 'Credit'))}</td></tr>
         </table>
       </td>
     </tr>
@@ -261,9 +272,11 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   </table>
 
   <div style="min-height:20px;"></div>
+  </div> <!-- end flex: 1 main content -->
 
+  <div style="margin-top: auto;">
   <!-- Notes & Ledger Balance -->
-  <table class="no-border" style="width:100%; margin-top:10px; font-size:10px; line-height:1.35;">
+  <table class="no-border" style="width:100%; margin-top:10px; font-size:14px; line-height:1.4;">
     <tr>
       <td style="width:65%; vertical-align:bottom;">
         <span style="font-weight:bold;">Note :</span> ${esc(val(invoice.note, ''))}
@@ -278,10 +291,10 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   <div class="dashed-divider"></div>
 
   <!-- Tax Breakdown & Summary Calculations -->
-  <table class="no-border" style="width:100%; margin-top:3px; font-size:10px; line-height:1.35;">
+  <table class="no-border" style="width:100%; margin-top:6px; font-size:14px; line-height:1.4;">
     <tr>
       <td style="width:30%; vertical-align:top; padding-right:15px;">
-        <table class="no-border" style="width:100%; font-size:10px;">
+        <table class="no-border" style="width:100%; font-size:14px;">
           <tr><td style="white-space:nowrap; font-weight:bold;">Taxable</td><td class="r" style="white-space:nowrap; font-weight:bold;">Value</td></tr>
           <tr><td style="white-space:nowrap; padding-right:8px;">5% Value:</td><td class="r" style="white-space:nowrap;">${money(slabs[5].taxable)}</td></tr>
           <tr><td style="white-space:nowrap; padding-right:8px;">12% Value:</td><td class="r" style="white-space:nowrap;">${money(slabs[12].taxable)}</td></tr>
@@ -291,7 +304,7 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
         </table>
       </td>
       <td style="width:40%; vertical-align:top; padding-right:15px;">
-        <table class="no-border" style="width:100%; font-size:10px;">
+        <table class="no-border" style="width:100%; font-size:14px;">
           <tr><td style="white-space:nowrap; font-weight:bold;">Taxable</td><td class="r" style="white-space:nowrap; font-weight:bold;">CGST Amt</td><td class="r" style="white-space:nowrap; font-weight:bold;">SGST Amt</td></tr>
           <tr><td style="white-space:nowrap; padding-right:8px;">5% GST:</td><td class="r" style="white-space:nowrap;">${money(slabs[5].cgst)}</td><td class="r" style="white-space:nowrap;">${money(slabs[5].sgst)}</td></tr>
           <tr><td style="white-space:nowrap; padding-right:8px;">12% GST:</td><td class="r" style="white-space:nowrap;">${money(slabs[12].cgst)}</td><td class="r" style="white-space:nowrap;">${money(slabs[12].sgst)}</td></tr>
@@ -301,7 +314,7 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
         </table>
       </td>
       <td style="width:30%; vertical-align:top;">
-        <table class="no-border" style="width:100%; font-size:10px;">
+        <table class="no-border" style="width:100%; font-size:14px;">
           <tr><td style="text-align:right; white-space:nowrap; padding-right:15px;">Items:</td><td class="r" style="width:90px; font-weight:bold;">${list.length}</td></tr>
           <tr><td style="text-align:right; white-space:nowrap; padding-right:15px;">Units:</td><td class="r" style="font-weight:bold;">${qtyInt(unitsSum)}</td></tr>
           <tr><td style="text-align:right; white-space:nowrap; padding-right:15px;">Sub Total:</td><td class="r">${money(subTotalGross)}</td></tr>
@@ -317,12 +330,12 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   <div class="dashed-divider"></div>
 
   <!-- Net Payable & Words -->
-  <table class="no-border" style="width:100%; margin: 3px 0;">
+  <table class="no-border" style="width:100%; margin: 6px 0;">
     <tr>
-      <td style="vertical-align:middle; font-size:10px;">
+      <td style="vertical-align:middle; font-size:13px; font-weight:bold;">
         ${esc(amountInWords(netPayable))}
       </td>
-      <td style="text-align:right; font-weight:bold; font-size:15px; vertical-align:middle;">
+      <td style="text-align:right; font-weight:bold; font-size:18px; vertical-align:middle;">
         NET PAYABLE: &nbsp; ${money(netPayable)}
       </td>
     </tr>
@@ -332,19 +345,20 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   <div class="dashed-divider"></div>
 
   <!-- Footer -->
-  <table class="no-border" style="width:100%; margin-top:4px;">
+  <table class="no-border" style="width:100%; margin-top:6px;">
     <tr>
-      <td style="width:60%; vertical-align:top; font-size:10px;">
+      <td style="width:60%; vertical-align:top; font-size:12px;">
         Goods covered under this bill donot contravene section 18 of the drugs &amp; cosmetics act 1940
       </td>
       <td style="width:40%; text-align:right; vertical-align:top;">
-        <div style="font-weight:bold; font-size:11px;">For ${companyName.toUpperCase()}</div>
+        <div style="font-weight:bold; font-size:13px;">For ${companyName.toUpperCase()}</div>
         <div style="height:45px;"></div>
-        <div style="font-weight:bold; font-size:11px;">For M/s. ${companyName.toUpperCase()}</div>
-        <div style="margin-top:2px;">${esc(val(company.authorized_sign, 'M.Partner / Authorised Signatory'))}</div>
+        <div style="font-weight:bold; font-size:13px;">For M/s. ${companyName.toUpperCase()}</div>
+        <div style="margin-top:4px; font-size:12px;">${esc(val(company.authorized_sign, 'M.Partner / Authorised Signatory'))}</div>
       </td>
     </tr>
   </table>
+  </div> <!-- end margin-top: auto footer -->
 </div>`;
 }
 

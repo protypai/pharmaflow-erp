@@ -7,6 +7,42 @@ export default function Settings() {
   const [checking, setChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState('');
 
+  // Settings State
+  const [settings, setSettings] = useState({
+    invoicePrefix: 'INV/25-26/',
+    nextInvoiceNumber: '42',
+    printFormat: 'A4',
+    printCopies: '2',
+    terms: '1. Goods once sold will not be taken back.\\n2. Interest @24% p.a. will be charged if payment is delayed beyond 30 days.\\n3. Subject to Mumbai Jurisdiction.',
+    allowNegativeStock: false,
+    warnNearExpiry: true,
+    blockExpired: true,
+    enforceFefo: true,
+    financialYear: '25-26',
+    uiTheme: 'light',
+    autoBackup: 'daily'
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('pharmaSettings');
+    if (saved) {
+      try {
+        setSettings(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse settings", e);
+      }
+    }
+  }, []);
+
+  const handleSettingChange = (field, value) => {
+    setSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  const saveSettings = () => {
+    localStorage.setItem('pharmaSettings', JSON.stringify(settings));
+    alert('Settings saved successfully!');
+  };
+
   useEffect(() => {
     if (window.pharmaAPI && window.pharmaAPI.app) {
       window.pharmaAPI.app.getVersion()
@@ -45,7 +81,7 @@ export default function Settings() {
           <h1 className="page-title">System Settings</h1>
           <div className="page-sub">Configure billing rules and application preferences</div>
         </div>
-        <button className="btn btn-primary"><Save size={16} /> Save Configuration</button>
+        <button className="btn btn-primary" onClick={saveSettings}><Save size={16} /> Save Configuration</button>
       </div>
 
       <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
@@ -87,15 +123,15 @@ export default function Settings() {
                 <div className="form-row-2">
                   <div className="form-group">
                     <label className="form-label">Invoice Prefix</label>
-                    <input className="form-input" defaultValue="INV/25-26/" />
+                    <input className="form-input" value={settings.invoicePrefix} onChange={e => handleSettingChange('invoicePrefix', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Next Invoice Number</label>
-                    <input className="form-input" type="number" defaultValue="42" />
+                    <input className="form-input" type="number" value={settings.nextInvoiceNumber} onChange={e => handleSettingChange('nextInvoiceNumber', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Print Format</label>
-                    <select className="form-select" defaultValue="A4">
+                    <select className="form-select" value={settings.printFormat} onChange={e => handleSettingChange('printFormat', e.target.value)}>
                       <option value="A4">A4 Full Page</option>
                       <option value="A5">A5 Half Page</option>
                       <option value="Thermal">Thermal 80mm</option>
@@ -103,7 +139,7 @@ export default function Settings() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Number of Print Copies</label>
-                    <select className="form-select" defaultValue="2">
+                    <select className="form-select" value={settings.printCopies} onChange={e => handleSettingChange('printCopies', e.target.value)}>
                       <option value="1">1 (Original)</option>
                       <option value="2">2 (Original + Duplicate)</option>
                       <option value="3">3 (Original + Duplicate + Transport)</option>
@@ -111,7 +147,7 @@ export default function Settings() {
                   </div>
                   <div className="form-group" style={{ gridColumn: 'span 2' }}>
                     <label className="form-label">Terms and Conditions (Printed on Invoice)</label>
-                    <textarea className="form-input" rows={4} defaultValue="1. Goods once sold will not be taken back.\n2. Interest @24% p.a. will be charged if payment is delayed beyond 30 days.\n3. Subject to Mumbai Jurisdiction." />
+                    <textarea className="form-input" rows={4} value={settings.terms} onChange={e => handleSettingChange('terms', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -125,7 +161,7 @@ export default function Settings() {
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="checkbox" style={{ width: '18px', height: '18px' }} />
+                    <input type="checkbox" style={{ width: '18px', height: '18px' }} checked={settings.allowNegativeStock} onChange={e => handleSettingChange('allowNegativeStock', e.target.checked)} />
                     <div>
                       <div style={{ fontWeight: 600 }}>Allow Negative Stock Billing</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Allow creating sales invoices even if system stock is zero (fixes physical vs system mismatch instantly).</div>
@@ -133,7 +169,7 @@ export default function Settings() {
                   </label>
                   
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px' }} />
+                    <input type="checkbox" style={{ width: '18px', height: '18px' }} checked={settings.warnNearExpiry} onChange={e => handleSettingChange('warnNearExpiry', e.target.checked)} />
                     <div>
                       <div style={{ fontWeight: 600 }}>Warn on selling Near Expiry stock</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Show a warning popup if batch expires within 30 days.</div>
@@ -141,7 +177,7 @@ export default function Settings() {
                   </label>
                   
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked disabled style={{ width: '18px', height: '18px' }} />
+                    <input type="checkbox" disabled style={{ width: '18px', height: '18px' }} checked={settings.blockExpired} />
                     <div>
                       <div style={{ fontWeight: 600 }}>Block sale of Expired Medicines</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Legally mandatory. System will not allow adding expired batches to any sales invoice.</div>
@@ -149,7 +185,7 @@ export default function Settings() {
                   </label>
 
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px' }} />
+                    <input type="checkbox" style={{ width: '18px', height: '18px' }} checked={settings.enforceFefo} onChange={e => handleSettingChange('enforceFefo', e.target.checked)} />
                     <div>
                       <div style={{ fontWeight: 600 }}>Enforce FEFO (First Expire First Out)</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Automatically suggest the batch closest to expiry when generating sales.</div>
@@ -167,21 +203,21 @@ export default function Settings() {
                 <div className="form-row-2">
                   <div className="form-group">
                     <label className="form-label">Financial Year</label>
-                    <select className="form-select" defaultValue="25-26">
+                    <select className="form-select" value={settings.financialYear} onChange={e => handleSettingChange('financialYear', e.target.value)}>
                       <option value="25-26">April 2025 - March 2026</option>
                       <option value="24-25">April 2024 - March 2025</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">UI Theme</label>
-                    <select className="form-select" defaultValue="light">
+                    <select className="form-select" value={settings.uiTheme} onChange={e => handleSettingChange('uiTheme', e.target.value)}>
                       <option value="light">Light Mode</option>
                     </select>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Dark mode restricted by admin.</span>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Auto Backup Frequency</label>
-                    <select className="form-select" defaultValue="daily">
+                    <select className="form-select" value={settings.autoBackup} onChange={e => handleSettingChange('autoBackup', e.target.value)}>
                       <option value="daily">Daily at 11:00 PM</option>
                       <option value="close">On Application Close</option>
                       <option value="weekly">Weekly</option>

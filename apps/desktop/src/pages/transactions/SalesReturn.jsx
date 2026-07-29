@@ -92,7 +92,7 @@ export default function SalesReturn() {
           const batchData = prod.batches.find(b => b.batch === value);
           if (batchData) {
             updated.expiry = batchData.expiry;
-            updated.rate = batchData.mrp; 
+            updated.rate = batchData.ptr || batchData.sale_price || batchData.mrp; 
           }
         }
       }
@@ -136,7 +136,7 @@ export default function SalesReturn() {
           batch: item.batch_no,
           expiry: item.expiry_date,
           qty: item.qty,
-          rate: item.mrp, 
+          rate: item.sale_price || item.ptr || item.mrp, 
           disc: item.disc_percent || 0,
           gst: item.gst_rate || item.prod_gst || 12,
           amount: 0 // Will be calculated by useEffect
@@ -208,10 +208,10 @@ export default function SalesReturn() {
           returnId,
           productId: row.product,
           batchId: batchData.id,
-          qty: row.qty,
-          mrp: row.rate,
-          salePrice: row.rate,
-          netAmount: row.amount,
+          qty: Number(row.qty),
+          mrp: Number(batchData.mrp),
+          salePrice: Number(row.rate),
+          netAmount: Number(row.amount),
           reason: mapReturnReason(returnReason)
         });
 

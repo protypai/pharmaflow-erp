@@ -8,7 +8,7 @@ export default function Sales() {
   const navigate = useNavigate();
   const [customerId, setCustomerId] = useState('');
   const [customerWarning, setCustomerWarning] = useState(null);
-  
+
   const [rows, setRows] = useState([
     { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
   ]);
@@ -54,7 +54,7 @@ export default function Sales() {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) {}
+        try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
         const custRes = await window.pharmaAPI.db.query("SELECT id, name, area, credit_limit, opening_balance FROM customers ORDER BY name ASC");
         setCustomersList(custRes?.data || []);
 
@@ -66,7 +66,7 @@ export default function Sales() {
           WHERE b.current_qty > 0
           ORDER BY p.name ASC, b.expiry_date ASC
         `);
-        
+
         const prodMap = {};
         if (prodRes?.data) {
           prodRes.data.forEach(row => {
@@ -96,7 +96,7 @@ export default function Sales() {
       }
     };
     fetchMasterData();
-    
+
     // Auto-generate sequential invoice number starting from 1
     fetchNextInvoiceNo();
   }, []);
@@ -140,7 +140,7 @@ export default function Sales() {
 
     const hasChanged = newRows.some((r, i) => Math.abs(r.amount - rows[i].amount) > 0.01);
     if (hasChanged) setRows(newRows);
-    
+
     setTotals({
       sub,
       disc: totalDisc,
@@ -182,9 +182,9 @@ export default function Sales() {
   const updateRow = (id, field, value) => {
     setRows(rows.map(r => {
       if (r.id !== id) return r;
-      
+
       let updated = { ...r, [field]: value };
-      
+
       if (field === 'productSearch') {
         updated.product = '';
         updated.productName = '';
@@ -196,7 +196,7 @@ export default function Sales() {
         updated.rate = 0;
         updated.mrp = 0;
       }
-      
+
       if (field === 'batch' && r.product) {
         const prod = productsList.find(p => p.id === r.product);
         if (prod) {
@@ -252,7 +252,7 @@ export default function Sales() {
           updated.available = Number(baseStrips);
         }
       }
-      
+
       return updated;
     }));
   };
@@ -292,7 +292,7 @@ export default function Sales() {
 
     setIsSaving(true);
     try {
-      try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) {}
+      try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
@@ -391,7 +391,7 @@ export default function Sales() {
       }
 
       const res = await window.pharmaAPI.db.transaction(operations);
-      
+
       if (!res.success) {
         throw new Error(res.error || 'Transaction failed');
       }
@@ -509,7 +509,7 @@ export default function Sales() {
       fetchNextInvoiceNo();
       setDoctorName('');
       setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
-      
+
       // Re-fetch master data to update available stock levels
       const prodRes = await window.pharmaAPI.db.query(`
         SELECT p.id as product_id, p.name as product_name, p.gst_rate, p.packing, p.conversion_factor,
@@ -519,7 +519,7 @@ export default function Sales() {
         WHERE b.current_qty > 0
         ORDER BY p.name ASC, b.expiry_date ASC
       `);
-      
+
       const prodMap = {};
       if (prodRes?.data) {
         prodRes.data.forEach(row => {
@@ -658,16 +658,16 @@ export default function Sales() {
                 return (
                   <tr key={r.id} style={{ background: overStock ? '#FEF2F2' : 'transparent' }}>
                     <td style={{ position: 'relative' }}>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         className="form-input form-input-sm"
-                        placeholder="Type to search product..." 
+                        placeholder="Type to search product..."
                         value={r.productSearch ?? ''}
                         onFocus={() => setActiveRowSearch(r.id)}
-                        onChange={e => updateRow(r.id, 'productSearch', e.target.value)} 
+                        onChange={e => updateRow(r.id, 'productSearch', e.target.value)}
                       />
                       {activeRowSearch === r.id && (
-                        <div 
+                        <div
                           style={{
                             position: 'absolute', top: '100%', left: 0, width: '300px',
                             background: '#fff', border: '1px solid var(--border)', borderRadius: '4px',
@@ -678,8 +678,8 @@ export default function Sales() {
                             .filter(p => !r.productSearch || p.name.toLowerCase().includes(r.productSearch.toLowerCase()))
                             .slice(0, 20)
                             .map(p => (
-                              <div 
-                                key={p.id} 
+                              <div
+                                key={p.id}
                                 style={{ padding: '6px 10px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', fontSize: '13px' }}
                                 onMouseDown={(e) => { e.preventDefault(); selectProduct(r.id, p); }}
                                 onMouseEnter={(e) => e.target.style.background = '#f8fafc'}
@@ -752,7 +752,7 @@ export default function Sales() {
             </tbody>
           </table>
         </div>
-        
+
         <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', background: '#F8FAFC', display: 'flex', justifyContent: 'flex-end' }}>
           <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>

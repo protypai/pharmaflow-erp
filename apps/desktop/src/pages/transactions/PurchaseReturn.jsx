@@ -203,10 +203,10 @@ export default function PurchaseReturn() {
           returnId,
           productId: row.product,
           batchId: batchData.id,
-          qty: row.qty,
-          mrp: batchData.mrp,
-          ptr: row.ptr,
-          netAmount: row.amount,
+          qty: Number(row.qty),
+          mrp: Number(batchData.mrp),
+          ptr: Number(row.ptr),
+          netAmount: Number(row.amount),
           reason: mapReturnReason(returnReason)
         });
 
