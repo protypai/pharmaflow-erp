@@ -82,6 +82,36 @@ export default function Dashboard() {
           else if (p.totalQty < (p.min_stock || 10)) lowStockCount++;
         });
 
+        const cashRes = await window.pharmaAPI.db.query(`
+          SELECT 
+            COALESCE((SELECT SUM(amount) FROM receipts WHERE payment_mode = 'cash'), 0) -
+            COALESCE((SELECT SUM(amount) FROM payments WHERE payment_mode = 'cash'), 0) as total
+        `);
+
+        const bankRes = await window.pharmaAPI.db.query(`
+          SELECT 
+            COALESCE((SELECT SUM(amount) FROM receipts WHERE payment_mode != 'cash'), 0) -
+            COALESCE((SELECT SUM(amount) FROM payments WHERE payment_mode != 'cash'), 0) as total
+        `);
+
+        let deadCount = 0;
+        try {
+          const deadRes = await window.pharmaAPI.db.query(`
+            SELECT COUNT(DISTINCT p.id) as count 
+            FROM products p 
+            JOIN batches b ON p.id = b.product_id 
+            WHERE b.current_qty > 0 
+            AND p.id NOT IN (SELECT DISTINCT product_id FROM sale_items)
+          `);
+          deadCount = deadRes?.data?.[0]?.count || 0;
+        } catch (e) {}
+
+        let pendingRetCount = 0;
+        try {
+          const pendingRetRes = await window.pharmaAPI.db.query("SELECT COUNT(*) as count FROM sale_returns");
+          pendingRetCount = pendingRetRes?.data?.[0]?.count || 0;
+        } catch (e) {}
+
         const sales = salesRes?.data || [];
         const purch = purchRes?.data || [];
         const coll = collRes?.data || [];
@@ -97,12 +127,14 @@ export default function Dashboard() {
           newCustomers: customers[0]?.count || 0,
           outstandingReceivable: recRes?.data?.[0]?.total || 0,
           outstandingPayable: paybleRes?.data?.[0]?.total || 0,
+          cashBalance: cashRes?.data?.[0]?.total || 0,
+          bankBalance: bankRes?.data?.[0]?.total || 0,
           nearExpiry: nearExpiryCount,
           expiredStock: expiredStockCount,
           lowStock: lowStockCount,
           outOfStock: outOfStockCount,
-          deadStock: 0,
-          pendingReturns: 0
+          deadStock: deadCount,
+          pendingReturns: pendingRetCount
         }));
       } catch (err) {
         console.error('Failed to load DB stats', err);
@@ -133,7 +165,7 @@ export default function Dashboard() {
         <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Today's Business
         </h3>
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="kpi-grid">
           <div className="kpi-card blue">
             <div className="kpi-label">Today's Sales</div>
             <div className="kpi-value">{formatCurr(todaySales.amount)}</div>
@@ -160,7 +192,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginTop: '-0.5rem' }}>
+        <div className="kpi-grid" style={{ marginTop: '-0.5rem' }}>
           <div className="kpi-card teal">
             <div className="kpi-label">Cash Balance</div>
             <div className="kpi-value">{formatCurr(cashBalance)}</div>
@@ -193,7 +225,7 @@ export default function Dashboard() {
         <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Action Required Alerts
         </h3>
-        <div className="alert-grid" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        <div className="alert-grid">
           <div className="alert-card orange">
             <div className="alert-icon"><Clock size={18} /></div>
             <div className="alert-count">{nearExpiry}</div>

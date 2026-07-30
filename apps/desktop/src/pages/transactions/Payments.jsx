@@ -148,7 +148,7 @@ export default function Payments() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
           <h1 className="page-title">Payments (Money Paid)</h1>
@@ -217,7 +217,7 @@ export default function Payments() {
             Auto Allocate (FIFO)
           </button>
         </div>
-        <div className="card-body no-pad" style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="card-body no-pad" style={{ flex: 1, overflow: 'auto', minHeight: '300px' }}>
           <table className="data-table">
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>

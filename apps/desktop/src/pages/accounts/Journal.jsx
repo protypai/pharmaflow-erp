@@ -25,9 +25,7 @@ export default function Journal() {
   };
 
   const removeRow = (id) => {
-    if (rows.length > 2) {
-      setRows(rows.filter(r => r.id !== id));
-    }
+    setRows(rows.filter(r => r.id !== id));
   };
 
   return (

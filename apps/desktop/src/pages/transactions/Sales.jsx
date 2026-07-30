@@ -10,7 +10,7 @@ export default function Sales() {
   const [customerWarning, setCustomerWarning] = useState(null);
 
   const [rows, setRows] = useState([
-    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
+    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
   ]);
   const [activeRowSearch, setActiveRowSearch] = useState(null);
   const [totals, setTotals] = useState({ sub: 0, disc: 0, gst: 0, net: 0 });
@@ -150,7 +150,7 @@ export default function Sales() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+    setRows([...rows, { id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
   };
 
   const selectProduct = (id, prod) => {
@@ -224,7 +224,7 @@ export default function Sales() {
       }
 
       if (field === 'unit') {
-        const oldUnit = r.unit || 'box';
+        const oldUnit = r.unit || 'strip';
         const newUnit = value;
         const factor = packSize(updated.boxSize);
         const baseStrips = r.baseAvailable ?? 0;
@@ -258,9 +258,7 @@ export default function Sales() {
   };
 
   const removeRow = (id) => {
-    if (rows.length > 1) {
-      setRows(rows.filter(r => r.id !== id));
-    }
+    setRows(rows.filter(r => r.id !== id));
   };
 
   const handleSave = async () => {
@@ -508,7 +506,7 @@ export default function Sales() {
       setCustomerId('');
       fetchNextInvoiceNo();
       setDoctorName('');
-      setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'box', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+      setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
 
       // Re-fetch master data to update available stock levels
       const prodRes = await window.pharmaAPI.db.query(`
@@ -548,7 +546,7 @@ export default function Sales() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
           <h1 className="page-title">Sales Invoice (Outward)</h1>
@@ -599,7 +597,7 @@ export default function Sales() {
 
       <div className="card">
         <div className="card-body">
-          <div className="form-row-2">
+          <div className="form-row-4">
             <div className="form-group">
               <label className="form-label">Customer <span className="text-danger">*</span></label>
               <select className="form-select" value={customerId} onChange={e => setCustomerId(e.target.value)}>
@@ -628,7 +626,7 @@ export default function Sales() {
       </div>
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div className="card-body no-pad" style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="card-body no-pad" style={{ flex: 1, overflow: 'auto', minHeight: '300px' }}>
           <table className="data-table" style={{ minWidth: '1100px' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
@@ -711,9 +709,9 @@ export default function Sales() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         <input type="number" className="form-input form-input-sm" min="1" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} style={{ borderColor: overStock ? 'var(--danger)' : 'var(--border)', fontWeight: 600 }} />
                         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                          <select className="form-select form-input-sm" value={r.unit || 'box'} onChange={e => updateRow(r.id, 'unit', e.target.value)} style={{ padding: '1px 4px', height: '22px', fontSize: '11px', background: '#f8fafc', flex: 1 }}>
-                            <option value="box">Per Box</option>
+                          <select className="form-select form-input-sm" value={r.unit || 'strip'} onChange={e => updateRow(r.id, 'unit', e.target.value)} style={{ padding: '1px 4px', height: '22px', fontSize: '11px', background: '#f8fafc', flex: 1 }}>
                             <option value="strip">Per Strip</option>
+                            <option value="box">Per Box</option>
                           </select>
                           {r.unit === 'box' && (
                             <input type="number" className="form-input form-input-sm" min="1" title="Units per Box" value={r.boxSize || 10} onChange={e => updateRow(r.id, 'boxSize', e.target.value)} style={{ width: '40px', padding: '1px 2px', height: '22px', fontSize: '11px', textAlign: 'center' }} />

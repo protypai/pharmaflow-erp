@@ -128,15 +128,34 @@ export default function Header({ collapsed, onToggle, pathname }) {
     : [];
 
   useEffect(() => {
+    setHighlighted(0);
+  }, [searchQuery]);
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlighted(prev => (prev < searchResults.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted(prev => (prev > 0 ? prev - 1 : prev));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (searchResults.length > 0 && searchResults[highlighted]) {
+        handleSearchSelect(searchResults[highlighted]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setSearchOpen(false);
+      setSearchQuery('');
+    }
+  };
+
+  useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setSearchOpen(true);
         setTimeout(() => searchRef.current?.focus(), 50);
-      }
-      if (e.key === 'Escape') {
-        setSearchOpen(false);
-        setSearchQuery('');
       }
     };
     window.addEventListener('keydown', handler);
@@ -341,6 +360,7 @@ export default function Header({ collapsed, onToggle, pathname }) {
                 placeholder="Search medicines, customers, suppliers, invoices…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 id="global-search-input"
               />
               {searchQuery && (
@@ -366,12 +386,15 @@ export default function Header({ collapsed, onToggle, pathname }) {
               {Object.entries(grouped).map(([type, items]) => (
                 <div key={type} className="search-result-group">
                   <div className="search-result-label">{type}</div>
-                  {items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="search-result-item"
-                      onClick={() => handleSearchSelect(item)}
-                    >
+                  {items.map((item, idx) => {
+                    const globalIdx = searchResults.indexOf(item);
+                    return (
+                      <div
+                        key={idx}
+                        className="search-result-item"
+                        style={{ background: globalIdx === highlighted ? '#f1f5f9' : 'transparent' }}
+                        onClick={() => handleSearchSelect(item)}
+                      >
                       <div className="search-result-icon">
                         <item.icon size={14} />
                       </div>
@@ -379,8 +402,9 @@ export default function Header({ collapsed, onToggle, pathname }) {
                         <div className="search-result-name">{item.name}</div>
                         <div className="search-result-sub">{item.sub}</div>
                       </div>
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>

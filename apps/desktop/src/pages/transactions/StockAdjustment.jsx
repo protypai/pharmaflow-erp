@@ -76,9 +76,7 @@ export default function StockAdjustment() {
   };
 
   const removeRow = (id) => {
-    if (rows.length > 1) {
-      setRows(rows.filter(r => r.id !== id));
-    }
+    setRows(rows.filter(r => r.id !== id));
   };
 
   const [adjDate, setAdjDate] = useState(new Date().toISOString().split('T')[0]);
@@ -146,7 +144,7 @@ export default function StockAdjustment() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
           <h1 className="page-title">Stock Adjustment</h1>
@@ -187,7 +185,7 @@ export default function StockAdjustment() {
       </div>
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div className="card-body no-pad" style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="card-body no-pad" style={{ flex: 1, overflow: 'auto', minHeight: '300px' }}>
           <table className="data-table">
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>

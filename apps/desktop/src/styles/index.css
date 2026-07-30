@@ -562,7 +562,7 @@ p { line-height: 1.6; }
 /* KPI Cards */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -630,7 +630,7 @@ p { line-height: 1.6; }
 /* Alert Cards */
 .alert-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
@@ -846,12 +846,12 @@ p { line-height: 1.6; }
   color: var(--danger);
 }
 
-.form-row {
+.form-row, .form-row-2, .form-row-3, .form-row-4 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
 }
 
+.form-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .form-row-2 { grid-template-columns: 1fr 1fr; }
 .form-row-3 { grid-template-columns: 1fr 1fr 1fr; }
 .form-row-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
@@ -1494,3 +1494,72 @@ p { line-height: 1.6; }
 .mb-4 { margin-bottom: 1rem; }
 .w-full { width: 100%; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── RESPONSIVE LAYOUTS ─────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* Sidebar behaves as an off-canvas drawer */
+  .app-sidebar {
+    transform: translateX(0);
+    border-right: none;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  }
+  .app-sidebar.collapsed {
+    transform: translateX(-100%);
+    width: var(--sidebar-width); /* keep width the same so it just slides out */
+  }
+
+  /* Main content takes full width */
+  .app-main {
+    margin-left: 0 !important;
+  }
+  .app-main.collapsed {
+    margin-left: 0 !important;
+  }
+
+  /* Condense multi-column form grids to 2 columns */
+  .form-row-3, .form-row-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Header items wrapping/stacking */
+  .app-header {
+    padding: 0 1rem;
+    gap: 0.5rem;
+  }
+  
+  .header-breadcrumb {
+    display: none; /* Hide breadcrumbs on mobile to save space for search and actions */
+  }
+
+  /* Global Search adjustments */
+  .header-search {
+    flex: 1;
+    min-width: 100px;
+  }
+  .header-search-text {
+    display: none; /* Hide placeholder text to just show icon or compact version */
+  }
+  .header-search-kbd {
+    display: none;
+  }
+
+  /* Form grids collapse to a single column */
+  .form-row-2, .form-row-3, .form-row-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .page-actions {
+    justify-content: flex-start;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

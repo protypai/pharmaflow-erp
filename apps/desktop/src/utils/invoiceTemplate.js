@@ -156,12 +156,10 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   const titleText = isPurchase ? 'PURCHASE INVOICE' : 'INVOICE / TAX INVOICE';
 
   let formattedDate = val(invoice.date, '');
-  if (typeof formattedDate === 'string' && formattedDate.includes('T')) {
+  if (formattedDate) {
     const d = new Date(formattedDate);
     if (!isNaN(d)) {
-      formattedDate = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
-    } else {
-      formattedDate = formattedDate.split('T')[0];
+      formattedDate = `${String(d.getDate()).padStart(2, '0')} ${String(d.getMonth() + 1).padStart(2, '0')} ${d.getFullYear()}`;
     }
   }
 

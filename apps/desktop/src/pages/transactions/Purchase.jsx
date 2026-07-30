@@ -48,8 +48,7 @@ export default function Purchase() {
     let totalGst = 0;
 
     const newRows = rows.map(r => {
-      const packMultiplier = (r.priceUnit || 'strip') === 'strip' ? (Number(r.boxSize) || 10) : 1;
-      const baseAmt = (Number(r.qty) || 0) * (Number(r.invPrice) || 0) * packMultiplier;
+      const baseAmt = (Number(r.qty) || 0) * (Number(r.invPrice) || 0);
       const rowDisc = baseAmt * ((Number(r.disc) || 0) / 100);
       const taxable = baseAmt - rowDisc;
       const gstAmt = taxable * ((Number(r.gst) || 0) / 100);
@@ -109,9 +108,7 @@ export default function Purchase() {
   };
 
   const removeRow = (id) => {
-    if (rows.length > 1) {
-      setRows(rows.filter(r => r.id !== id));
-    }
+    setRows(rows.filter(r => r.id !== id));
   };
 
   const handleSave = async () => {
@@ -178,8 +175,8 @@ export default function Purchase() {
         const priceUnit = row.priceUnit || 'strip';
         const packMultiplier = packSize(row.boxSize);
 
-        // Purchase qty is entered in BOXES; stock is stored in STRIPS (base unit).
-        const stockQty = toStrips(Number(row.qty) || 0, 'box', packMultiplier);
+        // Purchase qty is interpreted in the selected unit; stock is stored in STRIPS (base unit).
+        const stockQty = toStrips(Number(row.qty) || 0, priceUnit, packMultiplier);
 
         // Database prices always record Price per Strip.
         const unitPurchasePrice = Number(perStripPrice(row.invPrice, priceUnit, packMultiplier).toFixed(2));
@@ -342,7 +339,7 @@ export default function Purchase() {
             pack: meta.packing || `1x${pack}`,
             batch: r.batch,
             exp: r.expiry,
-            qty: toStrips(r.qty, 'box', pack),
+            qty: toStrips(r.qty, pu, pack),
             free: 0,
             mrp: perStripPrice(r.mrp, pu, pack),
             pts: perStripPrice(r.pts, pu, pack),
@@ -386,7 +383,7 @@ export default function Purchase() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 120px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
           <h1 className="page-title">Purchase Entry (Inward)</h1>
@@ -429,7 +426,7 @@ export default function Purchase() {
 
       <div className="card">
         <div className="card-body">
-          <div className="form-row-2">
+          <div className="form-row-4">
             <div className="form-group">
               <label className="form-label">Supplier / Distributor <span className="text-danger">*</span></label>
               <select className="form-select" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
@@ -466,7 +463,7 @@ export default function Purchase() {
       </div>
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div className="card-body no-pad" style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="card-body no-pad" style={{ flex: 1, overflow: 'auto', minHeight: '300px' }}>
           <table className="data-table" style={{ minWidth: '1350px', overflow: 'visible' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
@@ -541,7 +538,9 @@ export default function Purchase() {
                           <option value="strip">Per Strip/Unit</option>
                           <option value="box">Per Box</option>
                         </select>
-                        <input type="number" className="form-input form-input-sm" min="1" placeholder="Strips/Box" title="Strips per Box" value={r.boxSize === 0 ? '' : r.boxSize} onChange={e => updateRow(r.id, 'boxSize', e.target.value)} style={{ width: '45px', padding: '1px 4px', height: '22px', fontSize: '11px', textAlign: 'center', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        {(r.priceUnit || 'strip') === 'box' && (
+                          <input type="number" className="form-input form-input-sm" min="1" placeholder="Strips/Box" title="Strips per Box" value={r.boxSize === 0 ? '' : r.boxSize} onChange={e => updateRow(r.id, 'boxSize', e.target.value)} style={{ width: '45px', padding: '1px 4px', height: '22px', fontSize: '11px', textAlign: 'center', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        )}
                       </div>
                     </div>
                   </td>

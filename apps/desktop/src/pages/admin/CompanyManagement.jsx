@@ -306,7 +306,7 @@ export default function CompanyManagement() {
             </div>
             <div className="card-body">
               <h4 style={{ color: 'var(--primary)', marginBottom: '1rem', marginTop: 0 }}>Basic Info</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div className="form-row-2" style={{ marginBottom: '1.5rem' }}>
                 <div><strong>Legal Name:</strong> {selectedCompany.name}</div>
                 <div><strong>Trade Name:</strong> {selectedCompany.shortName || 'N/A'}</div>
                 <div><strong>Est. Year:</strong> {selectedCompany.estYear || 'N/A'}</div>
@@ -316,14 +316,14 @@ export default function CompanyManagement() {
               <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Contact & Address</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div><strong>Address:</strong> {selectedCompany.address || 'N/A'}, {selectedCompany.city || 'N/A'}, {selectedCompany.state || 'N/A'} - {selectedCompany.pincode || 'N/A'}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-row-2">
                   <div><strong>Phone:</strong> {selectedCompany.phone || 'N/A'}</div>
                   <div><strong>Email:</strong> {selectedCompany.email || 'N/A'}</div>
                 </div>
               </div>
 
               <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Licenses & Tax</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div className="form-row-2" style={{ marginBottom: '1.5rem' }}>
                 <div><strong>GSTIN:</strong> {selectedCompany.gstin || 'N/A'}</div>
                 <div><strong>PAN:</strong> {selectedCompany.pan || 'N/A'}</div>
                 <div><strong>Drug License (20B):</strong> {selectedCompany.drugLicense20B || 'N/A'}</div>
@@ -332,7 +332,7 @@ export default function CompanyManagement() {
               </div>
 
               <h4 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Bank Details</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div className="form-row-2" style={{ marginBottom: '1.5rem' }}>
                 <div><strong>Bank Name:</strong> {selectedCompany.bankName || 'N/A'}</div>
                 <div><strong>Account No:</strong> {selectedCompany.bankAccount || 'N/A'}</div>
                 <div><strong>IFSC Code:</strong> {selectedCompany.bankIfsc || 'N/A'}</div>
