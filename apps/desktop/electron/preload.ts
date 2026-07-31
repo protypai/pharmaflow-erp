@@ -70,6 +70,19 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
     onDownloaded: (callback: () => void) =>
       ipcRenderer.on('update:downloaded', () => callback()),
   },
+
+  // Import (Migration Engine) operations
+  import: {
+    selectFile: () => ipcRenderer.invoke('import:selectFile'),
+    analyzeSource: (filePath: string, format: string) => 
+      ipcRenderer.invoke('import:analyze', filePath, format),
+    startImport: (filePath: string, format: string, options: any) => 
+      ipcRenderer.invoke('import:start', filePath, format, options),
+    onProgress: (callback: (progress: any) => void) => 
+      ipcRenderer.on('import:progress', (_e, progress) => callback(progress)),
+    removeProgressListener: () => 
+      ipcRenderer.removeAllListeners('import:progress'),
+  },
 });
 
 // TypeScript declaration

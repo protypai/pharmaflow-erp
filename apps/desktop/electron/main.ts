@@ -9,6 +9,7 @@ import { setupPrintHandlers } from './ipc/print.handler';
 import { setupExportHandlers } from './ipc/export.handler';
 import { setupBackupHandlers } from './ipc/backup.handler';
 import { setupUpdateHandlers } from './ipc/update.handler';
+import { setupImportHandlers } from './ipc/import.handler';
 import { initLocalDb } from './services/localDb.service';
 import { setupTray } from './windows/tray';
 
@@ -221,6 +222,7 @@ async function createWindow() {
   setupExportHandlers();
   setupBackupHandlers();
   setupUpdateHandlers(mainWindow);
+  setupImportHandlers(mainWindow);
 }
 
 protocol.registerSchemesAsPrivileged([

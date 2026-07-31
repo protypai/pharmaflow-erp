@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Save, FileText, Settings as SettingsIcon, Database, CheckSquare, Layers, RefreshCw } from 'lucide-react';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('invoicing');
   const [appVersion, setAppVersion] = useState('1.0.18');
   const [checking, setChecking] = useState(false);
@@ -108,6 +110,13 @@ export default function Settings() {
               onClick={() => setActiveTab('system')}
             >
               <SettingsIcon size={16} /> System & Theme
+            </button>
+            <button 
+              className={`btn ${activeTab === 'import' ? 'btn-primary' : 'btn-ghost'}`} 
+              style={{ justifyContent: 'flex-start' }}
+              onClick={() => setActiveTab('import')}
+            >
+              <Database size={16} /> Data Import
             </button>
           </div>
         </div>
@@ -260,6 +269,41 @@ export default function Settings() {
                       {checking ? 'Checking...' : 'Check for Updates'}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'import' && (
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Database size={18} color="var(--primary)" /> Data Migration
+                </h3>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'var(--primary-50)',
+                  border: '1px solid var(--primary-light)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '1.25rem'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                      Import Existing Data
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Migrate data from your legacy ERP or CSV spreadsheets into PharmaFlow ERP using our Field Mapping Wizard.
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      navigate('/setup/import');
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    <Database size={14} /> Open Import Wizard
+                  </button>
                 </div>
               </div>
             )}

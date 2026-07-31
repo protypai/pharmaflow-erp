@@ -52,9 +52,10 @@ import CustomerReport from './pages/reports/CustomerReport';
 import SupplierReport from './pages/reports/SupplierReport';
 import ProfitReport from './pages/reports/ProfitReport';
 
-// Settings, Profile
+// Settings, Profile, Setup
 import Settings from './pages/settings/Settings';
 import Profile from './pages/profile/Profile';
+import ImportWizard from './pages/setup/ImportWizard';
 
 // Admin
 import AdminLogin from './pages/admin/AdminLogin';
@@ -161,9 +162,10 @@ export default function App() {
         <Route path="/reports/supplier" element={<WithLayout><SupplierReport /></WithLayout>} />
         <Route path="/reports/profit" element={<WithLayout><ProfitReport /></WithLayout>} />
 
-        {/* Settings, Profile */}
+        {/* Settings, Profile, Setup */}
         <Route path="/settings" element={<WithLayout><Settings /></WithLayout>} />
         <Route path="/profile" element={<WithLayout><Profile /></WithLayout>} />
+        <Route path="/setup/import" element={<WithLayout><ImportWizard /></WithLayout>} />
 
         {/* Default */}
         <Route path="/" element={<Navigate to="/login" replace />} />
