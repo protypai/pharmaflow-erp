@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Printer, Download, FileText, ShoppingCart } from 'lucide-react';
+import { Search, Printer, Download, FileText, ShoppingCart, Edit } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
   getCompanyProfile, dateRangeBounds,
@@ -8,6 +9,8 @@ import { exportPastInvoice } from '../../utils/invoiceTemplate';
 
 
 export default function PurchaseReport() {
+  const navigate = useNavigate();
+  const [lastPurchaseId, setLastPurchaseId] = useState(null);
   const [suppliers, set_suppliers] = useState([]);
 
   useEffect(() => {
@@ -41,10 +44,13 @@ export default function PurchaseReport() {
         FROM purchases p
         LEFT JOIN suppliers s ON p.supplier_id = s.id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY p.invoice_date DESC
+        ORDER BY p.invoice_date DESC, p.created_at DESC
       `;
       const res = await window.pharmaAPI.db.query(query, params);
       setPurchaseData(res?.data || []);
+
+      const lastRes = await window.pharmaAPI.db.query("SELECT id FROM purchases ORDER BY created_at DESC LIMIT 1");
+      setLastPurchaseId(lastRes?.data?.[0]?.id || null);
     } catch (err) {
       console.error("Failed to fetch purchase data:", err);
     }
@@ -185,6 +191,16 @@ export default function PurchaseReport() {
                 </td>
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                    {row.purchaseId === lastPurchaseId && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: '3px 7px', minWidth: 0, color: '#D97706', borderColor: '#D97706' }}
+                        title="Edit Invoice"
+                        onClick={() => navigate(`/transactions/purchase/edit/${row.purchaseId}`)}
+                      >
+                        <Edit size={14} />
+                      </button>
+                    )}
                     <button
                       className="btn btn-outline btn-sm"
                       style={{ padding: '3px 7px', minWidth: 0 }}

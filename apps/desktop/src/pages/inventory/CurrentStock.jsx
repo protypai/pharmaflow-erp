@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, Printer, Download, Package } from 'lucide-react';
+import { Search, Filter, Printer, Download, Package, X } from 'lucide-react';
 import { formatStock } from '../../utils/units';
-
 
 export default function CurrentStock() {
   const [products, set_products] = useState([]);
   const [categories, set_categories] = useState([]);
   const [manufacturers, set_manufacturers] = useState([]);
+  const [isBatchesModalOpen, setIsBatchesModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productBatches, setProductBatches] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -15,26 +17,19 @@ export default function CurrentStock() {
                c.name as category, 
                m.name as manufacturer, 
                r.code as rack,
-               IFNULL(b_agg.totalQty, 0) as totalQty,
-               IFNULL(b_agg.avgPtr, 0) as avgPtr,
-               IFNULL(b_agg.avgMrp, 0) as avgMrp,
-               IFNULL(b_agg.totalValuePTR, 0) as totalValuePTR,
-               IFNULL(b_agg.totalValueMRP, 0) as totalValueMRP
+               b.id as batch_id,
+               b.batch_no,
+               b.expiry_date,
+               b.mrp,
+               b.ptr,
+               b.current_qty
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
         LEFT JOIN racks r ON p.rack_id = r.id
-        LEFT JOIN (
-           SELECT product_id,
-                  SUM(current_qty) as totalQty,
-                  SUM(current_qty * ptr) / SUM(current_qty) as avgPtr,
-                  SUM(current_qty * mrp) / SUM(current_qty) as avgMrp,
-                  SUM(current_qty * ptr) as totalValuePTR,
-                  SUM(current_qty * mrp) as totalValueMRP
-           FROM batches
-           WHERE current_qty > 0
-           GROUP BY product_id
-        ) b_agg ON b_agg.product_id = p.id
+        JOIN batches b ON b.product_id = p.id
+        WHERE b.current_qty > 0
+        ORDER BY p.name ASC, b.expiry_date ASC
       `);
       set_products(res_products?.data || []);
       const res_categories = await window.pharmaAPI.db.query("SELECT * FROM categories");
@@ -49,32 +44,28 @@ export default function CurrentStock() {
   const [catFilter, setCatFilter] = useState('');
   const [mfgFilter, setMfgFilter] = useState('');
 
-  // Calculate aggregated stock data
   const stockData = useMemo(() => {
     return products.map(p => {
-      const totalQty = p.totalQty || 0;
-      const avgPtr = p.avgPtr || 0;
-      const avgMrp = p.avgMrp || 0;
-      const totalValuePTR = p.totalValuePTR || 0;
-      const totalValueMRP = p.totalValueMRP || 0;
+      const totalQty = p.current_qty || 0;
+      const totalValuePTR = totalQty * (p.ptr || 0);
+      const totalValueMRP = totalQty * (p.mrp || 0);
 
       return {
         ...p,
         totalQty,
-        avgPtr,
-        avgMrp,
         totalValuePTR,
         totalValueMRP
       };
     }).filter(p => {
-      if (search && !p.name?.toLowerCase().includes(search.toLowerCase()) && !p.generic_name?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search && !p.name?.toLowerCase().includes(search.toLowerCase()) && !p.generic_name?.toLowerCase().includes(search.toLowerCase()) && !p.batch_no?.toLowerCase().includes(search.toLowerCase())) return false;
       if (catFilter && p.category_id !== catFilter) return false;
       if (mfgFilter && p.manufacturer_id !== mfgFilter) return false;
-      // Only show items that actually have stock
       if (p.totalQty <= 0) return false;
       return true;
     });
   }, [search, catFilter, mfgFilter, products]);
+
+
 
   // Aggregate totals for the footer
   const grandTotals = stockData.reduce((acc, curr) => {
@@ -122,25 +113,31 @@ export default function CurrentStock() {
             <tr>
               <th>Item Code</th>
               <th>Product Details</th>
+              <th>Batch No</th>
+              <th>Expiry</th>
               <th>Rack</th>
               <th>Available Qty</th>
               <th>Unit</th>
-              <th style={{ textAlign: 'right' }}>Avg PTR (₹)</th>
-              <th style={{ textAlign: 'right' }}>Avg MRP (₹)</th>
+              <th style={{ textAlign: 'right' }}>PTR (₹)</th>
+              <th style={{ textAlign: 'right' }}>MRP (₹)</th>
               <th style={{ textAlign: 'right' }}>Stock Value (PTR)</th>
             </tr>
           </thead>
           <tbody>
             {stockData.length === 0 ? (
-              <tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>No stock found matching criteria.</td></tr>
+              <tr><td colSpan="10" style={{ textAlign: 'center', padding: '2rem' }}>No stock found matching criteria.</td></tr>
             ) : stockData.map(prod => (
-              <tr key={prod.id}>
+              <tr key={prod.batch_id}>
                 <td style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{prod.code}</td>
                 <td>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{prod.name}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                     {prod.genericName} • {prod.category} • {prod.manufacturer}
                   </div>
+                </td>
+                <td style={{ fontWeight: 600 }}>{prod.batch_no}</td>
+                <td style={{ color: new Date(prod.expiry_date) < new Date() ? 'var(--danger)' : 'inherit' }}>
+                  {prod.expiry_date}
                 </td>
                 <td>{prod.rack}</td>
                 <td>
@@ -150,8 +147,8 @@ export default function CurrentStock() {
                   </div>
                 </td>
                 <td style={{ color: 'var(--text-secondary)' }}>{prod.sale_unit}</td>
-                <td style={{ textAlign: 'right' }}>{prod.avgPtr.toFixed(2)}</td>
-                <td style={{ textAlign: 'right' }}>{prod.avgMrp.toFixed(2)}</td>
+                <td style={{ textAlign: 'right' }}>{(prod.ptr || 0).toFixed(2)}</td>
+                <td style={{ textAlign: 'right' }}>{(prod.mrp || 0).toFixed(2)}</td>
                 <td style={{ fontWeight: 600, textAlign: 'right' }}>₹ {prod.totalValuePTR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
             ))}
@@ -180,6 +177,9 @@ export default function CurrentStock() {
           </div>
         </div>
       </div>
+
+
+
     </div>
   );
 }

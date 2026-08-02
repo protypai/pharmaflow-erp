@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Calculator, AlertTriangle, ArrowLeft, Download } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml } from '../../utils/invoiceTemplate';
 import { packSize, toStrips, perStripPrice } from '../../utils/units';
 import { toIsoExpiry } from '../../utils/dates';
 export default function Purchase() {
   const navigate = useNavigate();
+  const { id: editId } = useParams();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [originalItems, setOriginalItems] = useState([]);
   const [rows, setRows] = useState([
     { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }
   ]);
@@ -37,9 +40,61 @@ export default function Purchase() {
         console.error('Failed to load master data for purchase:', err);
         setErrorMsg('Failed to load suppliers/products from database.');
       }
+      
+      if (editId) {
+         setIsEditMode(true);
+         try {
+           const pRes = await window.pharmaAPI.db.query("SELECT * FROM purchases WHERE id = ?", [editId]);
+           if (pRes?.data?.length) {
+              const purchase = pRes.data[0];
+              setSupplierId(purchase.supplier_id);
+              setInvoiceNo(purchase.invoice_no);
+              setInvoiceDate(purchase.invoice_date ? purchase.invoice_date.split('T')[0] : '');
+              setPaymentMode(purchase.payment_mode === 'credit' ? 'Credit' : (purchase.payment_mode === 'cash' ? 'Cash' : 'Bank / UPI'));
+              
+              const itemsRes = await window.pharmaAPI.db.query(`
+                SELECT pi.*, p.name as product_name, b.batch_no, b.expiry_date, p.conversion_factor, p.gst_rate
+                FROM purchase_items pi
+                JOIN products p ON pi.product_id = p.id
+                JOIN batches b ON pi.batch_id = b.id
+                WHERE pi.purchase_id = ?
+              `, [editId]);
+              
+              if (itemsRes?.data?.length) {
+                 setOriginalItems(itemsRes.data);
+                 const loadedRows = itemsRes.data.map((item, index) => {
+                    const boxSize = (item.conversion_factor && Number(item.conversion_factor) > 0) ? Number(item.conversion_factor) : 10;
+                    return {
+                       id: Date.now() + index,
+                       product: item.product_id,
+                       productName: item.product_name,
+                       productSearch: item.product_name,
+                       batch: item.batch_no,
+                       batchId: item.batch_id,
+                       expiry: item.expiry_date,
+                       qty: item.qty,
+                       invPrice: item.purchase_price,
+                       priceUnit: 'strip',
+                       boxSize: boxSize,
+                       pts: item.pts || 0,
+                       ptr: item.ptr || 0,
+                       mrp: item.mrp || 0,
+                       disc: item.disc_percent,
+                       gst: item.gst_rate,
+                       amount: item.net_amount,
+                       effectiveUnitPrice: item.purchase_price
+                    };
+                 });
+                 setRows(loadedRows);
+              }
+           }
+         } catch (e) {
+           console.error('Failed to load edit purchase', e);
+         }
+      }
     };
     fetchMasterData();
-  }, []);
+  }, [editId]);
 
   // Calculate row amounts and totals when rows change
   useEffect(() => {
@@ -133,24 +188,40 @@ export default function Purchase() {
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
       const companyId = userRes.data[0].company_id;
-      const purchaseId = 'PUR-' + Date.now();
-      const entryNo = 'PE-' + Date.now().toString().slice(-6);
+      const purchaseId = isEditMode ? editId : 'PUR-' + Date.now();
+      const entryNo = isEditMode ? null : 'PE-' + Date.now().toString().slice(-6);
 
       const operations = [];
 
-      // 1. Insert into purchases
-      operations.push({
-        sql: `INSERT INTO purchases (
-          id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type,
-          subtotal, discount_amount, taxable_amount, net_amount, payment_mode, paid_amount, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
-        params: [
-          purchaseId, companyId, entryNo, supplierId, invoiceNo, invoiceDate, gstType,
-          totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net
-        ]
-      });
+      if (isEditMode) {
+         operations.push({
+           sql: `UPDATE purchases SET 
+             supplier_id = ?, invoice_no = ?, invoice_date = ?, gst_type = ?,
+             subtotal = ?, discount_amount = ?, taxable_amount = ?, net_amount = ?, payment_mode = ?, paid_amount = ?, updated_at = datetime('now')
+             WHERE id = ?`,
+           params: [
+             supplierId, invoiceNo, invoiceDate, gstType,
+             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, purchaseId
+           ]
+         });
+         
+         operations.push({
+            sql: `DELETE FROM payments WHERE notes = ?`,
+            params: ['Against Purchase ' + invoiceNo]
+         });
+      } else {
+         operations.push({
+           sql: `INSERT INTO purchases (
+             id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type,
+             subtotal, discount_amount, taxable_amount, net_amount, payment_mode, paid_amount, status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
+           params: [
+             purchaseId, companyId, entryNo, supplierId, invoiceNo, invoiceDate, gstType,
+             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net
+           ]
+         });
+      }
 
-      // Insert payment if not credit
       let paymentId = null;
       let pModeNormalized = null;
       let paymentNo = null;
@@ -169,67 +240,57 @@ export default function Purchase() {
       }
 
       const syncItems = [];
-      // 2. Insert items and update batches
+      const batchStockDiff = {}; 
+      
+      if (isEditMode) {
+         for (const item of originalItems) {
+            syncItems.push({
+               tableName: 'PurchaseItem',
+               operation: 'delete',
+               payload: { id: item.id }
+            });
+            if (!batchStockDiff[item.batch_id]) batchStockDiff[item.batch_id] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: item.product_id, batchNo: item.batch_no };
+            batchStockDiff[item.batch_id].oldStrips += Number(item.qty || 0);
+         }
+         operations.push({ sql: `DELETE FROM purchase_items WHERE purchase_id = ?`, params: [purchaseId] });
+      }
+
       for (const row of validRows) {
-        const batchId = 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        const batchId = isEditMode && row.batchId ? row.batchId : 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        if (isEditMode && !row.batchId) row.batchId = batchId;
+        const actualBatchId = row.batchId || batchId;
+
         const priceUnit = row.priceUnit || 'strip';
         const packMultiplier = packSize(row.boxSize);
-
-        // Purchase qty is interpreted in the selected unit; stock is stored in STRIPS (base unit).
         const stockQty = toStrips(Number(row.qty) || 0, priceUnit, packMultiplier);
-
-        // Database prices always record Price per Strip.
+        
+        if (!batchStockDiff[actualBatchId]) batchStockDiff[actualBatchId] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: row.product, batchNo: row.batch };
+        batchStockDiff[actualBatchId].newStrips += stockQty;
+        
         const unitPurchasePrice = Number(perStripPrice(row.invPrice, priceUnit, packMultiplier).toFixed(2));
         const saveMrp = Number(perStripPrice(row.mrp, priceUnit, packMultiplier).toFixed(2));
         const savePtr = Number(perStripPrice(row.ptr, priceUnit, packMultiplier).toFixed(2));
         const savePts = Number(perStripPrice(row.pts, priceUnit, packMultiplier).toFixed(2));
         
-        // Upsert Batch
-        operations.push({
-          sql: `INSERT INTO batches (
-            id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
-          ON CONFLICT(product_id, batch_no) DO UPDATE SET 
-            current_qty = current_qty + excluded.current_qty,
-            mrp = excluded.mrp,
-            ptr = excluded.ptr,
-            pts = excluded.pts,
-            purchase_price = excluded.purchase_price,
-            updated_at = datetime('now')`,
-          params: [
-            batchId, row.product, row.batch, row.expiry || '12/99', saveMrp, savePtr, savePts, unitPurchasePrice, Number(row.gst) || 0, stockQty
-          ]
-        });
-
-        syncItems.push({
-          tableName: 'Batch',
-          operation: 'create',
-          payload: {
-            id: batchId,
-            productId: row.product,
-            batchNo: row.batch,
-            expiryDate: toIsoExpiry(row.expiry || '12/99'),
+        batchStockDiff[actualBatchId].newPrices = {
             mrp: saveMrp,
             ptr: savePtr,
             pts: savePts,
-            purchasePrice: unitPurchasePrice,
-            gstRate: Number(row.gst) || 0,
-            currentQty: stockQty,
-            freeQty: 0
-          }
-        });
+            purchase_price: unitPurchasePrice,
+            gst_rate: Number(row.gst) || 0,
+            expiryDate: row.expiry || '12/99'
+        };
 
-        // Insert Purchase Item
         const purchaseItemId = 'P-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
         operations.push({
           sql: `INSERT INTO purchase_items (
             id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, gst_rate, net_amount
-          ) VALUES (?, ?, ?, (SELECT id FROM batches WHERE product_id = ? AND batch_no = ?), ?, 0, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
           params: [
             purchaseItemId,
             purchaseId,
             row.product,
-            row.product, row.batch,
+            actualBatchId,
             stockQty, unitPurchasePrice, savePtr, saveMrp, Number(row.disc) || 0, Number(row.gst) || 0, row.amount
           ]
         });
@@ -241,7 +302,7 @@ export default function Purchase() {
             id: purchaseItemId,
             purchaseId,
             productId: row.product,
-            batchId,
+            batchId: actualBatchId,
             qty: stockQty,
             freeQty: 0,
             purchasePrice: unitPurchasePrice,
@@ -253,6 +314,45 @@ export default function Purchase() {
           }
         });
       }
+      
+      for (const [bId, diff] of Object.entries(batchStockDiff)) {
+          const netAdd = diff.newStrips - diff.oldStrips;
+          if (diff.oldStrips === 0 && diff.newStrips > 0) {
+              operations.push({
+                sql: `INSERT INTO batches (
+                  id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
+                ON CONFLICT(product_id, batch_no) DO UPDATE SET 
+                  current_qty = current_qty + excluded.current_qty,
+                  mrp = excluded.mrp,
+                  ptr = excluded.ptr,
+                  pts = excluded.pts,
+                  purchase_price = excluded.purchase_price,
+                  updated_at = datetime('now')`,
+                params: [
+                  bId, diff.productId, diff.batchNo, diff.newPrices.expiryDate, diff.newPrices.mrp, diff.newPrices.ptr, diff.newPrices.pts, diff.newPrices.purchase_price, diff.newPrices.gst_rate, netAdd
+                ]
+              });
+          } else if (netAdd !== 0 || diff.newPrices) {
+              const sets = [];
+              const prms = [];
+              if (netAdd !== 0) {
+                 sets.push("current_qty = current_qty + ?");
+                 prms.push(netAdd);
+              }
+              if (diff.newPrices) {
+                 sets.push("mrp = ?, ptr = ?, pts = ?, purchase_price = ?, gst_rate = ?");
+                 prms.push(diff.newPrices.mrp, diff.newPrices.ptr, diff.newPrices.pts, diff.newPrices.purchase_price, diff.newPrices.gst_rate);
+              }
+              sets.push("updated_at = datetime('now')");
+              prms.push(bId);
+              
+              operations.push({
+                 sql: `UPDATE batches SET ${sets.join(', ')} WHERE id = ?`,
+                 params: prms
+              });
+          }
+      }
 
       const res = await window.pharmaAPI.db.transaction(operations);
       
@@ -260,16 +360,39 @@ export default function Purchase() {
         throw new Error(res.error || 'Transaction failed');
       }
 
+      for (const bId of Object.keys(batchStockDiff)) {
+         const bRes = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [bId]);
+         if (bRes?.data?.length) {
+            const b = bRes.data[0];
+            syncItems.push({
+               tableName: 'Batch',
+               operation: 'update',
+               payload: {
+                  id: b.id,
+                  productId: b.product_id,
+                  batchNo: b.batch_no,
+                  expiryDate: b.expiry_date ? toIsoExpiry(b.expiry_date) : null,
+                  mrp: b.mrp,
+                  ptr: b.ptr,
+                  pts: b.pts,
+                  purchasePrice: b.purchase_price,
+                  gstRate: b.gst_rate,
+                  currentQty: b.current_qty,
+                  freeQty: 0
+               }
+            });
+         }
+      }
+
       const mapPaymentMode = (pm) => {
         if (pm === 'Cash') return 'cash';
         if (pm === 'Credit') return 'credit';
-        return 'upi'; // For Bank / UPI
+        return 'upi';
       };
 
       const mappedPm = mapPaymentMode(paymentMode);
 
-      // Sync to cloud
-      await syncEntity('Purchase', 'create', {
+      await syncEntity('Purchase', isEditMode ? 'update' : 'create', {
         id: purchaseId,
         companyId,
         entryNo,
@@ -303,7 +426,7 @@ export default function Purchase() {
         await syncEntity(item.tableName, item.operation, item.payload);
       }
 
-      setSuccessMsg(`Purchase Invoice "${invoiceNo}" saved successfully!`);
+      setSuccessMsg(`Purchase Invoice "${invoiceNo}" ${isEditMode ? 'updated' : 'saved'} successfully!`);
 
       // Build a printable GST tax-invoice from the saved purchase (before reset).
       try {
@@ -368,11 +491,14 @@ export default function Purchase() {
         console.error('Failed to build purchase invoice for print/PDF:', invErr);
       }
 
-      // Reset form
-      setSupplierId('');
-      setInvoiceNo('');
-      setPaymentMode('Credit');
-      setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
+      if (isEditMode) {
+         setTimeout(() => { navigate('/reports/purchase'); }, 1500);
+      } else {
+         setSupplierId('');
+         setInvoiceNo('');
+         setPaymentMode('Credit');
+         setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
+      }
       
     } catch (err) {
       console.error("Purchase save error:", err);
@@ -386,7 +512,7 @@ export default function Purchase() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
-          <h1 className="page-title">Purchase Entry (Inward)</h1>
+          <h1 className="page-title">{isEditMode ? 'Edit Purchase Entry' : 'Purchase Entry (Inward)'}</h1>
           <div className="page-sub">Record supplier invoices and update warehouse stock</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>

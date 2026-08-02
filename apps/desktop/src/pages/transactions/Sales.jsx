@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, AlertTriangle, ArrowLeft, Download } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml, normalizeInvoiceNumbers } from '../../utils/invoiceTemplate';
 import { packSize, toStrips, toBoxesFloat, perStripPrice, formatStock } from '../../utils/units';
 export default function Sales() {
   const navigate = useNavigate();
+  const { id: editId } = useParams();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [originalItems, setOriginalItems] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [customerWarning, setCustomerWarning] = useState(null);
 
@@ -89,17 +92,81 @@ export default function Sales() {
             });
           });
         }
-        setProductsList(Object.values(prodMap));
+        
+        const pList = Object.values(prodMap);
+        setProductsList(pList);
+        
+        if (editId) {
+           setIsEditMode(true);
+           const saleRes = await window.pharmaAPI.db.query("SELECT * FROM sales WHERE id = ?", [editId]);
+           if (saleRes?.data?.length) {
+              const sale = saleRes.data[0];
+              setCustomerId(sale.customer_id);
+              setInvoiceNo(sale.invoice_no);
+              setInvoiceDate(sale.date ? sale.date.split('T')[0] : '');
+              setPaymentMode(sale.payment_mode === 'credit' ? 'Credit' : (sale.payment_mode === 'cash' ? 'Cash' : 'Bank / UPI'));
+              if (sale.notes && sale.notes.startsWith('Doctor: ')) {
+                 setDoctorName(sale.notes.replace('Doctor: ', ''));
+              }
+              
+              const itemsRes = await window.pharmaAPI.db.query(`
+                SELECT si.*, p.name as product_name, b.batch_no, b.expiry_date, p.conversion_factor, p.gst_rate
+                FROM sale_items si
+                JOIN products p ON si.product_id = p.id
+                JOIN batches b ON si.batch_id = b.id
+                WHERE si.sale_id = ?
+              `, [editId]);
+              
+              if (itemsRes?.data?.length) {
+                 setOriginalItems(itemsRes.data);
+                 const loadedRows = itemsRes.data.map((item, index) => {
+                    const boxSize = (item.conversion_factor && Number(item.conversion_factor) > 0) ? Number(item.conversion_factor) : 10;
+                    let avail = 0;
+                    const pData = prodMap[item.product_id];
+                    if (pData) {
+                      const bData = pData.batches.find(b => b.id === item.batch_id);
+                      if (bData) {
+                         avail = Number(bData.qty);
+                      }
+                    }
+                    
+                    return {
+                       id: Date.now() + index,
+                       product: item.product_id,
+                       productName: item.product_name,
+                       productSearch: item.product_name,
+                       batch: item.batch_no,
+                       batchId: item.batch_id,
+                       expiry: item.expiry_date,
+                       qty: item.qty,
+                       free: item.free_qty,
+                       unit: 'strip',
+                       boxSize: boxSize,
+                       available: avail, 
+                       baseAvailable: avail,
+                       rate: item.sale_price,
+                       baseRate: item.sale_price,
+                       mrp: item.mrp,
+                       baseMrp: item.mrp,
+                       disc: item.disc_percent,
+                       gst: item.gst_rate,
+                       amount: item.net_amount
+                    };
+                 });
+                 setRows(loadedRows);
+              }
+           }
+        } else {
+           fetchNextInvoiceNo();
+        }
+
       } catch (err) {
         console.error('Failed to load master data for sales:', err);
         setErrorMsg('Failed to load customers/products from database.');
       }
     };
     fetchMasterData();
-
-    // Auto-generate sequential invoice number starting from 1
-    fetchNextInvoiceNo();
-  }, []);
+  }, [editId]);
 
   // Handle Customer Selection
   useEffect(() => {
@@ -277,15 +344,31 @@ export default function Sales() {
       return;
     }
 
-    // Validate overstock (everything compared in STRIPS)
+    const batchStockDiff = {};
+    if (isEditMode) {
+      for (const item of originalItems) {
+        if (!batchStockDiff[item.batch_id]) batchStockDiff[item.batch_id] = { oldStrips: 0, newStrips: 0 };
+        batchStockDiff[item.batch_id].oldStrips += Number(item.qty || 0) + Number(item.free_qty || 0);
+      }
+    }
+    
     for (const row of validRows) {
       const packMultiplier = packSize(row.boxSize);
-      const totalStripsNeeded = toStrips(row.qty, row.unit, packMultiplier) + toStrips(row.free, row.unit, packMultiplier);
-      const availStrips = Number(row.baseAvailable ?? toStrips(row.available, row.unit, packMultiplier));
-      if (totalStripsNeeded > availStrips) {
-        setErrorMsg(`Total quantity (${totalStripsNeeded} Strips) for batch ${row.batch} exceeds available stock (${availStrips} Strips).`);
-        return;
-      }
+      const newStrips = toStrips(row.qty, row.unit, packMultiplier) + toStrips(row.free, row.unit, packMultiplier);
+      if (!batchStockDiff[row.batchId]) batchStockDiff[row.batchId] = { oldStrips: 0, newStrips: 0 };
+      batchStockDiff[row.batchId].newStrips += newStrips;
+    }
+    
+    for (const [batchId, diff] of Object.entries(batchStockDiff)) {
+       const row = validRows.find(r => r.batchId === batchId);
+       if (row) {
+          const availStrips = Number(row.baseAvailable ?? 0);
+          const hypotheticalStock = availStrips + diff.oldStrips;
+          if (diff.newStrips > hypotheticalStock) {
+             setErrorMsg(`Total quantity for batch ${row.batch} exceeds available stock (${hypotheticalStock} Strips).`);
+             return;
+          }
+       }
     }
 
     setIsSaving(true);
@@ -295,23 +378,39 @@ export default function Sales() {
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
       const companyId = userRes.data[0].company_id;
-      const saleId = 'SAL-' + Date.now();
+      const saleId = isEditMode ? editId : 'SAL-' + Date.now();
 
       const operations = [];
 
-      // 1. Insert into sales
-      operations.push({
-        sql: `INSERT INTO sales (
-          id, company_id, invoice_no, customer_id, date, salesman, gst_type,
-          subtotal, discount_amount, taxable_amount, net_amount, payment_mode, paid_amount, notes, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
-        params: [
-          saleId, companyId, invoiceNo, customerId, invoiceDate, user.name || 'Admin', 'exclusive',
-          totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
-        ]
-      });
+      if (isEditMode) {
+         operations.push({
+           sql: `UPDATE sales SET 
+             customer_id = ?, invoice_no = ?, date = ?, salesman = ?, gst_type = ?,
+             subtotal = ?, discount_amount = ?, taxable_amount = ?, net_amount = ?, payment_mode = ?, paid_amount = ?, notes = ?, updated_at = datetime('now')
+             WHERE id = ?`,
+           params: [
+             customerId, invoiceNo, invoiceDate, user.name || 'Admin', 'exclusive',
+             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
+           ]
+         });
+         
+         operations.push({
+            sql: `DELETE FROM receipts WHERE notes = ?`,
+            params: ['Against Sale ' + invoiceNo]
+         });
+      } else {
+         operations.push({
+           sql: `INSERT INTO sales (
+             id, company_id, invoice_no, customer_id, date, salesman, gst_type,
+             subtotal, discount_amount, taxable_amount, net_amount, payment_mode, paid_amount, notes, status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+           params: [
+             saleId, companyId, invoiceNo, customerId, invoiceDate, user.name || 'Admin', 'exclusive',
+             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
+           ]
+         });
+      }
 
-      // Insert receipt if not credit
       let receiptId = null;
       let pModeNormalized = null;
       let receiptNo = null;
@@ -329,34 +428,36 @@ export default function Sales() {
         });
       }
 
-      // 2. Insert items and update batches
-      const syncItems = []; // Collect sync payloads to run after db transaction
+      const syncItems = []; 
+      
+      if (isEditMode) {
+         for (const item of originalItems) {
+            syncItems.push({
+               tableName: 'SaleItem',
+               operation: 'delete',
+               payload: { id: item.id }
+            });
+         }
+         operations.push({ sql: `DELETE FROM sale_items WHERE sale_id = ?`, params: [saleId] });
+      }
+
+      for (const [batchId, diff] of Object.entries(batchStockDiff)) {
+         const netDeduct = diff.newStrips - diff.oldStrips;
+         if (netDeduct !== 0) {
+             operations.push({
+                sql: `UPDATE batches SET current_qty = current_qty - ?, updated_at = datetime('now') WHERE id = ?`,
+                params: [netDeduct, batchId]
+             });
+         }
+      }
+
       for (const row of validRows) {
         const packMultiplier = packSize(row.boxSize);
-        // All persisted quantities are whole STRIPS.
         const billedStrips = toStrips(row.qty, row.unit, packMultiplier);
         const freeStrips = toStrips(row.free, row.unit, packMultiplier);
-        const totalDeductStrips = billedStrips + freeStrips;
         const stripRate = perStripPrice(row.rate, row.unit, packMultiplier);
         const stripMrp = perStripPrice(row.mrp, row.unit, packMultiplier);
-        const availStrips = Number(row.baseAvailable ?? toStrips(row.available, row.unit, packMultiplier));
 
-        // Deduct from Batch (strips)
-        operations.push({
-          sql: `UPDATE batches SET
-            current_qty = current_qty - ?,
-            updated_at = datetime('now')
-            WHERE id = ?`,
-          params: [totalDeductStrips, row.batchId]
-        });
-
-        syncItems.push({
-          tableName: 'Batch',
-          operation: 'update',
-          payload: { id: row.batchId, currentQty: availStrips - totalDeductStrips }
-        });
-
-        // Insert Sale Item
         const saleItemId = 'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
         operations.push({
           sql: `INSERT INTO sale_items (
@@ -394,16 +495,28 @@ export default function Sales() {
         throw new Error(res.error || 'Transaction failed');
       }
 
+      for (const [batchId, diff] of Object.entries(batchStockDiff)) {
+         if (diff.newStrips - diff.oldStrips !== 0) {
+            const bRes = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [batchId]);
+            if (bRes?.data?.length) {
+               syncItems.push({
+                  tableName: 'Batch',
+                  operation: 'update',
+                  payload: { id: batchId, currentQty: bRes.data[0].current_qty }
+               });
+            }
+         }
+      }
+
       const mapPaymentMode = (pm) => {
         if (pm === 'Cash') return 'cash';
         if (pm === 'Credit') return 'credit';
-        return 'upi'; // For Bank / UPI
+        return 'upi';
       };
 
       const mappedPm = mapPaymentMode(paymentMode);
 
-      // Sync to cloud after successful transaction
-      await syncEntity('Sale', 'create', {
+      await syncEntity('Sale', isEditMode ? 'update' : 'create', {
         id: saleId,
         companyId,
         invoiceNo,
@@ -438,13 +551,11 @@ export default function Sales() {
         await syncEntity(item.tableName, item.operation, item.payload);
       }
 
-      setSuccessMsg(`Sales Invoice ${invoiceNo} saved successfully!`);
+      setSuccessMsg(`Sales Invoice ${invoiceNo} ${isEditMode ? 'updated' : 'saved'} successfully!`);
 
-      // Build a printable GST tax-invoice from the saved data (before we reset the form).
       try {
         const companyRes = await window.pharmaAPI.db.query("SELECT * FROM companies LIMIT 1");
         const company = companyRes?.data?.[0] || {};
-
         const partyRes = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE id = ?", [customerId]);
         const party = partyRes?.data?.[0] || {};
 
@@ -465,7 +576,6 @@ export default function Sales() {
         const invItems = validRows.map(r => {
           const meta = metaMap[r.product] || {};
           const pack = packSize(r.boxSize);
-          // Invoice shows quantities in STRIPS and prices PER STRIP (amount unchanged).
           return {
             mfg: meta.mfg_name || '',
             name: r.productName,
@@ -502,13 +612,15 @@ export default function Sales() {
         console.error('Failed to build sales invoice for print/PDF:', invErr);
       }
 
-      // Reset form
-      setCustomerId('');
-      fetchNextInvoiceNo();
-      setDoctorName('');
-      setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+      if (isEditMode) {
+         setTimeout(() => { navigate('/reports/sales'); }, 1500);
+      } else {
+         setCustomerId('');
+         fetchNextInvoiceNo();
+         setDoctorName('');
+         setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+      }
 
-      // Re-fetch master data to update available stock levels
       const prodRes = await window.pharmaAPI.db.query(`
         SELECT p.id as product_id, p.name as product_name, p.gst_rate, p.packing, p.conversion_factor,
                b.id as batch_id, b.batch_no, b.expiry_date, b.mrp, b.ptr, b.current_qty as available
@@ -522,17 +634,9 @@ export default function Sales() {
       if (prodRes?.data) {
         prodRes.data.forEach(row => {
           if (!prodMap[row.product_id]) {
-            prodMap[row.product_id] = {
-              id: row.product_id,
-              name: row.product_name,
-              gst: row.gst_rate,
-              boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10,
-              batches: []
-            };
+             prodMap[row.product_id] = { id: row.product_id, name: row.product_name, gst: row.gst_rate, boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10, batches: [] };
           }
-          prodMap[row.product_id].batches.push({
-            id: row.batch_id, batch: row.batch_no, expiry: row.expiry_date, mrp: row.mrp, ptr: row.ptr, qty: row.available
-          });
+          prodMap[row.product_id].batches.push({ id: row.batch_id, batch: row.batch_no, expiry: row.expiry_date, mrp: row.mrp, ptr: row.ptr, qty: row.available });
         });
       }
       setProductsList(Object.values(prodMap));
@@ -549,7 +653,7 @@ export default function Sales() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
-          <h1 className="page-title">Sales Invoice (Outward)</h1>
+          <h1 className="page-title">{isEditMode ? 'Edit Sales Invoice' : 'Sales Invoice (Outward)'}</h1>
           <div className="page-sub">Generate bills for medical shops and clinics</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>

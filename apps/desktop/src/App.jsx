@@ -129,8 +129,10 @@ export default function App() {
 
         {/* Transactions */}
         <Route path="/transactions/purchase" element={<WithLayout><Purchase /></WithLayout>} />
+        <Route path="/transactions/purchase/edit/:id" element={<WithLayout><Purchase /></WithLayout>} />
         <Route path="/transactions/purchase-return" element={<WithLayout><PurchaseReturn /></WithLayout>} />
         <Route path="/transactions/sales" element={<WithLayout><Sales /></WithLayout>} />
+        <Route path="/transactions/sales/edit/:id" element={<WithLayout><Sales /></WithLayout>} />
         <Route path="/transactions/sales-return" element={<WithLayout><SalesReturn /></WithLayout>} />
         <Route path="/transactions/receipts" element={<WithLayout><Receipts /></WithLayout>} />
         <Route path="/transactions/payments" element={<WithLayout><Payments /></WithLayout>} />
