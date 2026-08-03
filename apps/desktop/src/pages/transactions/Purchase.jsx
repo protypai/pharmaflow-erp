@@ -189,7 +189,7 @@ export default function Purchase() {
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
       const companyId = userRes.data[0].company_id;
       const purchaseId = isEditMode ? editId : 'PUR-' + Date.now();
-      const entryNo = isEditMode ? null : 'PE-' + Date.now().toString().slice(-6);
+      const entryNo = isEditMode ? undefined : 'PE-' + Date.now().toString().slice(-6);
 
       const operations = [];
 
@@ -255,16 +255,33 @@ export default function Purchase() {
          operations.push({ sql: `DELETE FROM purchase_items WHERE purchase_id = ?`, params: [purchaseId] });
       }
 
+      const itemOperations = [];
+      const itemSyncItems = [];
+
       for (const row of validRows) {
-        const batchId = isEditMode && row.batchId ? row.batchId : 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-        if (isEditMode && !row.batchId) row.batchId = batchId;
-        const actualBatchId = row.batchId || batchId;
+        let actualBatchId = row.batchId;
+        let isExistingBatch = false;
+
+        if (!actualBatchId) {
+          const existingBatchRes = await window.pharmaAPI.db.query("SELECT id FROM batches WHERE product_id = ? AND batch_no = ?", [row.product, row.batch]);
+          if (existingBatchRes?.data?.length) {
+            actualBatchId = existingBatchRes.data[0].id;
+            isExistingBatch = true;
+          } else {
+            actualBatchId = 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+          }
+          if (isEditMode) row.batchId = actualBatchId;
+        } else {
+          isExistingBatch = true;
+        }
 
         const priceUnit = row.priceUnit || 'strip';
         const packMultiplier = packSize(row.boxSize);
         const stockQty = toStrips(Number(row.qty) || 0, priceUnit, packMultiplier);
         
-        if (!batchStockDiff[actualBatchId]) batchStockDiff[actualBatchId] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: row.product, batchNo: row.batch };
+        if (!batchStockDiff[actualBatchId]) {
+           batchStockDiff[actualBatchId] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: row.product, batchNo: row.batch, isNewToDb: !isExistingBatch };
+        }
         batchStockDiff[actualBatchId].newStrips += stockQty;
         
         const unitPurchasePrice = Number(perStripPrice(row.invPrice, priceUnit, packMultiplier).toFixed(2));
@@ -282,7 +299,7 @@ export default function Purchase() {
         };
 
         const purchaseItemId = 'P-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-        operations.push({
+        itemOperations.push({
           sql: `INSERT INTO purchase_items (
             id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, gst_rate, net_amount
           ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
@@ -295,7 +312,7 @@ export default function Purchase() {
           ]
         });
 
-        syncItems.push({
+        itemSyncItems.push({
           tableName: 'PurchaseItem',
           operation: 'create',
           payload: {
@@ -317,18 +334,11 @@ export default function Purchase() {
       
       for (const [bId, diff] of Object.entries(batchStockDiff)) {
           const netAdd = diff.newStrips - diff.oldStrips;
-          if (diff.oldStrips === 0 && diff.newStrips > 0) {
+          if (diff.isNewToDb) {
               operations.push({
                 sql: `INSERT INTO batches (
                   id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
-                ON CONFLICT(product_id, batch_no) DO UPDATE SET 
-                  current_qty = current_qty + excluded.current_qty,
-                  mrp = excluded.mrp,
-                  ptr = excluded.ptr,
-                  pts = excluded.pts,
-                  purchase_price = excluded.purchase_price,
-                  updated_at = datetime('now')`,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))`,
                 params: [
                   bId, diff.productId, diff.batchNo, diff.newPrices.expiryDate, diff.newPrices.mrp, diff.newPrices.ptr, diff.newPrices.pts, diff.newPrices.purchase_price, diff.newPrices.gst_rate, netAdd
                 ]
@@ -354,19 +364,23 @@ export default function Purchase() {
           }
       }
 
+      // Now push the purchase_items operations (after batches are guaranteed to exist)
+      operations.push(...itemOperations);
+
       const res = await window.pharmaAPI.db.transaction(operations);
       
       if (!res.success) {
         throw new Error(res.error || 'Transaction failed');
       }
 
+      // Sync Batches FIRST to satisfy foreign key constraints on the cloud
       for (const bId of Object.keys(batchStockDiff)) {
          const bRes = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [bId]);
          if (bRes?.data?.length) {
             const b = bRes.data[0];
             syncItems.push({
                tableName: 'Batch',
-               operation: 'update',
+               operation: 'create', // Use 'create' to ensure upsert on backend
                payload: {
                   id: b.id,
                   productId: b.product_id,
@@ -383,6 +397,10 @@ export default function Purchase() {
             });
          }
       }
+
+      // Then sync PurchaseItems
+      syncItems.push(...itemSyncItems);
+
 
       const mapPaymentMode = (pm) => {
         if (pm === 'Cash') return 'cash';

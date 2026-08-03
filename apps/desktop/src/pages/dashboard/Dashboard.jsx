@@ -112,6 +112,93 @@ export default function Dashboard() {
           pendingRetCount = pendingRetRes?.data?.[0]?.count || 0;
         } catch (e) {}
 
+        let activities = [];
+        try {
+          const actRes = await window.pharmaAPI.db.query(`
+            SELECT 'sale' as type, date as ref_date, invoice_no as desc, c.name as party, net_amount as amount, s.created_at
+            FROM sales s LEFT JOIN customers c ON s.customer_id = c.id
+            WHERE s.date LIKE '${today}%'
+            UNION ALL
+            SELECT 'purchase' as type, invoice_date as ref_date, invoice_no as desc, sup.name as party, net_amount as amount, p.created_at
+            FROM purchases p LEFT JOIN suppliers sup ON p.supplier_id = sup.id
+            WHERE p.invoice_date LIKE '${today}%'
+            UNION ALL
+            SELECT 'receipt' as type, date as ref_date, receipt_no as desc, c.name as party, amount, r.created_at
+            FROM receipts r LEFT JOIN customers c ON r.customer_id = c.id
+            WHERE r.date LIKE '${today}%'
+            UNION ALL
+            SELECT 'payment' as type, date as ref_date, payment_no as desc, sup.name as party, amount, p.created_at
+            FROM payments p LEFT JOIN suppliers sup ON p.supplier_id = sup.id
+            WHERE p.date LIKE '${today}%'
+            ORDER BY created_at DESC
+            LIMIT 10
+          `);
+          if (actRes?.data) {
+            activities = actRes.data.map(act => {
+              const dt = new Date(act.created_at);
+              let hours = dt.getHours();
+              const ampm = hours >= 12 ? 'PM' : 'AM';
+              hours = hours % 12;
+              hours = hours ? hours : 12;
+              const mins = dt.getMinutes().toString().padStart(2, '0');
+              return {
+                time: `${hours}:${mins} ${ampm}`,
+                desc: act.desc,
+                party: act.party || 'Cash',
+                type: act.type,
+                amount: act.amount
+              };
+            });
+          }
+        } catch (e) {
+          console.error("Activity feed error", e);
+        }
+
+        let aging = [];
+        const recTotal = recRes?.data?.[0]?.total || 0;
+        try {
+           // Distribute total outstanding into buckets (for dashboard visual representation)
+           // If there is no logic to track individual invoice payments perfectly, 
+           // we can provide a simplified aging model or simply query older unpaid invoices.
+           const agingRes = await window.pharmaAPI.db.query(`
+             SELECT 
+               SUM(CASE WHEN CAST(julianday('now') - julianday(date) AS INTEGER) <= 30 THEN net_amount ELSE 0 END) as b30,
+               SUM(CASE WHEN CAST(julianday('now') - julianday(date) AS INTEGER) BETWEEN 31 AND 60 THEN net_amount ELSE 0 END) as b60,
+               SUM(CASE WHEN CAST(julianday('now') - julianday(date) AS INTEGER) BETWEEN 61 AND 90 THEN net_amount ELSE 0 END) as b90,
+               SUM(CASE WHEN CAST(julianday('now') - julianday(date) AS INTEGER) > 90 THEN net_amount ELSE 0 END) as b90plus
+             FROM sales
+             WHERE payment_mode = 'credit'
+           `);
+           
+           if (agingRes?.data && agingRes.data.length > 0) {
+             const row = agingRes.data[0];
+             const b30 = row.b30 || 0;
+             const b60 = row.b60 || 0;
+             const b90 = row.b90 || 0;
+             const b90p = row.b90plus || 0;
+             const totalCreditSales = b30 + b60 + b90 + b90p;
+             
+             // Approximate distribution of outstanding amount based on credit sales volume
+             if (totalCreditSales > 0 && recTotal > 0) {
+               aging = [
+                 { label: '0-30 Days', value: (b30 / totalCreditSales) * recTotal },
+                 { label: '31-60 Days', value: (b60 / totalCreditSales) * recTotal },
+                 { label: '61-90 Days', value: (b90 / totalCreditSales) * recTotal },
+                 { label: '> 90 Days', value: (b90p / totalCreditSales) * recTotal }
+               ];
+             } else {
+               aging = [
+                 { label: '0-30 Days', value: recTotal },
+                 { label: '31-60 Days', value: 0 },
+                 { label: '61-90 Days', value: 0 },
+                 { label: '> 90 Days', value: 0 }
+               ];
+             }
+           }
+        } catch (e) {
+           console.error("Aging error", e);
+        }
+
         const sales = salesRes?.data || [];
         const purch = purchRes?.data || [];
         const coll = collRes?.data || [];
@@ -125,7 +212,7 @@ export default function Dashboard() {
           todayCollections: { amount: coll[0]?.total || 0, count: coll[0]?.count || 0 },
           todayPayments: { amount: paym[0]?.total || 0, count: paym[0]?.count || 0 },
           newCustomers: customers[0]?.count || 0,
-          outstandingReceivable: recRes?.data?.[0]?.total || 0,
+          outstandingReceivable: recTotal,
           outstandingPayable: paybleRes?.data?.[0]?.total || 0,
           cashBalance: cashRes?.data?.[0]?.total || 0,
           bankBalance: bankRes?.data?.[0]?.total || 0,
@@ -134,7 +221,9 @@ export default function Dashboard() {
           lowStock: lowStockCount,
           outOfStock: outOfStockCount,
           deadStock: deadCount,
-          pendingReturns: pendingRetCount
+          pendingReturns: pendingRetCount,
+          recentActivities: activities,
+          outstandingAging: aging
         }));
       } catch (err) {
         console.error('Failed to load DB stats', err);
@@ -144,15 +233,13 @@ export default function Dashboard() {
   }, []);
 
   const salesTrend = [];
-  const outstandingAging = [];
   const topProducts = [];
-  const recentActivities = [];
 
   const {
     todaySales, todayPurchase, todayCollections, todayPayments,
     cashBalance, bankBalance, outstandingReceivable, outstandingPayable,
     nearExpiry, expiredStock, lowStock, outOfStock, deadStock,
-    newCustomers, pendingReturns
+    newCustomers, pendingReturns, recentActivities = [], outstandingAging = []
   } = stats;
 
   const formatCurr = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -275,22 +362,30 @@ export default function Dashboard() {
           <div className="card-body no-pad">
             <table className="data-table">
               <tbody>
-                {recentActivities.map((act, i) => (
-                  <tr key={i}>
-                    <td style={{ width: '80px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      {act.time}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{act.desc}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{act.party}</div>
-                    </td>
-                    <td className="col-amount" style={{ 
-                      color: act.type === 'receipt' || act.type === 'sale' ? 'var(--success)' : 'var(--danger)' 
-                    }}>
-                      {act.type === 'receipt' || act.type === 'sale' ? '+' : '-'}{formatCurr(act.amount)}
+                {recentActivities.length === 0 ? (
+                  <tr>
+                    <td colSpan="3" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                      No activity today
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  recentActivities.map((act, i) => (
+                    <tr key={i}>
+                      <td style={{ width: '80px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        {act.time}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{act.desc}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{act.party}</div>
+                      </td>
+                      <td className="col-amount" style={{ 
+                        color: act.type === 'receipt' || act.type === 'sale' ? 'var(--success)' : 'var(--danger)' 
+                      }}>
+                        {act.type === 'receipt' || act.type === 'sale' ? '+' : '-'}{formatCurr(act.amount)}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

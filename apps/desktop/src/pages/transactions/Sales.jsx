@@ -403,7 +403,7 @@ export default function Sales() {
            sql: `INSERT INTO sales (
              id, company_id, invoice_no, customer_id, date, salesman, gst_type,
              subtotal, discount_amount, taxable_amount, net_amount, payment_mode, paid_amount, notes, status, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
            params: [
              saleId, companyId, invoiceNo, customerId, invoiceDate, user.name || 'Admin', 'exclusive',
              totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
@@ -531,7 +531,7 @@ export default function Sales() {
         paymentMode: mappedPm,
         paidAmount: paymentMode === 'Credit' ? 0 : totals.net,
         notes: doctorName ? 'Doctor: ' + doctorName : null,
-        status: 'completed'
+        status: 'saved'
       });
 
       if (paymentMode !== 'Credit') {

@@ -232,7 +232,7 @@ async function applyRecord(
     // Child tables: verify parent then hard-delete the child item.
     if (meta.parent) {
       const child = await delegate.findUnique({ where: { id } });
-      if (!child) throw new Error('Record not found or forbidden');
+      if (!child) return; // Idempotent: already deleted or never synced
       await verifyParent(tx, meta, child[meta.parent.fk], companyId);
       await delegate.delete({ where: { id } });
       return;
@@ -241,24 +241,23 @@ async function applyRecord(
     switch (meta.deleteStrategy) {
       case 'statusInactive': {
         const res = await delegate.updateMany({ where: { id, companyId }, data: { status: 'inactive' } });
-        if (res.count === 0) throw new Error('Record not found or forbidden');
+        if (res.count === 0) return; // Idempotent
         return;
       }
       case 'txnCancel': {
         const res = await delegate.updateMany({ where: { id, companyId }, data: { status: 'cancelled' } });
-        if (res.count === 0) throw new Error('Record not found or forbidden');
+        if (res.count === 0) return; // Idempotent
+        return;
+      }
+      case 'hardDelete': {
+        const where = meta.hasCompanyId ? { id, companyId } : { id };
+        const res = await delegate.deleteMany({ where });
+        if (res.count === 0) return; // Idempotent
         return;
       }
       case 'isActiveFalse': {
-        const where = meta.hasCompanyId ? { id, companyId } : { id };
-        const res = await delegate.updateMany({ where, data: { isActive: false } });
-        if (res.count === 0) throw new Error('Record not found or forbidden');
-        return;
-      }
-      case 'hardDelete':
-      default: {
-        const res = await delegate.deleteMany({ where: { id, companyId } });
-        if (res.count === 0) throw new Error('Record not found or forbidden');
+        const res = await delegate.updateMany({ where: { id, companyId }, data: { isActive: false } });
+        if (res.count === 0) return; // Idempotent
         return;
       }
     }

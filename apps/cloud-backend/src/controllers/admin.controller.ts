@@ -59,7 +59,7 @@ export const getCompanies = asyncHandler(async (_req: Request, res: Response) =>
     orderBy: { createdAt: 'desc' },
   });
 
-  const companiesWithSyncStats = await Promise.all(companies.map(async (c) => {
+  const companiesWithSyncStats = await Promise.all(companies.map(async (c: any) => {
     const unsyncedCount = await db.syncQueue.count({
       where: { companyId: c.id, isSynced: false }
     });
