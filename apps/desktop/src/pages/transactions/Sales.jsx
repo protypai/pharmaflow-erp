@@ -58,7 +58,7 @@ export default function Sales() {
     const fetchMasterData = async () => {
       try {
         try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
-        const custRes = await window.pharmaAPI.db.query("SELECT id, name, area, credit_limit, opening_balance FROM customers ORDER BY name ASC");
+        const custRes = await window.pharmaAPI.db.query("SELECT id, name, area, credit_limit, opening_balance FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
         setCustomersList(custRes?.data || []);
 
         const prodRes = await window.pharmaAPI.db.query(`
@@ -66,7 +66,7 @@ export default function Sales() {
                  b.id as batch_id, b.batch_no, b.expiry_date, b.mrp, b.ptr, b.current_qty as available
           FROM products p
           JOIN batches b ON p.id = b.product_id
-          WHERE b.current_qty > 0
+          WHERE b.current_qty > 0 AND COALESCE(p.status, 'active') <> 'inactive'
           ORDER BY p.name ASC, b.expiry_date ASC
         `);
 

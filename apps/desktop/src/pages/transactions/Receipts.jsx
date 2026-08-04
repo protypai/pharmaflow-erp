@@ -7,7 +7,7 @@ export default function Receipts() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers");
+      const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE COALESCE(status, 'active') <> 'inactive'");
       set_customers(res_customers?.data || []);
     };
     fetchData();

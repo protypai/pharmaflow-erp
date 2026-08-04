@@ -19,7 +19,7 @@ export default function CustomerMaster() {
 
   const fetchCustomers = async () => {
     try {
-      const res = await window.pharmaAPI.db.query("SELECT * FROM customers ORDER BY name ASC");
+      const res = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
       setCustomersList(res?.data || []);
     } catch (err) {
       console.error('Failed to load customers', err);
@@ -127,9 +127,12 @@ export default function CustomerMaster() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this customer?")) return;
     try {
-      await window.pharmaAPI.db.run("DELETE FROM customers WHERE id = ?", [id]);
-      
-      // Sync to cloud
+      // Soft-delete: retire the customer (hide from active list) but keep the row so
+      // their past invoices/receipts/ledger still resolve. Matches the cloud, so the
+      // delta pull never re-creates a hard-deleted row.
+      await window.pharmaAPI.db.run("UPDATE customers SET status = 'inactive', updated_at = datetime('now') WHERE id = ?", [id]);
+
+      // Sync to cloud (server maps 'delete' -> status='inactive' for masters)
       await syncEntity('Customer', 'delete', { id });
 
       fetchCustomers();

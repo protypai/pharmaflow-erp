@@ -18,7 +18,7 @@ export default function SupplierMaster() {
 
   const fetchSuppliers = async () => {
     try {
-      const res = await window.pharmaAPI.db.query("SELECT * FROM suppliers ORDER BY name ASC");
+      const res = await window.pharmaAPI.db.query("SELECT * FROM suppliers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
       setSuppliersList(res?.data || []);
     } catch (err) {
       console.error('Failed to load suppliers', err);
@@ -121,9 +121,12 @@ export default function SupplierMaster() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this supplier?")) return;
     try {
-      await window.pharmaAPI.db.run("DELETE FROM suppliers WHERE id = ?", [id]);
-      
-      // Sync to cloud
+      // Soft-delete: retire the supplier (hide from active list) but keep the row so
+      // their past purchases/payments still resolve. Matches the cloud, so the delta
+      // pull never re-creates a hard-deleted row.
+      await window.pharmaAPI.db.run("UPDATE suppliers SET status = 'inactive', updated_at = datetime('now') WHERE id = ?", [id]);
+
+      // Sync to cloud (server maps 'delete' -> status='inactive' for masters)
       await syncEntity('Supplier', 'delete', { id });
       
       fetchSuppliers();

@@ -12,7 +12,7 @@ export default function CategoryMaster() {
 
   const fetchCategories = async () => {
     try {
-      const res = await window.pharmaAPI.db.query("SELECT * FROM categories ORDER BY name ASC");
+      const res = await window.pharmaAPI.db.query("SELECT * FROM categories WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
       setCategoriesList(res?.data || []);
     } catch (err) {
       console.error('Failed to load categories', err);
@@ -76,9 +76,12 @@ export default function CategoryMaster() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this category?")) return;
     try {
-      await window.pharmaAPI.db.run("DELETE FROM categories WHERE id = ?", [id]);
-      
-      // Sync to cloud
+      // Soft-delete: retire the category (hide from active list) but keep the row so
+      // products that reference it still resolve. Matches the cloud, so the delta
+      // pull never re-creates a hard-deleted row.
+      await window.pharmaAPI.db.run("UPDATE categories SET status = 'inactive' WHERE id = ?", [id]);
+
+      // Sync to cloud (server maps 'delete' -> status='inactive' for masters)
       await syncEntity('Category', 'delete', { id });
       
       fetchCategories();

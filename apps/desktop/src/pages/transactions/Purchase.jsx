@@ -31,10 +31,10 @@ export default function Purchase() {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const supRes = await window.pharmaAPI.db.query("SELECT id, name, city FROM suppliers ORDER BY name ASC");
+        const supRes = await window.pharmaAPI.db.query("SELECT id, name, city FROM suppliers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
         setSuppliersList(supRes?.data || []);
 
-        const prodRes = await window.pharmaAPI.db.query("SELECT id, name, gst_rate, packing, conversion_factor FROM products ORDER BY name ASC");
+        const prodRes = await window.pharmaAPI.db.query("SELECT id, name, gst_rate, packing, conversion_factor FROM products WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
         setProductsList(prodRes?.data || []);
       } catch (err) {
         console.error('Failed to load master data for purchase:', err);

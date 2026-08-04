@@ -12,7 +12,7 @@ export default function RackMaster() {
 
   const fetchRacks = async () => {
     try {
-      const res = await window.pharmaAPI.db.query("SELECT * FROM racks ORDER BY code ASC");
+      const res = await window.pharmaAPI.db.query("SELECT * FROM racks WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY code ASC");
       setRacksList(res?.data || []);
     } catch (err) {
       console.error('Failed to load racks', err);
@@ -76,9 +76,12 @@ export default function RackMaster() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this rack?")) return;
     try {
-      await window.pharmaAPI.db.run("DELETE FROM racks WHERE id = ?", [id]);
-      
-      // Sync to cloud
+      // Soft-delete: retire the rack (hide from active list) but keep the row so
+      // products that reference it still resolve. Matches the cloud, so the delta
+      // pull never re-creates a hard-deleted row.
+      await window.pharmaAPI.db.run("UPDATE racks SET status = 'inactive' WHERE id = ?", [id]);
+
+      // Sync to cloud (server maps 'delete' -> status='inactive' for masters)
       await syncEntity('Rack', 'delete', { id });
       
       fetchRacks();

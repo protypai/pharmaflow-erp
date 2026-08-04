@@ -47,17 +47,18 @@ export default function ProductMaster() {
            WHERE current_qty > 0
            GROUP BY product_id
         ) b_agg ON b_agg.product_id = p.id
+        WHERE COALESCE(p.status, 'active') <> 'inactive'
         ORDER BY p.name ASC
       `);
       setProductsList(prodsRes?.data || []);
 
-      const catsRes = await window.pharmaAPI.db.query("SELECT * FROM categories ORDER BY name ASC");
+      const catsRes = await window.pharmaAPI.db.query("SELECT * FROM categories WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
       setCategories(catsRes?.data || []);
 
-      const mfgsRes = await window.pharmaAPI.db.query("SELECT * FROM manufacturers ORDER BY name ASC");
+      const mfgsRes = await window.pharmaAPI.db.query("SELECT * FROM manufacturers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
       setManufacturers(mfgsRes?.data || []);
 
-      const racksRes = await window.pharmaAPI.db.query("SELECT * FROM racks ORDER BY code ASC");
+      const racksRes = await window.pharmaAPI.db.query("SELECT * FROM racks WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY code ASC");
       setRacks(racksRes?.data || []);
     } catch (err) {
       console.error('Failed to load product data', err);
@@ -172,9 +173,12 @@ export default function ProductMaster() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this product?")) return;
     try {
-      await window.pharmaAPI.db.run("DELETE FROM products WHERE id = ?", [id]);
-      
-      // Sync to cloud
+      // Soft-delete: retire the record (hide it) instead of erasing it, so existing
+      // batches/invoices that reference it keep resolving. The cloud does the same
+      // (status='inactive'), so the delta pull never re-creates a hard-deleted row.
+      await window.pharmaAPI.db.run("UPDATE products SET status = 'inactive', updated_at = datetime('now') WHERE id = ?", [id]);
+
+      // Sync to cloud (server maps 'delete' -> status='inactive' for masters)
       await syncEntity('Product', 'delete', { id });
       
       fetchData();

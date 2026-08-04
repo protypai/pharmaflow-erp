@@ -8,7 +8,7 @@ export default function PurchaseReturn() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers WHERE COALESCE(status, 'active') <> 'inactive'");
       set_suppliers(res_suppliers?.data || []);
       const res_products = await window.pharmaAPI.db.query(`
         SELECT p.*, json_group_array(json_object('id', b.id, 'batch', b.batch_no, 'expiry', b.expiry_date, 'mrp', b.mrp, 'ptr', b.ptr, 'current_qty', b.current_qty)) as batches

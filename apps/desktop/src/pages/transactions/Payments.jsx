@@ -7,7 +7,7 @@ export default function Payments() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers");
+      const res_suppliers = await window.pharmaAPI.db.query("SELECT * FROM suppliers WHERE COALESCE(status, 'active') <> 'inactive'");
       set_suppliers(res_suppliers?.data || []);
     };
     fetchData();
