@@ -85,7 +85,8 @@ export default function Profile() {
         company.id
       ];
 
-      await window.pharmaAPI.db.run(sql, params);
+      const res1 = await window.pharmaAPI.db.run(sql, params);
+      if (!res1.success) throw new Error("Failed to update local db: " + res1.error);
 
       // 2. Add to sync queue to upload to cloud
       // Map back to camelCase for the cloud schema Prisma expects
@@ -117,16 +118,19 @@ export default function Profile() {
         VALUES (?, ?, 'update', ?, ?, ?, 0, ?)
       `;
       const currentVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.30';
-      await window.pharmaAPI.db.run(syncSql, [uuidv4(), 'Company', company.id, company.id, cloudPayload, currentVersion]);
+      const res2 = await window.pharmaAPI.db.run(syncSql, [uuidv4(), 'Company', company.id, company.id, cloudPayload, currentVersion]);
+      if (!res2.success) throw new Error("Failed to queue sync for company: " + res2.error);
 
       // Update User if needed
-      await window.pharmaAPI.db.run(`UPDATE users SET name = ? WHERE id = ?`, [user.name, user.id]);
+      const res3 = await window.pharmaAPI.db.run(`UPDATE users SET name = ? WHERE id = ?`, [user.name, user.id]);
+      if (!res3.success) throw new Error("Failed to update user: " + res3.error);
 
       const userPayload = JSON.stringify({
         id: user.id,
         name: user.name
       });
-      await window.pharmaAPI.db.run(syncSql, [uuidv4(), 'User', user.id, company.id, userPayload, currentVersion]);
+      const res4 = await window.pharmaAPI.db.run(syncSql, [uuidv4(), 'User', user.id, company.id, userPayload, currentVersion]);
+      if (!res4.success) throw new Error("Failed to queue sync for user: " + res4.error);
 
       alert('Profile updated and synced successfully!');
     } catch (err) {

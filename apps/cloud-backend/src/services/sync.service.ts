@@ -274,6 +274,9 @@ export const getChanges = async (companyId: string, since?: Date) => {
   const parentUpdated = since ? { updatedAt: { gte: since } } : {};
 
   // Parents first, children after, so the client can insert in dependency order.
+  const companyRecord = await db.company.findFirst({ where: { id: companyId, ...updatedFilter } });
+  const companies = companyRecord ? [companyRecord] : [];
+
   const categories = await db.category.findMany({ where: { companyId, ...updatedFilter } });
   const manufacturers = await db.manufacturer.findMany({ where: { companyId, ...updatedFilter } });
   const racks = await db.rack.findMany({ where: { companyId, ...updatedFilter } });
@@ -289,6 +292,7 @@ export const getChanges = async (companyId: string, since?: Date) => {
   const payments = await db.payment.findMany({ where: { companyId, ...updatedFilter } });
 
   return {
+    companies,
     categories,
     manufacturers,
     racks,

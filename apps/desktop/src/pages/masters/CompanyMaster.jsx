@@ -12,7 +12,7 @@ export default function CompanyMaster() {
 
   const fetchManufacturers = async () => {
     try {
-      const res = await window.pharmaAPI.db.query("SELECT * FROM manufacturers ORDER BY name ASC");
+      const res = await window.pharmaAPI.db.query("SELECT * FROM manufacturers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
       setManufacturersList(res?.data || []);
     } catch (err) {
       console.error('Failed to load manufacturers', err);
@@ -76,7 +76,9 @@ export default function CompanyMaster() {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this company?")) return;
     try {
-      await window.pharmaAPI.db.run("DELETE FROM manufacturers WHERE id = ?", [id]);
+      // Soft-delete: retire the company (hide from active list) but keep the row so
+      // products that reference it still resolve.
+      await window.pharmaAPI.db.run("UPDATE manufacturers SET status = 'inactive', updated_at = datetime('now') WHERE id = ?", [id]);
       
       // Sync to cloud
       await syncEntity('Manufacturer', 'delete', { id });

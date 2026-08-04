@@ -239,8 +239,34 @@ export default function Login() {
 
               if (user.company) {
                 await window.pharmaAPI.db.run(
-                  'INSERT OR REPLACE INTO companies (id, name, short_name, email) VALUES (?, ?, ?, ?)',
-                  [user.company.id, user.company.name, user.company.shortName || user.company.name, user.email]
+                  `INSERT OR REPLACE INTO companies (
+                    id, name, short_name, email, est_year, authorized_sign,
+                    address, city, pincode, state, state_code,
+                    gstin, pan, drug_license_20b, drug_license_21b,
+                    fssai_license, bank_name, bank_account, bank_ifsc, upi_id
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    user.company.id, 
+                    user.company.name, 
+                    user.company.shortName || user.company.name, 
+                    user.email,
+                    user.company.estYear || null,
+                    user.company.authorizedSign || null,
+                    user.company.address || null,
+                    user.company.city || null,
+                    user.company.pincode || null,
+                    user.company.state || null,
+                    user.company.stateCode || null,
+                    user.company.gstin || null,
+                    user.company.pan || null,
+                    user.company.drugLicense20B || null,
+                    user.company.drugLicense21B || null,
+                    user.company.fssaiLicense || null,
+                    user.company.bankName || null,
+                    user.company.bankAccount || null,
+                    user.company.bankIfsc || null,
+                    user.company.upiId || null
+                  ]
                 );
               }
               // Store a bcrypt hash (never the plaintext) so offline login can

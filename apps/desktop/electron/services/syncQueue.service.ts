@@ -485,6 +485,21 @@ type UpsertBuilder = (r: any) => { sql: string; params: any[] };
 
 // changesKey -> builder. Order of this list is the FK-safe apply order.
 const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
+  { key: 'companies', build: (c) => ({
+    sql: `INSERT INTO companies (
+            id, name, short_name, est_year, authorized_sign, address, city, pincode, state, state_code,
+            gstin, pan, drug_license_20b, drug_license_21b, fssai_license, bank_name, bank_account, bank_ifsc, upi_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name, short_name=excluded.short_name, est_year=excluded.est_year, authorized_sign=excluded.authorized_sign,
+            address=excluded.address, city=excluded.city, pincode=excluded.pincode, state=excluded.state, state_code=excluded.state_code,
+            gstin=excluded.gstin, pan=excluded.pan, drug_license_20b=excluded.drug_license_20b, drug_license_21b=excluded.drug_license_21b,
+            fssai_license=excluded.fssai_license, bank_name=excluded.bank_name, bank_account=excluded.bank_account, bank_ifsc=excluded.bank_ifsc, upi_id=excluded.upi_id`,
+    params: [
+      c.id, c.name, c.shortName, c.estYear, c.authorizedSign, c.address, c.city, c.pincode, c.state, c.stateCode,
+      c.gstin, c.pan, c.drugLicense20B, c.drugLicense21B, c.fssaiLicense, c.bankName, c.bankAccount, c.bankIfsc, c.upiId
+    ],
+  }) },
   { key: 'categories', build: (c) => ({
     sql: 'INSERT OR REPLACE INTO categories (id, company_id, name, status) VALUES (?, ?, ?, ?)',
     params: [c.id, c.companyId, c.name, c.status],
