@@ -51,6 +51,8 @@ import GSTReport from './pages/reports/GSTReport';
 import CustomerReport from './pages/reports/CustomerReport';
 import SupplierReport from './pages/reports/SupplierReport';
 import ProfitReport from './pages/reports/ProfitReport';
+import SalesReturnReport from './pages/reports/SalesReturnReport';
+import PurchaseReturnReport from './pages/reports/PurchaseReturnReport';
 
 // Settings, Profile
 import Settings from './pages/settings/Settings';
@@ -131,9 +133,11 @@ export default function App() {
         <Route path="/transactions/purchase" element={<WithLayout><Purchase /></WithLayout>} />
         <Route path="/transactions/purchase/edit/:id" element={<WithLayout><Purchase /></WithLayout>} />
         <Route path="/transactions/purchase-return" element={<WithLayout><PurchaseReturn /></WithLayout>} />
+        <Route path="/transactions/purchase-return/edit/:id" element={<WithLayout><PurchaseReturn /></WithLayout>} />
         <Route path="/transactions/sales" element={<WithLayout><Sales /></WithLayout>} />
         <Route path="/transactions/sales/edit/:id" element={<WithLayout><Sales /></WithLayout>} />
         <Route path="/transactions/sales-return" element={<WithLayout><SalesReturn /></WithLayout>} />
+        <Route path="/transactions/sales-return/edit/:id" element={<WithLayout><SalesReturn /></WithLayout>} />
         <Route path="/transactions/receipts" element={<WithLayout><Receipts /></WithLayout>} />
         <Route path="/transactions/payments" element={<WithLayout><Payments /></WithLayout>} />
         <Route path="/transactions/stock-adjustment" element={<WithLayout><StockAdjustment /></WithLayout>} />
@@ -162,6 +166,8 @@ export default function App() {
         <Route path="/reports/customer" element={<WithLayout><CustomerReport /></WithLayout>} />
         <Route path="/reports/supplier" element={<WithLayout><SupplierReport /></WithLayout>} />
         <Route path="/reports/profit" element={<WithLayout><ProfitReport /></WithLayout>} />
+        <Route path="/reports/sales-return" element={<WithLayout><SalesReturnReport /></WithLayout>} />
+        <Route path="/reports/purchase-return" element={<WithLayout><PurchaseReturnReport /></WithLayout>} />
 
         {/* Settings, Profile */}
         <Route path="/settings" element={<WithLayout><Settings /></WithLayout>} />

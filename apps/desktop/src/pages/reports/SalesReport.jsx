@@ -198,16 +198,14 @@ export default function SalesReport() {
                 </td>
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                    {row.saleId === lastSaleId && (
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ padding: '3px 7px', minWidth: 0, color: '#D97706', borderColor: '#D97706' }}
-                        title="Edit Invoice"
-                        onClick={() => navigate(`/transactions/sales/edit/${row.saleId}`)}
-                      >
-                        <Edit size={14} />
-                      </button>
-                    )}
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0, color: '#D97706', borderColor: '#D97706' }}
+                      title="Edit Invoice"
+                      onClick={() => navigate(`/transactions/sales/edit/${row.saleId}`)}
+                    >
+                      <Edit size={14} />
+                    </button>
                     <button
                       className="btn btn-outline btn-sm"
                       style={{ padding: '3px 7px', minWidth: 0 }}

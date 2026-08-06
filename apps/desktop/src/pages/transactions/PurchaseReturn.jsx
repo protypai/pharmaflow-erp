@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 
 export default function PurchaseReturn() {
+  const { id: editId } = useParams();
+  const navigate = useNavigate();
+  const isEditMode = !!editId;
   const [suppliers, set_suppliers] = useState([]);
   const [products, set_products] = useState([]);
 
@@ -24,12 +28,57 @@ export default function PurchaseReturn() {
     fetchData();
   }, []);
 
+  // Edit mode: load the existing return (header + items) into the form.
+  useEffect(() => {
+    if (!editId) return;
+    (async () => {
+      try {
+        const hdrRes = await window.pharmaAPI.db.query("SELECT * FROM purchase_returns WHERE id = ?", [editId]);
+        const hdr = hdrRes?.data?.[0];
+        if (!hdr) { setErrorMsg("Return not found."); return; }
+        setSupplierId(hdr.supplier_id);
+        setOriginalPurchaseId(hdr.purchase_id || null);
+        setReturnDate(String(hdr.return_date || '').slice(0, 10) || new Date().toISOString().split('T')[0]);
+        setReturnReason(hdr.reason || 'Expiry / Near Expiry');
+        setExistingEntryNo(hdr.entry_no || null);
+
+        const itRes = await window.pharmaAPI.db.query(`
+          SELECT pri.*, b.batch_no, b.expiry_date, p.gst_rate as prod_gst
+          FROM purchase_return_items pri
+          JOIN batches b ON pri.batch_id = b.id
+          JOIN products p ON pri.product_id = p.id
+          WHERE pri.return_id = ?
+        `, [editId]);
+        const items = itRes?.data || [];
+        setOriginalItems(items.map(i => ({ id: i.id, batch_id: i.batch_id, qty: Number(i.qty) || 0 })));
+        if (items.length > 0) {
+          setRows(items.map(i => ({
+            id: Date.now() + Math.random(),
+            product: i.product_id.toString(),
+            batch_id: i.batch_id,
+            batch: i.batch_no,
+            expiry: i.expiry_date,
+            qty: i.qty,
+            ptr: i.ptr,
+            gst: i.prod_gst || 12,
+            amount: 0,
+          })));
+        }
+      } catch (err) {
+        setErrorMsg("Failed to load return: " + err.message);
+      }
+    })();
+  }, [editId]);
+
   const [lookupInvoiceNo, setLookupInvoiceNo] = useState('');
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
   const [returnReason, setReturnReason] = useState('Expiry / Near Expiry');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [originalPurchaseId, setOriginalPurchaseId] = useState(null);
+  // Edit-mode context: original items (to reverse stock + delete on save) and entry no.
+  const [originalItems, setOriginalItems] = useState([]);
+  const [existingEntryNo, setExistingEntryNo] = useState(null);
 
   const [supplierId, setSupplierId] = useState('');
   
@@ -78,7 +127,7 @@ export default function PurchaseReturn() {
         updated.expiry = '';
         updated.ptr = 0;
         const prod = products.find(p => p.id.toString() === value.toString());
-        if (prod) updated.gst = prod.gst;
+        if (prod) updated.gst = prod.gst_rate ?? 12;
       }
       
       if (field === 'batch' && r.product) {
@@ -154,17 +203,93 @@ export default function PurchaseReturn() {
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
       const companyId = userRes.data[0].company_id;
-      const returnId = 'PR-' + Date.now();
-      const entryNo = 'RET-' + Date.now();
+      const returnId = isEditMode ? editId : 'PR-' + Date.now();
+      const entryNo = isEditMode ? (existingEntryNo || 'RET-' + Date.now()) : 'RET-' + Date.now();
 
-      const res = await window.pharmaAPI.db.run(`
-        INSERT INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, net_amount, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))
-      `, [returnId, companyId, entryNo, originalPurchaseId, supplierId, returnDate, returnReason, totals.net]);
+      const mapReturnReason = (r) => {
+        if (r.includes('Expiry')) return 'expired';
+        if (r.includes('Damaged')) return 'damaged';
+        if (r.includes('Rate')) return 'quality_issue';
+        if (r.includes('Excess')) return 'excess_supply';
+        return 'quality_issue';
+      };
+      const mappedReason = mapReturnReason(returnReason);
 
-      if (!res.success) throw new Error(res.error);
+      // 1) Resolve & validate every row BEFORE writing anything (no ghost-header state).
+      const prepared = [];
+      for (const row of rows) {
+        if (!row.product || !row.qty) continue;
+        const prod = products.find(p => p.id.toString() === row.product.toString());
+        const batchData = prod?.batches.find(b => b.batch === row.batch);
+        if (!batchData) throw new Error("Batch not found for product.");
+        const returnItemId = 'PRI-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        prepared.push({ row, batchData, returnItemId });
+      }
+      if (prepared.length === 0) throw new Error("Please add at least one product to return.");
 
-      await syncEntity('PurchaseReturn', 'create', {
+      // Net stock change per batch. A purchase return REMOVES stock (goods go back to the
+      // supplier). On EDIT we reverse the OLD return (add back) then apply the NEW one.
+      const batchDelta = {};
+      if (isEditMode) {
+        for (const it of originalItems) {
+          batchDelta[it.batch_id] = (batchDelta[it.batch_id] || 0) + Math.round(Number(it.qty) || 0);
+        }
+      }
+      for (const { row, batchData } of prepared) {
+        batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) - Math.round(Number(row.qty) || 0);
+      }
+
+      // Negative-stock guard for any batch whose net change is a reduction.
+      for (const [bId, delta] of Object.entries(batchDelta)) {
+        if (delta < 0) {
+          const cur = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [bId]);
+          const currentQty = Number(cur?.data?.[0]?.current_qty ?? 0);
+          if (currentQty + delta < 0) {
+            throw new Error(`Return quantity exceeds available stock for a batch (only ${currentQty} strip(s) in stock).`);
+          }
+        }
+      }
+
+      const operations = [];
+
+      // 2) Header: UPDATE on edit (clearing old items first), INSERT on create.
+      if (isEditMode) {
+        operations.push({ sql: `DELETE FROM purchase_return_items WHERE return_id = ?`, params: [returnId] });
+        operations.push({
+          sql: `UPDATE purchase_returns SET purchase_id = ?, supplier_id = ?, return_date = ?, reason = ?, net_amount = ?, updated_at = datetime('now') WHERE id = ?`,
+          params: [originalPurchaseId, supplierId, returnDate, returnReason, totals.net, returnId],
+        });
+      } else {
+        operations.push({
+          sql: `INSERT INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, net_amount, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
+          params: [returnId, companyId, entryNo, originalPurchaseId, supplierId, returnDate, returnReason, totals.net],
+        });
+      }
+
+      // 3) (Re)insert items.
+      for (const { row, batchData, returnItemId } of prepared) {
+        operations.push({
+          sql: `INSERT INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [returnItemId, returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, mappedReason],
+        });
+      }
+
+      // 4) Apply net stock change per batch.
+      for (const [bId, delta] of Object.entries(batchDelta)) {
+        if (delta === 0) continue;
+        operations.push({
+          sql: `UPDATE batches SET current_qty = current_qty + ?, updated_at = datetime('now') WHERE id = ?`,
+          params: [delta, bId],
+        });
+      }
+
+      const txRes = await window.pharmaAPI.db.transaction(operations);
+      if (!txRes?.success) throw new Error(txRes?.error || 'Failed to save return');
+
+      // 5) Sync AFTER the local write is committed.
+      await syncEntity('PurchaseReturn', isEditMode ? 'update' : 'create', {
         id: returnId,
         companyId,
         entryNo,
@@ -176,26 +301,13 @@ export default function PurchaseReturn() {
         status: 'saved'
       });
 
-      for (const row of rows) {
-        if (!row.product || !row.qty) continue;
-        const prod = products.find(p => p.id.toString() === row.product.toString());
-        const batchData = prod?.batches.find(b => b.batch === row.batch);
-        if (!batchData) throw new Error("Batch not found for product.");
+      if (isEditMode) {
+        for (const it of originalItems) {
+          await syncEntity('PurchaseReturnItem', 'delete', { id: it.id });
+        }
+      }
 
-        const returnItemId = 'PRI-' + Date.now() + Math.random();
-        await window.pharmaAPI.db.run(`
-          INSERT INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [returnItemId, returnId, row.product, batchData.id, row.qty, batchData.mrp, row.ptr, row.amount, returnReason]);
-
-        const mapReturnReason = (r) => {
-          if (r.includes('Expiry')) return 'expired';
-          if (r.includes('Damaged')) return 'damaged';
-          if (r.includes('Rate')) return 'quality_issue';
-          if (r.includes('Excess')) return 'excess_supply';
-          return 'quality_issue';
-        };
-
+      for (const { row, batchData, returnItemId } of prepared) {
         await syncEntity('PurchaseReturnItem', 'create', {
           id: returnItemId,
           returnId,
@@ -205,29 +317,26 @@ export default function PurchaseReturn() {
           mrp: Number(batchData.mrp),
           ptr: Number(row.ptr),
           netAmount: Number(row.amount),
-          reason: mapReturnReason(returnReason)
-        });
-
-        // Decrease stock (qty is in STRIPS, whole numbers). Guard against negative stock.
-        const returnStrips = Math.round(Number(row.qty) || 0);
-        const availStrips = Number(batchData.current_qty) || 0;
-        if (returnStrips > availStrips) {
-          throw new Error(`Return qty (${returnStrips} Strips) for batch ${row.batch} exceeds available stock (${availStrips} Strips).`);
-        }
-        await window.pharmaAPI.db.run(`
-          UPDATE batches SET current_qty = current_qty - ? WHERE id = ?
-        `, [returnStrips, batchData.id]);
-
-        await syncEntity('Batch', 'update', {
-          id: batchData.id,
-          currentQty: availStrips - returnStrips
+          reason: mappedReason
         });
       }
 
-      setSuccessMsg("Purchase Return saved successfully!");
-      setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, ptr: 0, gst: 12, amount: 0 }]);
-      setLookupInvoiceNo('');
-      setOriginalPurchaseId(null);
+      // Sync each affected batch with its live absolute quantity (post-commit).
+      for (const bId of Object.keys(batchDelta)) {
+        if (!batchDelta[bId]) continue;
+        const cur = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [bId]);
+        await syncEntity('Batch', 'update', { id: bId, currentQty: Number(cur?.data?.[0]?.current_qty ?? 0) });
+      }
+
+      if (isEditMode) {
+        setSuccessMsg("Purchase Return updated successfully!");
+        setTimeout(() => navigate('/reports/purchase-return'), 800);
+      } else {
+        setSuccessMsg("Purchase Return saved successfully!");
+        setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, ptr: 0, gst: 12, amount: 0 }]);
+        setLookupInvoiceNo('');
+        setOriginalPurchaseId(null);
+      }
     } catch (err) {
       setErrorMsg("Failed to save return: " + err.message);
     }
@@ -237,12 +346,12 @@ export default function PurchaseReturn() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
-          <h1 className="page-title">Purchase Return (Debit Note)</h1>
+          <h1 className="page-title">{isEditMode ? 'Edit Purchase Return (Debit Note)' : 'Purchase Return (Debit Note)'}</h1>
           <div className="page-sub">Return goods to supplier and issue debit note</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn btn-outline"><Printer size={16} /> Print Debit Note</button>
-          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> Save Return</button>
+          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {isEditMode ? 'Update Return' : 'Save Return'}</button>
         </div>
       </div>
 

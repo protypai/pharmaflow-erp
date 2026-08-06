@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Printer } from 'lucide-react';
+import { Save, Plus, Trash2, Printer, Edit, X } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
 
 export default function StockAdjustment() {
   const [products, set_products] = useState([]);
+  const [adjustmentsList, setAdjustmentsList] = useState([]);
+  // When set, we're editing an existing adjustment's DETAILS only (date/ref/reason/auth).
+  // Counted quantities are locked — to re-count stock, make a NEW adjustment entry.
+  const [editingAdjId, setEditingAdjId] = useState(null);
+
+  const fetchAdjustments = async () => {
+    const res = await window.pharmaAPI.db.query(`
+      SELECT a.*, (SELECT COUNT(*) FROM stock_adjustment_items WHERE adjustment_id = a.id) as itemCount
+      FROM stock_adjustments a
+      ORDER BY a.created_at DESC LIMIT 50
+    `);
+    setAdjustmentsList(res?.data || []);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -25,6 +38,7 @@ export default function StockAdjustment() {
           : []
       }));
       set_products(formatted);
+      await fetchAdjustments();
     };
     fetchData();
   }, []);
@@ -84,60 +98,124 @@ export default function StockAdjustment() {
   const [reason, setReason] = useState('Physical Count Mismatch');
   const [authBy, setAuthBy] = useState('Admin User');
 
+  const mapReason = (r) => {
+    if (r.includes('Mismatch')) return 'physical_count';
+    if (r.includes('Damage')) return 'damage';
+    if (r.includes('Theft')) return 'lost_theft';
+    if (r.includes('Expired')) return 'expired_destroyed';
+    return 'other';
+  };
+
+  const resetForm = () => {
+    setEditingAdjId(null);
+    setRows([{ id: 1, product: '', batch: '', sysQty: 0, actualQty: '', diff: 0 }]);
+    setRefNo('');
+    setReason('Physical Count Mismatch');
+    setAuthBy('Admin User');
+    setAdjDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const handleEditAdj = (a) => {
+    setEditingAdjId(a.id);
+    setAdjDate(String(a.date || '').slice(0, 10));
+    setRefNo(a.entry_no && !a.entry_no.startsWith('ADJ-') ? a.entry_no : '');
+    // Header stores the display reason text; if it was stored as an enum, keep as-is.
+    setReason(a.reason || 'Physical Count Mismatch');
+    setAuthBy(String(a.notes || '').replace(/^Authorized by:\s*/, '') || 'Admin User');
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSave = async () => {
-    const validRows = rows.filter(r => r.product && r.batch && r.actualQty !== '');
-    if (validRows.length === 0) return alert("Add at least one product to adjust.");
-    
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
       const companyId = userRes.data[0].company_id;
+
+      // Metadata-only edit of an existing adjustment (date/reference/reason/authorized-by).
+      // Counted quantities are NOT changed here — a re-count should be a new adjustment.
+      if (editingAdjId) {
+        await window.pharmaAPI.db.run(
+          `UPDATE stock_adjustments SET date = ?, entry_no = ?, reason = ?, notes = ? WHERE id = ?`,
+          [adjDate, refNo || editingAdjId, reason, "Authorized by: " + authBy, editingAdjId]
+        );
+        await syncEntity('StockAdjustment', 'update', {
+          id: editingAdjId,
+          entryNo: refNo || editingAdjId,
+          date: new Date(adjDate).toISOString(),
+          reason: mapReason(reason),
+          notes: "Authorized by: " + authBy,
+        });
+        resetForm();
+        await fetchAdjustments();
+        alert('Adjustment details updated!');
+        return;
+      }
+
+      const validRows = rows.filter(r => r.product && r.batch && r.actualQty !== '');
+      if (validRows.length === 0) return alert("Add at least one product to adjust.");
       const adjId = 'ADJ-' + Date.now();
 
-      await window.pharmaAPI.db.run(`
-        INSERT INTO stock_adjustments (id, company_id, date, reference_no, reason, authorized_by)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [adjId, companyId, adjDate, refNo, reason, authBy]);
+      // Resolve & validate all rows first (before any write).
+      const prepared = [];
+      for (const row of validRows) {
+        const prod = products.find(p => p.id.toString() === row.product.toString());
+        const batchData = prod?.batches.find(b => b.batch === row.batch);
+        if (!batchData) throw new Error("Batch not found for a product.");
+        const actualStrips = Math.round(Number(row.actualQty) || 0);
+        const sysStrips = Math.round(Number(batchData.qty) || 0);
+        const itemId = 'ADJI-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        prepared.push({ productId: row.product, batchData, actualStrips, sysStrips, diff: actualStrips - sysStrips, itemId });
+      }
 
-      const mapReason = (r) => {
-        if (r.includes('Mismatch')) return 'physical_count';
-        if (r.includes('Damage')) return 'damage';
-        if (r.includes('Theft')) return 'lost_theft';
-        if (r.includes('Expired')) return 'expired_destroyed';
-        return 'other';
-      };
+      // Atomic: header + items (audit: system vs physical) + set batch quantities.
+      const operations = [];
+      operations.push({
+        sql: `INSERT INTO stock_adjustments (id, company_id, entry_no, date, reason, notes, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+        params: [adjId, companyId, refNo || adjId, adjDate, reason, "Authorized by: " + authBy],
+      });
+      for (const { productId, batchData, actualStrips, sysStrips, diff, itemId } of prepared) {
+        operations.push({
+          sql: `INSERT INTO stock_adjustment_items (id, adjustment_id, product_id, batch_id, system_qty, physical_qty, difference_qty, reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [itemId, adjId, productId, batchData.id, sysStrips, actualStrips, diff, mapReason(reason)],
+        });
+        operations.push({
+          sql: `UPDATE batches SET current_qty = ?, updated_at = datetime('now') WHERE id = ?`,
+          params: [actualStrips, batchData.id],
+        });
+      }
 
+      const txRes = await window.pharmaAPI.db.transaction(operations);
+      if (!txRes?.success) throw new Error(txRes?.error || 'Failed to save adjustment');
+
+      // Sync AFTER commit: header, items, and each affected batch.
       await syncEntity('StockAdjustment', 'create', {
         id: adjId,
         companyId,
         entryNo: refNo || adjId,
         date: new Date(adjDate).toISOString(),
         reason: mapReason(reason),
-        notes: "Authorized by: " + authBy
+        notes: "Authorized by: " + authBy,
       });
-
-      for (const row of validRows) {
-        const prod = products.find(p => p.id.toString() === row.product.toString());
-        const batchData = prod?.batches.find(b => b.batch === row.batch);
-
-        if (batchData) {
-          // Actual (counted) qty is in STRIPS; store as a whole number.
-          const actualStrips = Math.round(Number(row.actualQty) || 0);
-          await window.pharmaAPI.db.run(`
-            UPDATE batches SET current_qty = ? WHERE id = ?
-          `, [actualStrips, batchData.id]);
-
-          await syncEntity('Batch', 'update', {
-            id: batchData.id,
-            currentQty: actualStrips
-          });
-        }
+      for (const { productId, batchData, actualStrips, sysStrips, diff, itemId } of prepared) {
+        await syncEntity('StockAdjustmentItem', 'create', {
+          id: itemId,
+          adjustmentId: adjId,
+          productId,
+          batchId: batchData.id,
+          systemQty: sysStrips,
+          physicalQty: actualStrips,
+          differenceQty: diff,
+          reason: mapReason(reason),
+        });
+        await syncEntity('Batch', 'update', { id: batchData.id, currentQty: actualStrips });
       }
-      
+
       alert("Stock Adjustment saved!");
-      setRows([{ id: 1, product: '', batch: '', sysQty: 0, actualQty: '', diff: 0 }]);
-      setRefNo('');
+      resetForm();
+      await fetchAdjustments();
     } catch(err) {
       alert("Error: " + err.message);
     }
@@ -147,17 +225,25 @@ export default function StockAdjustment() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
-          <h1 className="page-title">Stock Adjustment</h1>
+          <h1 className="page-title">{editingAdjId ? 'Edit Adjustment Details' : 'Stock Adjustment'}</h1>
           <div className="page-sub">Reconcile physical stock with system stock</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {editingAdjId && (
+            <button className="btn btn-outline" onClick={resetForm}><X size={16} /> Cancel</button>
+          )}
           <button className="btn btn-outline"><Printer size={16} /> Print Report</button>
-          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> Save Adjustment</button>
+          <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {editingAdjId ? 'Update Details' : 'Save Adjustment'}</button>
         </div>
       </div>
 
       <div className="card">
         <div className="card-body">
+          {editingAdjId && (
+            <div style={{ background: '#FEF3C7', color: '#92400E', padding: '0.6rem 0.85rem', marginBottom: '1rem', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '0.85rem' }}>
+              Editing adjustment details only — <b>counted quantities are locked</b>. To re-count stock, create a new adjustment.
+            </div>
+          )}
           <div className="form-row-2">
             <div className="form-group">
               <label className="form-label">Adjustment Date <span className="text-danger">*</span></label>
@@ -184,6 +270,7 @@ export default function StockAdjustment() {
         </div>
       </div>
 
+      {!editingAdjId && (
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="card-body no-pad" style={{ flex: 1, overflow: 'auto', minHeight: '300px' }}>
           <table className="data-table">
@@ -242,6 +329,51 @@ export default function StockAdjustment() {
                   </button>
                 </td>
               </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      )}
+
+      {/* Recent adjustments — edit details (date/reference/reason/authorized-by) from here */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title" style={{ fontSize: '1rem' }}>Recent Adjustments</h3>
+        </div>
+        <div className="card-body no-pad" style={{ maxHeight: '320px', overflow: 'auto' }}>
+          <table className="data-table">
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+              <tr>
+                <th>Reference</th>
+                <th>Date</th>
+                <th>Reason</th>
+                <th style={{ textAlign: 'center' }}>Items</th>
+                <th>Authorized By</th>
+                <th style={{ width: '70px', textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adjustmentsList.length === 0 ? (
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No adjustments yet.</td></tr>
+              ) : adjustmentsList.map((a) => (
+                <tr key={a.id}>
+                  <td style={{ fontWeight: 600 }}>{a.entry_no}</td>
+                  <td>{String(a.date || '').slice(0, 10)}</td>
+                  <td>{a.reason}</td>
+                  <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{a.itemCount}</td>
+                  <td>{String(a.notes || '').replace(/^Authorized by:\s*/, '') || '—'}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0, color: '#D97706', borderColor: '#D97706' }}
+                      title="Edit adjustment details"
+                      onClick={() => handleEditAdj(a)}
+                    >
+                      <Edit size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

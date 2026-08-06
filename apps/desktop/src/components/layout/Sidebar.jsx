@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Package, Users, Truck, Building2, Tag, Grid3X3,
   ShoppingCart, ArrowLeftRight, Receipt, Wallet, BarChart3,
   Archive, Settings, Database, ChevronRight, Pill, BadgeIndianRupee,
-  FileText, TrendingUp, LogOut, Menu, X, Layers,
+  FileText, TrendingUp, LogOut, Menu, X, Layers, Undo2,
 } from 'lucide-react';
 
 const navConfig = [
@@ -80,6 +80,8 @@ const navConfig = [
       { label: 'Customer Report', path: '/reports/customer', icon: Users },
       { label: 'Supplier Report', path: '/reports/supplier', icon: Truck },
       { label: 'Profit Report', path: '/reports/profit', icon: TrendingUp },
+      { label: 'Sales Return Report', path: '/reports/sales-return', icon: Undo2 },
+      { label: 'Purchase Return Report', path: '/reports/purchase-return', icon: Undo2 },
     ],
   },
   {

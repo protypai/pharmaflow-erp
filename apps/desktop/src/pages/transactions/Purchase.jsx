@@ -332,6 +332,24 @@ export default function Purchase() {
         });
       }
       
+      // Negative-stock guard (edit only): reducing a purchase's quantity must not push
+      // a batch below what has already been sold. netAdd < 0 means stock is being removed.
+      if (isEditMode) {
+        for (const [bId, diff] of Object.entries(batchStockDiff)) {
+          if (diff.isNewToDb) continue;
+          const netAdd = diff.newStrips - diff.oldStrips;
+          if (netAdd < 0) {
+            const cur = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [bId]);
+            const currentQty = Number(cur?.data?.[0]?.current_qty ?? 0);
+            if (currentQty + netAdd < 0) {
+              setIsSaving(false);
+              setErrorMsg(`Cannot reduce batch ${diff.batchNo}: only ${currentQty} strip(s) remain in stock (the rest were already sold). This edit would make stock negative.`);
+              return;
+            }
+          }
+        }
+      }
+
       for (const [bId, diff] of Object.entries(batchStockDiff)) {
           const netAdd = diff.newStrips - diff.oldStrips;
           if (diff.isNewToDb) {

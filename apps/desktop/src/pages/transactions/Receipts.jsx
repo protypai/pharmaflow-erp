@@ -1,17 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Printer, IndianRupee } from 'lucide-react';
+import { Save, Printer, IndianRupee, Edit, X } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
 
 export default function Receipts() {
   const [customers, set_customers] = useState([]);
+  const [receiptsList, setReceiptsList] = useState([]);
+  // When set, we're editing an existing receipt's DETAILS only (date/mode/cheque/bank).
+  // Amount and invoice allocation stay locked to avoid desyncing invoice paid-status.
+  const [editingReceiptId, setEditingReceiptId] = useState(null);
+
+  const fetchReceipts = async () => {
+    const res = await window.pharmaAPI.db.query(`
+      SELECT r.*, c.name as customerName
+      FROM receipts r LEFT JOIN customers c ON r.customer_id = c.id
+      ORDER BY r.created_at DESC LIMIT 50
+    `);
+    setReceiptsList(res?.data || []);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       const res_customers = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE COALESCE(status, 'active') <> 'inactive'");
       set_customers(res_customers?.data || []);
+      await fetchReceipts();
     };
     fetchData();
   }, []);
+
+  const handleEditReceipt = (r) => {
+    setEditingReceiptId(r.id);
+    setCustomerId(r.customer_id || '');
+    setReceiptDate(String(r.date || '').slice(0, 10));
+    setPayMode(r.payment_mode === 'cash' ? 'cash' : (r.payment_mode === 'upi' ? 'upi' : 'bank'));
+    setAmountReceived(r.amount);
+    setChequeNo(r.cheque_no || '');
+    setBankName(r.bank_name || '');
+    setBills([]);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetForm = () => {
+    setEditingReceiptId(null);
+    setCustomerId('');
+    setAmountReceived('');
+    setChequeNo('');
+    setBankName('');
+    setBills([]);
+  };
 
   const [customerId, setCustomerId] = useState('');
   const [amountReceived, setAmountReceived] = useState(0);
@@ -71,6 +106,26 @@ export default function Receipts() {
 
   const handleSave = async () => {
     try {
+      // Metadata-only edit of an existing receipt. Amount & allocation are NOT changed
+      // (allocations aren't tracked per-receipt, so we never touch invoice paid-status here).
+      if (editingReceiptId) {
+        await window.pharmaAPI.db.run(
+          `UPDATE receipts SET date = ?, payment_mode = ?, cheque_no = ?, bank_name = ?, updated_at = datetime('now') WHERE id = ?`,
+          [receiptDate, payMode, chequeNo, bankName, editingReceiptId]
+        );
+        await syncEntity('Receipt', 'update', {
+          id: editingReceiptId,
+          date: new Date(receiptDate).toISOString(),
+          paymentMode: payMode === 'cash' ? 'cash' : 'neft_rtgs',
+          chequeNo,
+          bankName,
+        });
+        resetForm();
+        await fetchReceipts();
+        alert('Receipt details updated!');
+        return;
+      }
+
       if (!customerId) throw new Error("Please select a customer.");
       if (!amountReceived || Number(amountReceived) <= 0) throw new Error("Amount must be greater than 0.");
       if (allocatedTotal > Number(amountReceived)) throw new Error("Allocation exceeds received amount!");
@@ -141,6 +196,7 @@ export default function Receipts() {
       setChequeNo('');
       setBankName('');
       setBills([]);
+      await fetchReceipts();
       alert(`Receipt ${receiptNo} saved successfully!`);
     } catch (err) {
       alert(err.message || "Failed to save receipt.");
@@ -151,21 +207,29 @@ export default function Receipts() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 'calc(100vh - 120px)' }}>
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
-          <h1 className="page-title">Receipts (Money Received)</h1>
+          <h1 className="page-title">{editingReceiptId ? 'Edit Receipt Details' : 'Receipts (Money Received)'}</h1>
           <div className="page-sub">Collect payments from customers and adjust against invoices</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {editingReceiptId && (
+            <button className="btn btn-outline" onClick={resetForm}><X size={16} /> Cancel</button>
+          )}
           <button className="btn btn-outline"><Printer size={16} /> Print Receipt</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={!amountReceived || Number(amountReceived) <= 0 || allocatedTotal > (Number(amountReceived)||0)}><Save size={16} /> Save Receipt</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={editingReceiptId ? false : (!amountReceived || Number(amountReceived) <= 0 || allocatedTotal > (Number(amountReceived)||0))}><Save size={16} /> {editingReceiptId ? 'Update Details' : 'Save Receipt'}</button>
         </div>
       </div>
 
       <div className="card">
         <div className="card-body">
+          {editingReceiptId && (
+            <div style={{ background: '#FEF3C7', color: '#92400E', padding: '0.6rem 0.85rem', marginBottom: '1rem', borderRadius: '4px', border: '1px solid #FDE68A', fontSize: '0.85rem' }}>
+              Editing receipt details only — <b>amount and invoice allocation are locked</b>. To correct an amount, add a new receipt instead.
+            </div>
+          )}
           <div className="form-row-2">
             <div className="form-group">
               <label className="form-label">Customer <span className="text-danger">*</span></label>
-              <select className="form-select" value={customerId} onChange={e => setCustomerId(e.target.value)}>
+              <select className="form-select" value={customerId} onChange={e => setCustomerId(e.target.value)} disabled={!!editingReceiptId}>
                 <option value="">Select Customer...</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -180,7 +244,7 @@ export default function Receipts() {
                   <label className="form-label">Total Amount Received (₹) <span className="text-danger">*</span></label>
                   <div className="search-input-wrap" style={{ width: '100%' }}>
                     <IndianRupee size={16} className="search-icon" color="var(--success)" />
-                    <input type="number" className="form-input" value={amountReceived === 0 ? '' : amountReceived} onChange={e => setAmountReceived(e.target.value)} style={{ fontWeight: 600, fontSize: '1.1rem' }} />
+                    <input type="number" className="form-input" value={amountReceived === 0 ? '' : amountReceived} onChange={e => setAmountReceived(e.target.value)} disabled={!!editingReceiptId} title={editingReceiptId ? 'Amount is locked while editing details' : ''} style={{ fontWeight: 600, fontSize: '1.1rem' }} />
                   </div>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -210,6 +274,7 @@ export default function Receipts() {
         </div>
       </div>
 
+      {!editingReceiptId && (
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="card-title" style={{ fontSize: '1rem' }}>Pending Invoice Allocation</h3>
@@ -265,6 +330,51 @@ export default function Receipts() {
               <div style={{ color: 'var(--danger)', fontSize: '0.8rem', textAlign: 'right' }}>Allocation exceeds received amount!</div>
             )}
           </div>
+        </div>
+      </div>
+      )}
+
+      {/* Recent receipts — edit details (date/mode/cheque/bank) from here */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title" style={{ fontSize: '1rem' }}>Recent Receipts</h3>
+        </div>
+        <div className="card-body no-pad" style={{ maxHeight: '320px', overflow: 'auto' }}>
+          <table className="data-table">
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+              <tr>
+                <th>Receipt No</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th style={{ textAlign: 'right' }}>Amount (₹)</th>
+                <th>Mode</th>
+                <th style={{ width: '70px', textAlign: 'center' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receiptsList.length === 0 ? (
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>No receipts yet.</td></tr>
+              ) : receiptsList.map((r) => (
+                <tr key={r.id}>
+                  <td style={{ fontWeight: 600 }}>{r.receipt_no}</td>
+                  <td>{String(r.date || '').slice(0, 10)}</td>
+                  <td>{r.customerName || '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>{Number(r.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style={{ textTransform: 'capitalize' }}>{r.payment_mode}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ padding: '3px 7px', minWidth: 0, color: '#D97706', borderColor: '#D97706' }}
+                      title="Edit receipt details"
+                      onClick={() => handleEditReceipt(r)}
+                    >
+                      <Edit size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
