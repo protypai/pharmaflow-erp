@@ -552,6 +552,38 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     sql: 'INSERT OR REPLACE INTO payments (id, company_id, payment_no, supplier_id, date, amount, payment_mode, cheque_no, cheque_date, bank_name, utr_no, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     params: [item.id, item.companyId, item.paymentNo, item.supplierId, item.date, item.amount, item.paymentMode, item.chequeNo, item.chequeDate, item.bankName, item.utrNo, item.notes, item.createdAt, item.updatedAt],
   }) },
+  { key: 'purchaseReturns', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, debit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.companyId, item.entryNo, item.purchaseId, item.supplierId, item.returnDate, item.reason, item.debitNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt],
+  }) },
+  { key: 'purchaseReturnItems', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.netAmount, item.reason],
+  }) },
+  { key: 'saleReturns', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, credit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.companyId, item.entryNo, item.saleId, item.customerId, item.returnDate, item.reason, item.creditNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt],
+  }) },
+  { key: 'saleReturnItems', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO sale_return_items (id, return_id, product_id, batch_id, qty, mrp, sale_price, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.salePrice, item.netAmount, item.reason],
+  }) },
+  { key: 'stockAdjustments', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO stock_adjustments (id, company_id, entry_no, date, type, reason, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.companyId, item.entryNo, item.date, item.type, item.reason, item.status, item.createdAt, item.updatedAt],
+  }) },
+  { key: 'stockAdjustmentItems', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO stock_adjustment_items (id, adjustment_id, product_id, batch_id, previous_qty, new_qty, diff_qty) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.adjustmentId, item.productId, item.batchId, item.previousQty, item.newQty, item.diffQty],
+  }) },
+  { key: 'journals', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO journals (id, company_id, entry_no, date, type, reference, notes, total_debit, total_credit, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.companyId, item.entryNo, item.date, item.type, item.reference, item.notes, item.totalDebit, item.totalCredit, item.status, item.createdAt, item.updatedAt],
+  }) },
+  { key: 'journalEntries', build: (item) => ({
+    sql: 'INSERT OR REPLACE INTO journal_entries (id, journal_id, account_id, account_type, account_name, debit, credit, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.journalId, item.accountId, item.accountType, item.accountName, item.debit, item.credit, item.notes],
+  }) },
 ];
 
 export async function pullChanges(accessToken: string, refreshToken?: string): Promise<{ applied: number; serverTime?: string; newAccessToken?: string }> {
