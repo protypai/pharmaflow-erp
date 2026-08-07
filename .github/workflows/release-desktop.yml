@@ -49,8 +49,12 @@ jobs:
       - name: Sync package.json Version with Git Tag
         run: |
           $tag = "${{ github.ref_name }}"
-          if ($tag.StartsWith("v")) { $tag = $tag.Substring(1) }
-          npm version $tag --no-git-tag-version --allow-same-version
+          if ($tag -match "^v?\d+\.\d+\.\d+") {
+            if ($tag.StartsWith("v")) { $tag = $tag.Substring(1) }
+            npm version $tag --no-git-tag-version --allow-same-version
+          } else {
+            Write-Host "Skipping npm version sync for non-release tag/branch: $tag"
+          }
         working-directory: apps/desktop
 
       - name: Build Electron .exe Installers (x64, ia32, arm64)
