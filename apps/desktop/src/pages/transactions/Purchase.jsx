@@ -369,8 +369,8 @@ export default function Purchase() {
                  prms.push(netAdd);
               }
               if (diff.newPrices) {
-                 sets.push("mrp = ?, ptr = ?, pts = ?, purchase_price = ?, gst_rate = ?");
-                 prms.push(diff.newPrices.mrp, diff.newPrices.ptr, diff.newPrices.pts, diff.newPrices.purchase_price, diff.newPrices.gst_rate);
+                 sets.push("mrp = ?, ptr = ?, pts = ?, purchase_price = ?, gst_rate = ?, expiry_date = ?");
+                 prms.push(diff.newPrices.mrp, diff.newPrices.ptr, diff.newPrices.pts, diff.newPrices.purchase_price, diff.newPrices.gst_rate, diff.newPrices.expiryDate);
               }
               sets.push("updated_at = datetime('now')");
               prms.push(bId);
