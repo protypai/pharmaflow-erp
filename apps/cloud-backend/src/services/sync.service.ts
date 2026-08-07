@@ -291,6 +291,15 @@ export const getChanges = async (companyId: string, since?: Date) => {
   const receipts = await db.receipt.findMany({ where: { companyId, ...updatedFilter } });
   const payments = await db.payment.findMany({ where: { companyId, ...updatedFilter } });
 
+  const purchaseReturns = await db.purchaseReturn.findMany({ where: { companyId, ...updatedFilter } });
+  const purchaseReturnItems = await db.purchaseReturnItem.findMany({ where: { purchaseReturn: { companyId, ...parentUpdated } } });
+  const saleReturns = await db.saleReturn.findMany({ where: { companyId, ...updatedFilter } });
+  const saleReturnItems = await db.saleReturnItem.findMany({ where: { saleReturn: { companyId, ...parentUpdated } } });
+  const stockAdjustments = await db.stockAdjustment.findMany({ where: { companyId, ...updatedFilter } });
+  const stockAdjustmentItems = await db.stockAdjustmentItem.findMany({ where: { adjustment: { companyId, ...parentUpdated } } });
+  const journals = await db.journal.findMany({ where: { companyId, ...updatedFilter } });
+  const journalEntries = await db.journalEntry.findMany({ where: { journal: { companyId, ...parentUpdated } } });
+
   return {
     companies,
     categories,
@@ -306,5 +315,13 @@ export const getChanges = async (companyId: string, since?: Date) => {
     purchaseItems,
     receipts,
     payments,
+    purchaseReturns,
+    purchaseReturnItems,
+    saleReturns,
+    saleReturnItems,
+    stockAdjustments,
+    stockAdjustmentItems,
+    journals,
+    journalEntries,
   };
 };
