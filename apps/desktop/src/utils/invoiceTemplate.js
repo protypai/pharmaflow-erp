@@ -93,7 +93,7 @@ function amountInWords(amount) {
  * @param {Array}    opts.items    [{ mfg, name, hsn, pack, batch, exp, qty, free, mrp, pts, ptr, amount, gst, disc }]
  */
 export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, invoice = {}, items = [] } = {}) {
-  const isPurchase = type === 'purchase';
+  const isPurchase = type === 'purchase' || type === 'purchase_return';
   const list = Array.isArray(items) ? items : [];
 
   // ---- per-item derived taxable + gst (self-consistent from the net amount) ----
@@ -153,7 +153,9 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
   const companyName = esc(val(company.name, isPurchase ? 'Purchase Enterprise' : 'Medical Enterprise'));
   const dlLine1 = val(party.drug_license1 ?? party.drug_license);
   const dlLine2 = val(party.drug_license2);
-  const titleText = isPurchase ? 'PURCHASE INVOICE' : 'INVOICE / TAX INVOICE';
+  let titleText = isPurchase ? 'PURCHASE INVOICE' : 'INVOICE / TAX INVOICE';
+  if (type === 'sales_return') titleText = 'CREDIT NOTE / RETURN';
+  if (type === 'purchase_return') titleText = 'DEBIT NOTE / RETURN';
 
   let formattedDate = val(invoice.date, '');
   if (formattedDate) {
@@ -420,6 +422,104 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         discount: sale.discount_amount || 0,
         netPayable: sale.net_amount || 0,
         note: sale.notes || ''
+      };
+    } else if (type === 'sales_return') {
+      const srRes = await window.pharmaAPI.db.query(
+        "SELECT * FROM sale_returns WHERE id = ? OR entry_no = ? LIMIT 1",
+        [recordId, recordId]
+      );
+      const sr = srRes?.data?.[0];
+      if (!sr) {
+        alert('Sales return not found in database.');
+        return;
+      }
+
+      const partyRes = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE id = ?", [sr.customer_id]);
+      party = partyRes?.data?.[0] || {};
+
+      const itemsRes = await window.pharmaAPI.db.query(
+        `SELECT sri.*, p.name AS product_name, p.hsn_code, p.packing, m.name AS mfg_name, b.batch_no, b.expiry_date, b.pts AS batch_pts
+         FROM sale_return_items sri
+         LEFT JOIN products p ON sri.product_id = p.id
+         LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
+         LEFT JOIN batches b ON sri.batch_id = b.id
+         WHERE sri.return_id = ?`,
+        [sr.id]
+      );
+
+      items = (itemsRes?.data || []).map(item => ({
+        mfg: item.mfg_name || '',
+        name: item.product_name || 'Product',
+        hsn: item.hsn_code || '',
+        pack: item.packing || '1x10',
+        batch: item.batch_no || '',
+        exp: item.expiry_date || '',
+        qty: item.qty || 0,
+        free: 0,
+        mrp: item.mrp || 0,
+        pts: item.batch_pts || '',
+        ptr: item.ptr || item.sale_price || 0,
+        amount: item.net_amount || 0,
+        gst: item.gst_rate || 0,
+        disc: item.disc_percent || 0
+      }));
+
+      invoice = {
+        no: sr.entry_no || sr.credit_note_no || sr.id,
+        date: sr.return_date,
+        type: 'Credit Note',
+        discount: sr.discount_amount || 0,
+        netPayable: sr.net_amount || 0,
+        note: sr.reason || ''
+      };
+    } else if (type === 'purchase_return') {
+      const prRes = await window.pharmaAPI.db.query(
+        "SELECT * FROM purchase_returns WHERE id = ? OR entry_no = ? LIMIT 1",
+        [recordId, recordId]
+      );
+      const pr = prRes?.data?.[0];
+      if (!pr) {
+        alert('Purchase return not found in database.');
+        return;
+      }
+
+      const partyRes = await window.pharmaAPI.db.query("SELECT * FROM suppliers WHERE id = ?", [pr.supplier_id]);
+      party = partyRes?.data?.[0] || {};
+
+      const itemsRes = await window.pharmaAPI.db.query(
+        `SELECT pri.*, p.name AS product_name, p.hsn_code, p.packing, m.name AS mfg_name, b.batch_no, b.expiry_date, b.pts AS batch_pts
+         FROM purchase_return_items pri
+         LEFT JOIN products p ON pri.product_id = p.id
+         LEFT JOIN manufacturers m ON p.manufacturer_id = m.id
+         LEFT JOIN batches b ON pri.batch_id = b.id
+         WHERE pri.return_id = ?`,
+        [pr.id]
+      );
+
+      items = (itemsRes?.data || []).map(item => ({
+        mfg: item.mfg_name || '',
+        name: item.product_name || 'Product',
+        hsn: item.hsn_code || '',
+        pack: item.packing || '1x10',
+        batch: item.batch_no || '',
+        exp: item.expiry_date || '',
+        qty: item.qty || 0,
+        free: 0,
+        mrp: item.mrp || 0,
+        pts: item.batch_pts || item.ptr || 0,
+        ptr: item.ptr || item.purchase_price || 0,
+        amount: item.net_amount || 0,
+        gst: item.gst_rate || 0,
+        disc: item.disc_percent || 0
+      }));
+
+      invoice = {
+        no: pr.entry_no || pr.debit_note_no || pr.id,
+        date: pr.return_date,
+        type: 'Debit Note',
+        discount: pr.discount_amount || 0,
+        netPayable: pr.net_amount || 0,
+        note: pr.reason || ''
       };
     } else {
       const purRes = await window.pharmaAPI.db.query(

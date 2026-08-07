@@ -11,6 +11,7 @@ export default function Outstanding() {
       const res_customers = await window.pharmaAPI.db.query(`
         SELECT c.*,
                (SELECT SUM(net_amount) FROM sales WHERE customer_id = c.id) as totalBilled,
+               (SELECT SUM(net_amount) FROM sale_returns WHERE customer_id = c.id) as totalReturned,
                (SELECT SUM(amount) FROM receipts WHERE customer_id = c.id) as totalPaid,
                (SELECT MIN(date) FROM sales WHERE customer_id = c.id AND (net_amount - paid_amount) > 0) as oldestDue
         FROM customers c
@@ -19,6 +20,7 @@ export default function Outstanding() {
       const res_suppliers = await window.pharmaAPI.db.query(`
         SELECT s.*,
                (SELECT SUM(net_amount) FROM purchases WHERE supplier_id = s.id) as totalBilled,
+               (SELECT SUM(net_amount) FROM purchase_returns WHERE supplier_id = s.id) as totalReturned,
                (SELECT SUM(amount) FROM payments WHERE supplier_id = s.id) as totalPaid,
                (SELECT MIN(invoice_date) FROM purchases WHERE supplier_id = s.id AND (net_amount - paid_amount) > 0) as oldestDue
         FROM suppliers s
@@ -38,7 +40,8 @@ export default function Outstanding() {
       // Customers owe money TO the pharmacy
       data = customers.map(c => {
         const totalBilled = c.totalBilled || 0;
-        const pendingAmt = (c.opening_balance || 0) + totalBilled - (c.totalPaid || 0);
+        const totalReturned = c.totalReturned || 0;
+        const pendingAmt = (c.opening_balance || 0) + totalBilled - totalReturned - (c.totalPaid || 0);
         let oldestDueDays = 0;
         if (c.oldestDue) {
           oldestDueDays = Math.ceil((new Date() - new Date(c.oldestDue)) / (1000 * 60 * 60 * 24));
@@ -59,7 +62,8 @@ export default function Outstanding() {
       // Pharmacy owes money TO suppliers
       data = suppliers.map(s => {
         const totalBilled = s.totalBilled || 0;
-        const pendingAmt = (s.opening_balance || 0) + totalBilled - (s.totalPaid || 0);
+        const totalReturned = s.totalReturned || 0;
+        const pendingAmt = (s.opening_balance || 0) + totalBilled - totalReturned - (s.totalPaid || 0);
         let oldestDueDays = 0;
         if (s.oldestDue) {
           oldestDueDays = Math.ceil((new Date() - new Date(s.oldestDue)) / (1000 * 60 * 60 * 24));

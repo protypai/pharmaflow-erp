@@ -64,13 +64,20 @@ export default function Receipts() {
   useEffect(() => {
     const fetchPendingBills = async () => {
       if (customerId) {
-        const res = await window.pharmaAPI.db.query("SELECT * FROM sales WHERE customer_id = ? AND (net_amount - paid_amount) > 0 ORDER BY date ASC", [customerId]);
+        const res = await window.pharmaAPI.db.query(`
+          SELECT s.*, COALESCE((SELECT SUM(net_amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0) as returned_amount
+          FROM sales s 
+          WHERE s.customer_id = ? 
+            AND (s.net_amount - s.paid_amount - COALESCE((SELECT SUM(net_amount) FROM sale_returns sr WHERE sr.sale_id = s.id), 0)) > 0 
+          ORDER BY s.date ASC
+        `, [customerId]);
         const dbBills = (res?.data || []).map(s => ({
           id: s.invoice_no,
           dbId: s.id,
           date: s.date,
           amount: s.net_amount,
-          pending: s.net_amount - s.paid_amount,
+          returned: s.returned_amount,
+          pending: s.net_amount - s.paid_amount - s.returned_amount,
           allocated: 0,
           discount: 0
         }));

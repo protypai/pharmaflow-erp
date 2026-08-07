@@ -7,7 +7,7 @@ import {
 
 export default function GSTReport() {
   const [reportType, setReportType] = useState('gstr3b');
-  const [period, setPeriod] = useState('july_2025');
+  const [period, setPeriod] = useState('current_month');
 
   const [gstSummary, setGstSummary] = useState({
     salesValue: 0, purchaseValue: 0,
@@ -146,9 +146,10 @@ export default function GSTReport() {
         <div style={{ width: '200px' }}>
           <label className="form-label">Filing Period</label>
           <select className="form-select" value={period} onChange={e => setPeriod(e.target.value)}>
-            <option value="july_2025">July 2025</option>
-            <option value="june_2025">June 2025</option>
-            <option value="q1_2025">Q1 (Apr-Jun 2025)</option>
+            <option value="current_month">Current Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="current_quarter">Current Quarter</option>
+            <option value="all_time">All Time</option>
           </select>
         </div>
         <button className="btn btn-outline" style={{ padding: '0.5rem 1.5rem' }} onClick={fetchGST}>Refresh</button>

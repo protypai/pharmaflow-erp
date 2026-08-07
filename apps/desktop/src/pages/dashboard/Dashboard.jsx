@@ -41,6 +41,7 @@ export default function Dashboard() {
           SELECT 
             COALESCE((SELECT SUM(opening_balance) FROM customers), 0) +
             COALESCE((SELECT SUM(net_amount) FROM sales), 0) -
+            COALESCE((SELECT SUM(net_amount) FROM sale_returns), 0) -
             COALESCE((SELECT SUM(amount) FROM receipts), 0) as total
         `);
 
@@ -48,6 +49,7 @@ export default function Dashboard() {
           SELECT 
             COALESCE((SELECT SUM(opening_balance) FROM suppliers), 0) +
             COALESCE((SELECT SUM(net_amount) FROM purchases), 0) -
+            COALESCE((SELECT SUM(net_amount) FROM purchase_returns), 0) -
             COALESCE((SELECT SUM(amount) FROM payments), 0) as total
         `);
 
@@ -115,19 +117,19 @@ export default function Dashboard() {
         let activities = [];
         try {
           const actRes = await window.pharmaAPI.db.query(`
-            SELECT 'sale' as type, date as ref_date, invoice_no as desc, c.name as party, net_amount as amount, s.created_at
+            SELECT 'sale' as type, date as ref_date, invoice_no as description, c.name as party, net_amount as amount, s.created_at
             FROM sales s LEFT JOIN customers c ON s.customer_id = c.id
             WHERE s.date LIKE '${today}%'
             UNION ALL
-            SELECT 'purchase' as type, invoice_date as ref_date, invoice_no as desc, sup.name as party, net_amount as amount, p.created_at
+            SELECT 'purchase' as type, invoice_date as ref_date, invoice_no as description, sup.name as party, net_amount as amount, p.created_at
             FROM purchases p LEFT JOIN suppliers sup ON p.supplier_id = sup.id
             WHERE p.invoice_date LIKE '${today}%'
             UNION ALL
-            SELECT 'receipt' as type, date as ref_date, receipt_no as desc, c.name as party, amount, r.created_at
+            SELECT 'receipt' as type, date as ref_date, receipt_no as description, c.name as party, amount, r.created_at
             FROM receipts r LEFT JOIN customers c ON r.customer_id = c.id
             WHERE r.date LIKE '${today}%'
             UNION ALL
-            SELECT 'payment' as type, date as ref_date, payment_no as desc, sup.name as party, amount, p.created_at
+            SELECT 'payment' as type, date as ref_date, payment_no as description, sup.name as party, amount, p.created_at
             FROM payments p LEFT JOIN suppliers sup ON p.supplier_id = sup.id
             WHERE p.date LIKE '${today}%'
             ORDER BY created_at DESC
@@ -143,7 +145,7 @@ export default function Dashboard() {
               const mins = dt.getMinutes().toString().padStart(2, '0');
               return {
                 time: `${hours}:${mins} ${ampm}`,
-                desc: act.desc,
+                desc: act.description,
                 party: act.party || 'Cash',
                 type: act.type,
                 amount: act.amount

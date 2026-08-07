@@ -5,6 +5,7 @@ import {
   exportCsv, exportExcel, exportPdf, printHtml, buildReportHtml,
   getCompanyProfile, dateRangeBounds,
 } from '../../utils/export';
+import { exportPastInvoice } from '../../utils/invoiceTemplate';
 
 // Sales Returns register — history + date-range + CSV/Excel/PDF export.
 // Mirrors the other reports (SalesReport, PurchaseReport) for a consistent UX.
@@ -192,7 +193,23 @@ export default function SalesReturnReport() {
                 <td style={{ textAlign: 'right', fontWeight: 700, color: '#B91C1C' }}>
                   {(Number(row.net) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td style={{ textAlign: 'center' }}>
+                <td style={{ textAlign: 'center', display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '3px 7px', minWidth: 0, color: '#475569', borderColor: '#CBD5E1' }}
+                    title="Download Note"
+                    onClick={() => exportPastInvoice('sales_return', row.returnId, 'pdf')}
+                  >
+                    <Download size={14} color="#475569" />
+                  </button>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '3px 7px', minWidth: 0, color: '#475569', borderColor: '#CBD5E1' }}
+                    title="Print Note"
+                    onClick={() => exportPastInvoice('sales_return', row.returnId, 'print')}
+                  >
+                    <Printer size={14} color="#475569" />
+                  </button>
                   <button
                     className="btn btn-outline btn-sm"
                     style={{ padding: '3px 7px', minWidth: 0, color: '#D97706', borderColor: '#D97706' }}

@@ -132,13 +132,30 @@ export function dateRangeBounds(range, customStart, customEnd) {
  * GST filing-period bounds (matches the fixed options in GSTReport).
  */
 export function periodBounds(period) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-11
+  
+  const fmt = (d) => d.toISOString().split('T')[0];
+  
   switch (period) {
-    case 'july_2025':
-      return { start: '2025-07-01', end: '2025-07-31T23:59:59.999Z' };
-    case 'june_2025':
-      return { start: '2025-06-01', end: '2025-06-30T23:59:59.999Z' };
-    case 'q1_2025':
-      return { start: '2025-04-01', end: '2025-06-30T23:59:59.999Z' };
+    case 'current_month': {
+      const start = new Date(y, m, 1);
+      const end = new Date(y, m + 1, 0);
+      return { start: fmt(start), end: fmt(end) + 'T23:59:59.999Z' };
+    }
+    case 'last_month': {
+      const start = new Date(y, m - 1, 1);
+      const end = new Date(y, m, 0);
+      return { start: fmt(start), end: fmt(end) + 'T23:59:59.999Z' };
+    }
+    case 'current_quarter': {
+      const qStartMonth = Math.floor(m / 3) * 3;
+      const start = new Date(y, qStartMonth, 1);
+      const end = new Date(y, qStartMonth + 3, 0);
+      return { start: fmt(start), end: fmt(end) + 'T23:59:59.999Z' };
+    }
+    case 'all_time':
     default:
       return { start: null, end: null };
   }

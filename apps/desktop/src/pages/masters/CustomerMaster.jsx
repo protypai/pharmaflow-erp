@@ -19,7 +19,15 @@ export default function CustomerMaster() {
 
   const fetchCustomers = async () => {
     try {
-      const res = await window.pharmaAPI.db.query("SELECT * FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
+      const res = await window.pharmaAPI.db.query(`
+        SELECT c.*,
+               (SELECT SUM(net_amount) FROM sales WHERE customer_id = c.id) as totalBilled,
+               (SELECT SUM(net_amount) FROM sale_returns WHERE customer_id = c.id) as totalReturned,
+               (SELECT SUM(amount) FROM receipts WHERE customer_id = c.id) as totalPaid
+        FROM customers c 
+        WHERE COALESCE(status, 'active') <> 'inactive' 
+        ORDER BY name ASC
+      `);
       setCustomersList(res?.data || []);
     } catch (err) {
       console.error('Failed to load customers', err);
@@ -194,7 +202,10 @@ export default function CustomerMaster() {
           </thead>
           <tbody>
             {filtered.map(cust => {
-              const outstanding = cust.opening_balance || 0; // TODO: Calculate actual outstanding from transactions
+              const totalBilled = cust.totalBilled || 0;
+              const totalReturned = cust.totalReturned || 0;
+              const totalPaid = cust.totalPaid || 0;
+              const outstanding = (cust.opening_balance || 0) + totalBilled - totalReturned - totalPaid;
               const outstandingExceeds = outstanding > cust.credit_limit;
               return (
                 <tr key={cust.id}>

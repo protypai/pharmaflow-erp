@@ -13,9 +13,9 @@ export default function CustomerReport() {
       const res_customers = await window.pharmaAPI.db.query(`
         SELECT c.*, 
                COUNT(s.id) as totalOrders,
-               SUM(s.net_amount) as totalRevenue,
-               (SELECT SUM(amount) FROM receipts WHERE customer_id = c.id) as totalReceipts,
-               (SELECT SUM(net_amount) FROM sale_returns WHERE customer_id = c.id) as totalReturns
+               (SELECT SUM(net_amount) FROM sales WHERE customer_id = c.id) as totalRevenue,
+               (SELECT SUM(net_amount) FROM sale_returns WHERE customer_id = c.id) as totalReturned,
+               (SELECT SUM(amount) FROM receipts WHERE customer_id = c.id) as totalReceipts
         FROM customers c
         LEFT JOIN sales s ON c.id = s.customer_id
         GROUP BY c.id
@@ -31,11 +31,11 @@ export default function CustomerReport() {
   const customerData = useMemo(() => {
     return customers.map(c => {
       const totalOrders = c.totalOrders || 0;
-      const totalRevenue = c.totalRevenue || 0;
-      const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
+      const netRevenue = c.totalRevenue || 0;
+      const totalReturned = c.totalReturned || 0;
+      const avgOrderValue = totalOrders > 0 ? (netRevenue / totalOrders) : 0;
       
-      const netRevenue = totalRevenue - (c.totalReturns || 0);
-      const outstandingBalance = (c.opening_balance || 0) + netRevenue - (c.totalReceipts || 0);
+      const outstandingBalance = (c.opening_balance || 0) + netRevenue - totalReturned - (c.totalReceipts || 0);
       
       return {
         ...c,

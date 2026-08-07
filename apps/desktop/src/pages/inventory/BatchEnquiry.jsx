@@ -6,6 +6,8 @@ import { formatStock } from '../../utils/units';
 export default function BatchEnquiry() {
   const [products, set_products] = useState([]);
   const [suppliers, set_suppliers] = useState([]);
+  const [traceModalOpen, setTraceModalOpen] = useState(false);
+  const [traceData, setTraceData] = useState({ batch: '', history: [] });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,6 +48,35 @@ export default function BatchEnquiry() {
       inwardDate: batch.inwardDate ? batch.inwardDate.split(' ')[0] : 'N/A',
       invoiceNo: `INV-BATCH`
     };
+  };
+
+  const handleTrace = async (batch_id, batch_no) => {
+    try {
+      const res = await window.pharmaAPI.db.query(`
+        SELECT 'Inward (Purchase)' as type, p.invoice_date as date, p.invoice_no as description, s.name as party, pi.qty as qty
+        FROM purchase_items pi JOIN purchases p ON pi.purchase_id = p.id LEFT JOIN suppliers s ON p.supplier_id = s.id
+        WHERE pi.batch_id = ?
+        UNION ALL
+        SELECT 'Outward (Sale)' as type, s.date as date, s.invoice_no as description, c.name as party, si.qty as qty
+        FROM sale_items si JOIN sales s ON si.sale_id = s.id LEFT JOIN customers c ON s.customer_id = c.id
+        WHERE si.batch_id = ?
+        UNION ALL
+        SELECT 'Inward (Sale Return)' as type, sr.return_date as date, sr.entry_no as description, c.name as party, sri.qty as qty
+        FROM sale_return_items sri JOIN sale_returns sr ON sri.return_id = sr.id LEFT JOIN customers c ON sr.customer_id = c.id
+        WHERE sri.batch_id = ?
+        UNION ALL
+        SELECT 'Outward (Purchase Return)' as type, pr.return_date as date, pr.entry_no as description, s.name as party, pri.qty as qty
+        FROM purchase_return_items pri JOIN purchase_returns pr ON pri.return_id = pr.id LEFT JOIN suppliers s ON pr.supplier_id = s.id
+        WHERE pri.batch_id = ?
+        ORDER BY date DESC
+      `, [batch_id, batch_id, batch_id, batch_id]);
+      
+      setTraceData({ batch: batch_no, history: res?.data || [] });
+      setTraceModalOpen(true);
+    } catch (err) {
+      console.error("Error tracing batch:", err);
+      alert("Failed to fetch batch trace history.");
+    }
   };
 
   return (
@@ -121,7 +152,7 @@ export default function BatchEnquiry() {
                         className="btn btn-outline btn-sm" 
                         title="View Transaction History" 
                         style={{ color: 'var(--info-dark)', borderColor: 'var(--info-dark)' }}
-                        onClick={() => alert(`Full trace history for Batch ${enriched.batch} will be available in the next update.`)}
+                        onClick={() => handleTrace(batch.id, enriched.batch)}
                       >
                         <History size={14} /> Trace
                       </button>
@@ -133,6 +164,54 @@ export default function BatchEnquiry() {
           </tbody>
         </table>
       </div>
+
+      {traceModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: '800px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="card-header" style={{ borderBottom: '1px solid var(--border)', background: '#F8FAFC' }}>
+              <h3 className="card-title">Batch Trace History: {traceData.batch}</h3>
+              <button className="btn btn-ghost" onClick={() => setTraceModalOpen(false)} style={{ padding: '0.25rem' }}>
+                &times;
+              </button>
+            </div>
+            
+            <div className="card-body no-pad" style={{ overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                  <tr>
+                    <th>Date</th>
+                    <th>Transaction Type</th>
+                    <th>Reference No.</th>
+                    <th>Party</th>
+                    <th style={{ textAlign: 'right' }}>Qty Changed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {traceData.history.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>No transaction history found for this batch.</td>
+                    </tr>
+                  ) : (
+                    traceData.history.map((t, idx) => (
+                      <tr key={idx}>
+                        <td>{t.date}</td>
+                        <td style={{ fontWeight: 500, color: t.type.includes('Inward') ? 'var(--success)' : 'var(--danger)' }}>
+                          {t.type}
+                        </td>
+                        <td>{t.description}</td>
+                        <td>{t.party || '-'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {t.type.includes('Inward') ? '+' : '-'}{t.qty}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
