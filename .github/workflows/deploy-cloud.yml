@@ -4,11 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'apps/cloud-backend/**'
-      - 'docker-compose.yml'
-      - 'nginx/**'
-      - '.github/workflows/**'
+    tags:
+      - 'v*.*.*'
 
 concurrency:
   group: production-deploy
