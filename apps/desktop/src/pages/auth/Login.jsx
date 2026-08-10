@@ -25,10 +25,33 @@ export default function Login() {
 
   // Auto-login check
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      navigate('/dashboard', { replace: true });
-    }
+    (async () => {
+      // Already have a session in localStorage → straight to the app.
+      if (localStorage.getItem('accessToken')) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
+      // Otherwise rehydrate from DURABLE stores so the user stays logged in across
+      // app/laptop restarts even if localStorage didn't persist: the token lives in
+      // the OS credential store (keytar) and the user row lives in local SQLite.
+      try {
+        if (window.pharmaAPI?.auth?.getToken && window.pharmaAPI?.db) {
+          const stored = await window.pharmaAPI.auth.getToken();
+          if (stored?.token) {
+            const userRes = await window.pharmaAPI.db.query(
+              "SELECT id, name, email, company_id as companyId, role FROM users WHERE is_active = 1 ORDER BY rowid DESC LIMIT 1"
+            );
+            const u = userRes?.data?.[0];
+            if (u) {
+              localStorage.setItem('user', JSON.stringify(u));
+              localStorage.setItem('accessToken', stored.token);
+              if (stored.refreshToken) localStorage.setItem('refreshToken', stored.refreshToken);
+              navigate('/dashboard', { replace: true });
+            }
+          }
+        }
+      } catch { /* no durable session — show the login form */ }
+    })();
   }, [navigate]);
 
   const performInitialSync = async (data) => {

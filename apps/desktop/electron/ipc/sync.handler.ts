@@ -42,6 +42,20 @@ export function setupSyncHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
+  // Return the durably-stored tokens (Windows Credential Manager) so the renderer
+  // can rehydrate the session on startup even if localStorage didn't survive a
+  // restart. This is what keeps the user logged in across app/laptop restarts.
+  ipcMain.handle('auth:getToken', async () => {
+    try {
+      const token = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
+      const refreshToken = await keytar.getPassword(SERVICE_NAME, REFRESH_ACCOUNT_NAME);
+      return { token: token || null, refreshToken: refreshToken || null };
+    } catch (err: any) {
+      logger.error('Failed to get token', { error: err.message });
+      return { token: null, refreshToken: null };
+    }
+  });
+
   ipcMain.handle('auth:clearToken', async () => {
     try {
       await keytar.deletePassword(SERVICE_NAME, ACCOUNT_NAME);
