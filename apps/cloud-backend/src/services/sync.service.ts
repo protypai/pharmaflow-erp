@@ -170,6 +170,19 @@ async function applyRecord(
   const delegate = tx[meta.key];
   const id = payload.id;
 
+  // ─── Emergency Data Sanitization ─────────────────────────────────────────
+  // If a Purchase was created locally without an entryNo, patch it to prevent 
+  // cascading failures for PurchaseItem and Batch records.
+  if (tableName === 'Purchase' && !payload.entryNo) {
+    payload.entryNo = payload.invoiceNo || `RECOVERED-${Date.now()}`;
+  }
+  
+  // If a Batch was updated locally and is missing batchNo in the payload
+  if (tableName === 'Batch' && !payload.batchNo) {
+    payload.batchNo = `UNKNOWN-BATCH`;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (operation === 'create') {
     if (!id) throw new Error('Missing id for create');
 
