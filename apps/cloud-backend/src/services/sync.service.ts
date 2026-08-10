@@ -209,7 +209,14 @@ async function applyRecord(
     if (meta.parent) {
       // Verify the existing child's parent belongs to this company.
       const child = await delegate.findUnique({ where: { id } });
-      if (!child) throw new Error('Record not found or forbidden');
+      if (!child) {
+        // Fallback: create it if it was never synced
+        if (payload[meta.parent.fk]) {
+          await verifyParent(tx, meta, payload[meta.parent.fk], companyId);
+        }
+        await delegate.create({ data: { ...payload } });
+        return;
+      }
       await verifyParent(tx, meta, child[meta.parent.fk], companyId);
       await delegate.update({ where: { id }, data });
       return;
@@ -217,12 +224,29 @@ async function applyRecord(
 
     if (meta.hasCompanyId) {
       const res = await delegate.updateMany({ where: { id, companyId }, data });
-      if (res.count === 0) throw new Error('Record not found or forbidden');
+      if (res.count === 0) {
+        // Fallback: Check if it belongs to another company
+        const existing = await delegate.findUnique({ where: { id } });
+        if (existing && existing.companyId !== companyId) {
+          throw new Error('Record belongs to another company');
+        }
+        // Doesn't exist, create it (upsert behavior)
+        const createData = { ...payload, companyId };
+        await delegate.create({ data: createData });
+      }
       return;
     }
 
     // Company (no companyId column)
-    await delegate.update({ where: { id }, data });
+    try {
+      await delegate.update({ where: { id }, data });
+    } catch (err: any) {
+      if (err.code === 'P2025') {
+        await delegate.create({ data: { ...payload } });
+      } else {
+        throw err;
+      }
+    }
     return;
   }
 
@@ -234,7 +258,12 @@ async function applyRecord(
       const child = await delegate.findUnique({ where: { id } });
       if (!child) return; // Idempotent: already deleted or never synced
       await verifyParent(tx, meta, child[meta.parent.fk], companyId);
-      await delegate.delete({ where: { id } });
+      try {
+        await delegate.delete({ where: { id } });
+      } catch (err: any) {
+        if (err.code === 'P2025') return; // Idempotent: Record to delete does not exist
+        throw err;
+      }
       return;
     }
 

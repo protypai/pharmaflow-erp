@@ -346,12 +346,40 @@ function selectPendingRows(): any[] {
   const db = getDb();
   const nowIso = new Date().toISOString();
   // Only rows that are pending, under the retry cap, and past their backoff window.
+  // Order by dependency hierarchy first (parents before children) so FK constraints don't fail,
+  // then by created_at.
   return db.prepare(`
     SELECT * FROM sync_queue
     WHERE is_synced = ${SYNCED_PENDING}
       AND retry_count < ${MAX_RETRIES}
       AND (next_retry_at IS NULL OR next_retry_at <= ?)
-    ORDER BY created_at ASC
+    ORDER BY 
+      CASE table_name
+        WHEN 'Company' THEN 1
+        WHEN 'Category' THEN 2
+        WHEN 'Manufacturer' THEN 3
+        WHEN 'Rack' THEN 4
+        WHEN 'Supplier' THEN 5
+        WHEN 'Customer' THEN 6
+        WHEN 'Product' THEN 7
+        WHEN 'Batch' THEN 8
+        WHEN 'Purchase' THEN 9
+        WHEN 'PurchaseItem' THEN 10
+        WHEN 'Sale' THEN 11
+        WHEN 'SaleItem' THEN 12
+        WHEN 'SaleReturn' THEN 13
+        WHEN 'SaleReturnItem' THEN 14
+        WHEN 'PurchaseReturn' THEN 15
+        WHEN 'PurchaseReturnItem' THEN 16
+        WHEN 'StockAdjustment' THEN 17
+        WHEN 'StockAdjustmentItem' THEN 18
+        WHEN 'Receipt' THEN 19
+        WHEN 'Payment' THEN 20
+        WHEN 'Journal' THEN 21
+        WHEN 'JournalEntry' THEN 22
+        ELSE 99
+      END ASC,
+      created_at ASC
     LIMIT 100
   `).all(nowIso) as any[];
 }
