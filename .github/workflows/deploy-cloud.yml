@@ -106,11 +106,11 @@ jobs:
             docker compose up -d --force-recreate --remove-orphans
 
             echo "Waiting for backend API to be ready..."
-            timeout 120 bash -c \
-            "until curl -sf http://127.0.0.1:5000/api/health > /dev/null; do
-              echo 'waiting for API...'
-              sleep 3
-            done"
+            if ! timeout 120 bash -c "until curl -sf http://127.0.0.1:5000/api/health > /dev/null; do echo 'waiting for API...'; sleep 3; done"; then
+              echo "API failed to start. Printing backend logs:"
+              docker compose logs backend
+              exit 1
+            fi
 
             echo "Restarting Nginx proxy..."
             docker compose restart nginx
