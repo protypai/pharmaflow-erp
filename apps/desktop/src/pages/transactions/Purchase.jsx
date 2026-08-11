@@ -11,7 +11,7 @@ export default function Purchase() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalItems, setOriginalItems] = useState([]);
   const [rows, setRows] = useState([
-    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }
+    { id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }
   ]);
   const [activeRowSearch, setActiveRowSearch] = useState(null);
   const [totals, setTotals] = useState({ sub: 0, disc: 0, gst: 0, net: 0 });
@@ -55,8 +55,8 @@ export default function Purchase() {
               const itemsRes = await window.pharmaAPI.db.query(`
                 SELECT pi.*, p.name as product_name, b.batch_no, b.expiry_date, p.conversion_factor, p.gst_rate
                 FROM purchase_items pi
-                JOIN products p ON pi.product_id = p.id
-                JOIN batches b ON pi.batch_id = b.id
+                LEFT JOIN products p ON pi.product_id = p.id
+                LEFT JOIN batches b ON pi.batch_id = b.id
                 WHERE pi.purchase_id = ?
               `, [editId]);
               
@@ -65,13 +65,13 @@ export default function Purchase() {
                  const loadedRows = itemsRes.data.map((item, index) => {
                     const boxSize = (item.conversion_factor && Number(item.conversion_factor) > 0) ? Number(item.conversion_factor) : 10;
                     return {
-                       id: Date.now() + index,
-                       product: item.product_id,
-                       productName: item.product_name,
-                       productSearch: item.product_name,
-                       batch: item.batch_no,
+                       id: crypto.randomUUID(),
+                       product: item.product_id || '',
+                       productName: item.product_name || '',
+                       productSearch: item.product_name || '',
+                       batch: item.batch_no || '',
                        batchId: item.batch_id,
-                       expiry: item.expiry_date,
+                       expiry: item.expiry_date || '',
                        qty: item.qty,
                        invPrice: item.purchase_price,
                        priceUnit: 'strip',
@@ -128,7 +128,7 @@ export default function Purchase() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
+    setRows([...rows, { id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
   };
 
   const selectProduct = (id, prod) => {
@@ -188,8 +188,8 @@ export default function Purchase() {
       const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
       if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
       const companyId = userRes.data[0].company_id;
-      const purchaseId = isEditMode ? editId : 'PUR-' + Date.now();
-      const entryNo = isEditMode ? undefined : 'PE-' + Date.now().toString().slice(-6);
+      const purchaseId = isEditMode ? editId : 'PUR-' + crypto.randomUUID();
+      const entryNo = isEditMode ? undefined : 'PE-' + crypto.randomUUID().slice(-6);
 
       const operations = [];
 
@@ -227,8 +227,8 @@ export default function Purchase() {
       let paymentNo = null;
       if (paymentMode !== 'Credit') {
         pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
-        paymentId = 'PAY-' + Date.now();
-        paymentNo = 'PMT-' + Date.now().toString().slice(-6);
+        paymentId = 'PAY-' + crypto.randomUUID();
+        paymentNo = 'PMT-' + crypto.randomUUID().slice(-6);
         operations.push({
           sql: `INSERT INTO payments (
             id, company_id, payment_no, supplier_id, date, amount, payment_mode, notes, created_at, updated_at
@@ -268,7 +268,7 @@ export default function Purchase() {
             actualBatchId = existingBatchRes.data[0].id;
             isExistingBatch = true;
           } else {
-            actualBatchId = 'BCH-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+            actualBatchId = 'BCH-' + crypto.randomUUID();
           }
           if (isEditMode) row.batchId = actualBatchId;
         } else {
@@ -298,7 +298,7 @@ export default function Purchase() {
             expiryDate: row.expiry || '12/99'
         };
 
-        const purchaseItemId = 'P-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        const purchaseItemId = 'P-ITM-' + crypto.randomUUID();
         itemOperations.push({
           sql: `INSERT INTO purchase_items (
             id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, gst_rate, net_amount
@@ -533,7 +533,7 @@ export default function Purchase() {
          setSupplierId('');
          setInvoiceNo('');
          setPaymentMode('Credit');
-         setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
+         setRows([{ id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, invPrice: 0, priceUnit: 'strip', boxSize: 10, pts: 0, ptr: 0, mrp: 0, disc: 0, gst: 12, amount: 0, effectiveUnitPrice: 0 }]);
       }
       
     } catch (err) {

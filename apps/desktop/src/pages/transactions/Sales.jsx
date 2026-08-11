@@ -112,8 +112,8 @@ export default function Sales() {
               const itemsRes = await window.pharmaAPI.db.query(`
                 SELECT si.*, p.name as product_name, b.batch_no, b.expiry_date, p.conversion_factor, p.gst_rate
                 FROM sale_items si
-                JOIN products p ON si.product_id = p.id
-                JOIN batches b ON si.batch_id = b.id
+                LEFT JOIN products p ON si.product_id = p.id
+                LEFT JOIN batches b ON si.batch_id = b.id
                 WHERE si.sale_id = ?
               `, [editId]);
               
@@ -131,13 +131,13 @@ export default function Sales() {
                     }
                     
                     return {
-                       id: Date.now() + index,
-                       product: item.product_id,
-                       productName: item.product_name,
-                       productSearch: item.product_name,
-                       batch: item.batch_no,
-                       batchId: item.batch_id,
-                       expiry: item.expiry_date,
+                       id: crypto.randomUUID(),
+                       product: item.product_id || '',
+                       productName: item.product_name || '',
+                       productSearch: item.product_name || '',
+                       batch: item.batch_no || '',
+                       batchId: item.batch_id || '',
+                       expiry: item.expiry_date || '',
                        qty: item.qty,
                        free: item.free_qty,
                        unit: 'strip',
@@ -217,7 +217,7 @@ export default function Sales() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+    setRows([...rows, { id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
   };
 
   const selectProduct = (id, prod) => {
@@ -458,7 +458,7 @@ export default function Sales() {
         const stripRate = perStripPrice(row.rate, row.unit, packMultiplier);
         const stripMrp = perStripPrice(row.mrp, row.unit, packMultiplier);
 
-        const saleItemId = 'S-ITM-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        const saleItemId = 'S-ITM-' + crypto.randomUUID();
         operations.push({
           sql: `INSERT INTO sale_items (
             id, sale_id, product_id, batch_id, qty, free_qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
@@ -618,7 +618,7 @@ export default function Sales() {
          setCustomerId('');
          fetchNextInvoiceNo();
          setDoctorName('');
-         setRows([{ id: Date.now(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+         setRows([{ id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
       }
 
       const prodRes = await window.pharmaAPI.db.query(`
@@ -805,6 +805,9 @@ export default function Sales() {
                         {prod && prod.batches.map(b => (
                           <option key={b.id} value={b.batch}>{b.batch} ({b.qty} Strips)</option>
                         ))}
+                        {r.batch && (!prod || !prod.batches.some(b => b.batch === r.batch)) && (
+                          <option key={r.batchId || r.batch} value={r.batch}>{r.batch} (Historical)</option>
+                        )}
                       </select>
                     </td>
                     <td><input type="text" className="form-input form-input-sm" value={r.expiry} readOnly style={{ background: '#F8FAFC' }} /></td>
