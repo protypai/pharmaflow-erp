@@ -318,7 +318,35 @@ export default function Header({ collapsed, onToggle, pathname }) {
                   ))}
                   <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.25rem', paddingTop: '0.25rem' }}>
                     <div
-                      onClick={async () => { 
+                      onClick={async () => {
+                        // Data-safety guard: a manual logout is the ONLY thing that can
+                        // strand local data (the next login may restore/reset from cloud).
+                        // So before clearing the session, flush any unsynced records and
+                        // warn the user if anything still hasn't reached the cloud.
+                        try {
+                          const countPending = async () => {
+                            try {
+                              const r = await window.pharmaAPI.db.query("SELECT COUNT(*) as c FROM sync_queue WHERE is_synced = 0");
+                              return Number(r?.data?.[0]?.c || 0);
+                            } catch { return 0; }
+                          };
+                          let pending = await countPending();
+                          if (pending > 0 && window.pharmaAPI?.sync?.push) {
+                            // Try to back everything up before logging out.
+                            try { await window.pharmaAPI.sync.push(); } catch { /* offline */ }
+                            pending = await countPending();
+                          }
+                          if (pending > 0) {
+                            const proceed = window.confirm(
+                              `⚠️ You have ${pending} record(s) not yet backed up to the cloud.\n\n` +
+                              `If you log out now, this unsynced data can be lost the next time you log in.\n\n` +
+                              `Recommended: stay online for a moment so it finishes syncing, then log out.\n\n` +
+                              `Log out anyway?`
+                            );
+                            if (!proceed) { setProfileOpen(false); return; }
+                          }
+                        } catch { /* never block logout on a guard error */ }
+
                         if (window.pharmaAPI?.auth) {
                           await window.pharmaAPI.auth.clearToken();
                         }

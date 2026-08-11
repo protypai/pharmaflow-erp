@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('pharmaAPI', {
   // Auth operations
   auth: {
     setToken: (token: string, refreshToken?: string) => ipcRenderer.invoke('auth:setToken', token, refreshToken),
+    getToken: () => ipcRenderer.invoke('auth:getToken'),
     clearToken: () => ipcRenderer.invoke('auth:clearToken'),
     // Local (offline) auth helpers — bcrypt runs in main, never in the renderer.
     hashPassword: (plain: string) => ipcRenderer.invoke('auth:hashPassword', plain),

@@ -25,10 +25,33 @@ export default function Login() {
 
   // Auto-login check
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      navigate('/dashboard', { replace: true });
-    }
+    (async () => {
+      // Already have a session in localStorage → straight to the app.
+      if (localStorage.getItem('accessToken')) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
+      // Otherwise rehydrate from DURABLE stores so the user stays logged in across
+      // app/laptop restarts even if localStorage didn't persist: the token lives in
+      // the OS credential store (keytar) and the user row lives in local SQLite.
+      try {
+        if (window.pharmaAPI?.auth?.getToken && window.pharmaAPI?.db) {
+          const stored = await window.pharmaAPI.auth.getToken();
+          if (stored?.token) {
+            const userRes = await window.pharmaAPI.db.query(
+              "SELECT id, name, email, company_id as companyId, role FROM users WHERE is_active = 1 ORDER BY rowid DESC LIMIT 1"
+            );
+            const u = userRes?.data?.[0];
+            if (u) {
+              localStorage.setItem('user', JSON.stringify(u));
+              localStorage.setItem('accessToken', stored.token);
+              if (stored.refreshToken) localStorage.setItem('refreshToken', stored.refreshToken);
+              navigate('/dashboard', { replace: true });
+            }
+          }
+        }
+      } catch { /* no durable session — show the login form */ }
+    })();
   }, [navigate]);
 
   const performInitialSync = async (data) => {
@@ -223,16 +246,43 @@ export default function Login() {
           // Sync into local SQLite if window.pharmaAPI exists
           if (window.pharmaAPI?.db) {
             try {
-              // Workspace Protection Check
+              // ── Data-safety backstop: never destroy local data that hasn't reached
+              // the cloud. Push any unsynced records FIRST; only allow a wipe/restore
+              // once the queue is empty. Protects the "token expired → re-login with
+              // pending data" case from losing un-backed-up work.
+              const countPending = async () => {
+                try {
+                  const r = await window.pharmaAPI.db.query("SELECT COUNT(*) as c FROM sync_queue WHERE is_synced = 0");
+                  return Number(r?.data?.[0]?.c || 0);
+                } catch { return 0; }
+              };
+              let pendingUnsynced = await countPending();
+              if (pendingUnsynced > 0) {
+                // Give Electron the fresh token, then flush the queue to the cloud.
+                try {
+                  if (window.pharmaAPI?.auth?.setToken) await window.pharmaAPI.auth.setToken(accessToken, refreshToken);
+                  if (window.pharmaAPI?.sync?.push) await window.pharmaAPI.sync.push();
+                } catch { /* offline or push failed — data stays local */ }
+                pendingUnsynced = await countPending();
+              }
+
+              // Workspace Protection Check — only wipe when it's genuinely a different
+              // company AND there's no unsynced local data still to back up.
               const compRes = await window.pharmaAPI.db.query('SELECT id FROM companies LIMIT 1');
               if (compRes?.data && compRes.data.length > 0) {
                 const existingCompanyId = compRes.data[0].id;
                 const newCompanyId = user.company?.id || user.companyId || 'comp_001';
-                
+
                 if (existingCompanyId !== newCompanyId) {
-                  console.warn('Workspace change detected! Wiping local database for new company.');
-                  if (window.pharmaAPI.db.reset) {
-                    await window.pharmaAPI.db.reset();
+                  if (pendingUnsynced > 0) {
+                    // Could not back up local work (offline). Do NOT wipe — keep the
+                    // data and skip the workspace-switch reset to avoid data loss.
+                    console.warn('Workspace change detected, but unsynced records exist — skipping wipe to protect local data.');
+                  } else {
+                    console.warn('Workspace change detected! Wiping local database for new company.');
+                    if (window.pharmaAPI.db.reset) {
+                      await window.pharmaAPI.db.reset();
+                    }
                   }
                 }
               }
@@ -285,9 +335,11 @@ export default function Login() {
                 [user.id, user.companyId || user.company?.id || 'comp_001', user.name, user.email, localPasswordHash, user.role || 'admin']
               );
 
-              // Initial Cloud Restore check
+              // Initial Cloud Restore — only for a truly fresh device (no local
+              // customers) AND when nothing is pending, so we never overwrite
+              // un-backed-up local work with an older cloud copy.
               const custRes = await window.pharmaAPI.db.query('SELECT COUNT(*) as c FROM customers');
-              if (custRes?.data && custRes.data[0]?.c === 0) {
+              if (custRes?.data && custRes.data[0]?.c === 0 && pendingUnsynced === 0) {
                 setSyncing(true);
                 const syncRes = await fetch(`${API_BASE_URL}/api/v1/sync/initial`, {
                   headers: { Authorization: `Bearer ${accessToken}` }
