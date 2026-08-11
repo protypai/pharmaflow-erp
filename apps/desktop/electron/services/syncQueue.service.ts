@@ -557,7 +557,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [b.id, b.productId, b.batchNo, isoToDisplayExpiry(b.expiryDate), b.mrp, b.ptr, b.pts, b.purchasePrice, b.gstRate, b.currentQty, b.freeQty],
   }) },
   { key: 'sales', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO sales (id, company_id, invoice_no, customer_id, date, salesman, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: `INSERT INTO sales (id, company_id, invoice_no, customer_id, date, salesman, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET company_id=excluded.company_id, invoice_no=excluded.invoice_no, customer_id=excluded.customer_id, date=excluded.date, salesman=excluded.salesman, gst_type=excluded.gst_type, subtotal=excluded.subtotal, discount_amount=excluded.discount_amount, taxable_amount=excluded.taxable_amount, cgst_amount=excluded.cgst_amount, sgst_amount=excluded.sgst_amount, igst_amount=excluded.igst_amount, net_amount=excluded.net_amount, round_off=excluded.round_off, payment_mode=excluded.payment_mode, paid_amount=excluded.paid_amount, notes=excluded.notes, status=excluded.status, created_at=excluded.created_at, updated_at=excluded.updated_at`,
     params: [item.id, item.companyId, item.invoiceNo, item.customerId, item.date, item.salesman, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'saleItems', build: (item) => ({
@@ -565,7 +566,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.saleId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.salePrice, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount],
   }) },
   { key: 'purchases', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO purchases (id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: `INSERT INTO purchases (id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET company_id=excluded.company_id, entry_no=excluded.entry_no, supplier_id=excluded.supplier_id, invoice_no=excluded.invoice_no, invoice_date=excluded.invoice_date, gst_type=excluded.gst_type, subtotal=excluded.subtotal, discount_amount=excluded.discount_amount, taxable_amount=excluded.taxable_amount, cgst_amount=excluded.cgst_amount, sgst_amount=excluded.sgst_amount, igst_amount=excluded.igst_amount, net_amount=excluded.net_amount, round_off=excluded.round_off, payment_mode=excluded.payment_mode, paid_amount=excluded.paid_amount, notes=excluded.notes, status=excluded.status, created_at=excluded.created_at, updated_at=excluded.updated_at`,
     params: [item.id, item.companyId, item.entryNo, item.supplierId, item.invoiceNo, item.invoiceDate, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'purchaseItems', build: (item) => ({
@@ -581,7 +583,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.companyId, item.paymentNo, item.supplierId, item.date, item.amount, item.paymentMode, item.chequeNo, item.chequeDate, item.bankName, item.utrNo, item.notes, item.createdAt, item.updatedAt],
   }) },
   { key: 'purchaseReturns', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, debit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: `INSERT INTO purchase_returns (id, company_id, entry_no, purchase_id, supplier_id, return_date, reason, debit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET company_id=excluded.company_id, entry_no=excluded.entry_no, purchase_id=excluded.purchase_id, supplier_id=excluded.supplier_id, return_date=excluded.return_date, reason=excluded.reason, debit_note_no=excluded.debit_note_no, net_amount=excluded.net_amount, status=excluded.status, created_at=excluded.created_at, updated_at=excluded.updated_at`,
     params: [item.id, item.companyId, item.entryNo, item.purchaseId, item.supplierId, item.returnDate, item.reason, item.debitNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'purchaseReturnItems', build: (item) => ({
@@ -589,7 +592,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.netAmount, item.reason],
   }) },
   { key: 'saleReturns', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, credit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: `INSERT INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, credit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET company_id=excluded.company_id, entry_no=excluded.entry_no, sale_id=excluded.sale_id, customer_id=excluded.customer_id, return_date=excluded.return_date, reason=excluded.reason, credit_note_no=excluded.credit_note_no, net_amount=excluded.net_amount, status=excluded.status, created_at=excluded.created_at, updated_at=excluded.updated_at`,
     params: [item.id, item.companyId, item.entryNo, item.saleId, item.customerId, item.returnDate, item.reason, item.creditNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'saleReturnItems', build: (item) => ({
@@ -597,7 +601,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.salePrice, item.netAmount, item.reason],
   }) },
   { key: 'stockAdjustments', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO stock_adjustments (id, company_id, entry_no, date, type, reason, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: `INSERT INTO stock_adjustments (id, company_id, entry_no, date, type, reason, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET company_id=excluded.company_id, entry_no=excluded.entry_no, date=excluded.date, type=excluded.type, reason=excluded.reason, status=excluded.status, created_at=excluded.created_at, updated_at=excluded.updated_at`,
     params: [item.id, item.companyId, item.entryNo, item.date, item.type, item.reason, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'stockAdjustmentItems', build: (item) => ({
@@ -605,7 +610,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.adjustmentId, item.productId, item.batchId, item.previousQty, item.newQty, item.diffQty],
   }) },
   { key: 'journals', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO journals (id, company_id, entry_no, date, type, reference, notes, total_debit, total_credit, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: `INSERT INTO journals (id, company_id, entry_no, date, type, reference, notes, total_debit, total_credit, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET company_id=excluded.company_id, entry_no=excluded.entry_no, date=excluded.date, type=excluded.type, reference=excluded.reference, notes=excluded.notes, total_debit=excluded.total_debit, total_credit=excluded.total_credit, status=excluded.status, created_at=excluded.created_at, updated_at=excluded.updated_at`,
     params: [item.id, item.companyId, item.entryNo, item.date, item.type, item.reference, item.notes, item.totalDebit, item.totalCredit, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'journalEntries', build: (item) => ({
