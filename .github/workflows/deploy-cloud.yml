@@ -102,6 +102,12 @@ jobs:
             echo "Pulling pre-built images..."
             docker compose pull backend
 
+            echo "Resolving failed migration..."
+            docker compose run --rm backend npx prisma migrate resolve --rolled-back "20260811164500_add_freeqty_and_dl2" || true
+
+            echo "Retrying migration manually to see the error..."
+            docker compose run --rm backend npx prisma migrate deploy || true
+
             echo "Starting services..."
             docker compose up -d --force-recreate --remove-orphans
 
