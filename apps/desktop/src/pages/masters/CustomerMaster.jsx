@@ -12,7 +12,7 @@ export default function CustomerMaster() {
   const [formData, setFormData] = useState({
     id: null,
     name: '', type: 'Retail', salesman: '', phone: '', email: '',
-    address: '', area: '', pincode: '', drug_license: '', gstin: '',
+    address: '', area: '', pincode: '', drug_license: '', drug_license_2: '', gstin: '',
     credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
   });
   const [errorMsg, setErrorMsg] = useState('');
@@ -57,12 +57,12 @@ export default function CustomerMaster() {
         const res = await window.pharmaAPI.db.run(`
           UPDATE customers SET
             name = ?, type = ?, salesman = ?, phone = ?, email = ?, address = ?, area = ?, pincode = ?, 
-            drug_license = ?, gstin = ?, credit_limit = ?, credit_days = ?, opening_balance = ?, opening_balance_type = ?,
+            drug_license = ?, drug_license_2 = ?, gstin = ?, credit_limit = ?, credit_days = ?, opening_balance = ?, opening_balance_type = ?,
             updated_at = datetime('now')
           WHERE id = ?
         `, [
           formData.name, formData.type, formData.salesman, formData.phone, formData.email,
-          formData.address, formData.area, formData.pincode, formData.drug_license, formData.gstin,
+          formData.address, formData.area, formData.pincode, formData.drug_license, formData.drug_license_2, formData.gstin,
           formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type,
           formData.id
         ]);
@@ -71,14 +71,14 @@ export default function CustomerMaster() {
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO customers (
             id, company_id, name, type, salesman, phone, email, address, area, pincode, 
-            drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
+            drug_license, drug_license_2, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
             status, created_at, updated_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
           )
         `, [
           id, companyId, formData.name, formData.type, formData.salesman, formData.phone, formData.email,
-          formData.address, formData.area, formData.pincode, formData.drug_license, formData.gstin,
+          formData.address, formData.area, formData.pincode, formData.drug_license, formData.drug_license_2, formData.gstin,
           formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
@@ -97,6 +97,7 @@ export default function CustomerMaster() {
         area: formData.area,
         pincode: formData.pincode,
         drugLicense: formData.drug_license,
+        drugLicense2: formData.drug_license_2,
         gstin: formData.gstin,
         creditLimit: formData.credit_limit,
         creditDays: formData.credit_days,
@@ -110,7 +111,7 @@ export default function CustomerMaster() {
       setFormData({
         id: null,
         name: '', type: 'Retail', salesman: '', phone: '', email: '',
-        address: '', area: '', pincode: '', drug_license: '', gstin: '',
+        address: '', area: '', pincode: '', drug_license: '', drug_license_2: '', gstin: '',
         credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
       });
       setShowEmail(false);
@@ -125,7 +126,7 @@ export default function CustomerMaster() {
     setFormData({
       id: cust.id,
       name: cust.name || '', type: cust.type || 'Retail', salesman: cust.salesman || '', phone: cust.phone || '', email: cust.email || '',
-      address: cust.address || '', area: cust.area || '', pincode: cust.pincode || '', drug_license: cust.drug_license || '', gstin: cust.gstin || '',
+      address: cust.address || '', area: cust.area || '', pincode: cust.pincode || '', drug_license: cust.drug_license || '', drug_license_2: cust.drug_license_2 || '', gstin: cust.gstin || '',
       credit_limit: cust.credit_limit || 50000, credit_days: cust.credit_days || 30, opening_balance: cust.opening_balance || 0, opening_balance_type: cust.opening_balance_type || 'debit'
     });
     setShowEmail(!!cust.email);
@@ -177,7 +178,7 @@ export default function CustomerMaster() {
             setFormData({
               id: null,
               name: '', type: 'Retail', salesman: '', phone: '', email: '',
-              address: '', area: '', pincode: '', drug_license: '', gstin: '',
+              address: '', area: '', pincode: '', drug_license: '', drug_license_2: '', gstin: '',
               credit_limit: 50000, credit_days: 30, opening_balance: 0, opening_balance_type: 'debit'
             });
             setShowEmail(false);
@@ -224,7 +225,7 @@ export default function CustomerMaster() {
                     </div>
                   </td>
                   <td>
-                    <div style={{ fontSize: '0.8rem' }}>DL: {cust.drug_license || '-'}</div>
+                    <div style={{ fontSize: '0.8rem' }}>DL: {cust.drug_license || '-'} {cust.drug_license_2 ? `| ${cust.drug_license_2}` : ''}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                       {cust.gstin ? `GST: ${cust.gstin}` : 'Unregistered'}
                     </div>
@@ -330,8 +331,12 @@ export default function CustomerMaster() {
                   Licenses & Finance
                 </h4>
                 <div className="form-group">
-                  <label className="form-label">Drug License No.</label>
+                  <label className="form-label">Drug License No 1</label>
                   <input className="form-input" placeholder="e.g. MH-MUM-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Drug License No 2</label>
+                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">GSTIN (Optional for Retail)</label>

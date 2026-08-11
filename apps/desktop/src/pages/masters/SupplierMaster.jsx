@@ -11,7 +11,7 @@ export default function SupplierMaster() {
   const [formData, setFormData] = useState({
     id: null,
     name: '', contact_person: '', phone: '', email: '', city: '',
-    address: '', pincode: '', drug_license: '', gstin: '',
+    address: '', pincode: '', drug_license: '', drug_license_2: '', gstin: '',
     credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
   });
   const [errorMsg, setErrorMsg] = useState('');
@@ -48,12 +48,12 @@ export default function SupplierMaster() {
         const res = await window.pharmaAPI.db.run(`
           UPDATE suppliers SET
             name = ?, phone = ?, email = ?, address = ?, city = ?, pincode = ?, 
-            drug_license = ?, gstin = ?, credit_limit = ?, credit_days = ?, opening_balance = ?, opening_balance_type = ?,
+            drug_license = ?, drug_license_2 = ?, gstin = ?, credit_limit = ?, credit_days = ?, opening_balance = ?, opening_balance_type = ?,
             updated_at = datetime('now')
           WHERE id = ?
         `, [
           formData.name, formData.phone, formData.email,
-          formData.address, formData.city, formData.pincode, formData.drug_license, formData.gstin,
+          formData.address, formData.city, formData.pincode, formData.drug_license, formData.drug_license_2, formData.gstin,
           formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type,
           formData.id
         ]);
@@ -62,14 +62,14 @@ export default function SupplierMaster() {
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO suppliers (
             id, company_id, name, phone, email, address, city, pincode, 
-            drug_license, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
+            drug_license, drug_license_2, gstin, credit_limit, credit_days, opening_balance, opening_balance_type,
             status, created_at, updated_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now')
           )
         `, [
           id, companyId, formData.name, formData.phone, formData.email,
-          formData.address, formData.city, formData.pincode, formData.drug_license, formData.gstin,
+          formData.address, formData.city, formData.pincode, formData.drug_license, formData.drug_license_2, formData.gstin,
           formData.credit_limit, formData.credit_days, formData.opening_balance, formData.opening_balance_type
         ]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
@@ -86,6 +86,7 @@ export default function SupplierMaster() {
         address: formData.address,
         pincode: formData.pincode,
         drugLicense: formData.drug_license,
+        drugLicense2: formData.drug_license_2,
         gstin: formData.gstin,
         creditLimit: formData.credit_limit,
         creditDays: formData.credit_days,
@@ -98,7 +99,7 @@ export default function SupplierMaster() {
       setFormData({
         id: null,
         name: '', contact_person: '', phone: '', email: '', city: '',
-        address: '', pincode: '', drug_license: '', gstin: '',
+        address: '', pincode: '', drug_license: '', drug_license_2: '', gstin: '',
         credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
       });
       fetchSuppliers();
@@ -112,7 +113,7 @@ export default function SupplierMaster() {
     setFormData({
       id: supp.id,
       name: supp.name || '', contact_person: supp.contact_person || '', phone: supp.phone || '', email: supp.email || '', city: supp.city || '',
-      address: supp.address || '', pincode: supp.pincode || '', drug_license: supp.drug_license || '', gstin: supp.gstin || '',
+      address: supp.address || '', pincode: supp.pincode || '', drug_license: supp.drug_license || '', drug_license_2: supp.drug_license_2 || '', gstin: supp.gstin || '',
       credit_limit: supp.credit_limit || 500000, credit_days: supp.credit_days || 45, opening_balance: supp.opening_balance || 0, opening_balance_type: supp.opening_balance_type || 'credit'
     });
     setIsModalOpen(true);
@@ -162,7 +163,7 @@ export default function SupplierMaster() {
             setFormData({
               id: null,
               name: '', contact_person: '', phone: '', email: '', city: '',
-              address: '', pincode: '', drug_license: '', gstin: '',
+              address: '', pincode: '', drug_license: '', drug_license_2: '', gstin: '',
               credit_limit: 500000, credit_days: 45, opening_balance: 0, opening_balance_type: 'credit'
             });
             setIsModalOpen(true);
@@ -200,7 +201,7 @@ export default function SupplierMaster() {
                   </div>
                 </td>
                 <td>
-                  <div style={{ fontSize: '0.8rem' }}>DL: {supp.drug_license}</div>
+                  <div style={{ fontSize: '0.8rem' }}>DL: {supp.drug_license} {supp.drug_license_2 ? `| ${supp.drug_license_2}` : ''}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>GST: {supp.gstin}</div>
                 </td>
                 <td>
@@ -280,8 +281,12 @@ export default function SupplierMaster() {
                   Licenses & Procurement Terms
                 </h4>
                 <div className="form-group">
-                  <label className="form-label">Drug License No. <span className="text-danger">*</span></label>
+                  <label className="form-label">Drug License No 1 <span className="text-danger">*</span></label>
                   <input className="form-input" placeholder="e.g. MH-CFA-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Drug License No 2</label>
+                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">GSTIN <span className="text-danger">*</span></label>

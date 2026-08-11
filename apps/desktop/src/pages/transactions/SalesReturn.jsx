@@ -51,7 +51,7 @@ export default function SalesReturn() {
           WHERE sri.return_id = ?
         `, [editId]);
         const items = itRes?.data || [];
-        setOriginalItems(items.map(i => ({ id: i.id, batch_id: i.batch_id, qty: Number(i.qty) || 0 })));
+        setOriginalItems(items.map(i => ({ id: i.id, batch_id: i.batch_id, qty: Number(i.qty) || 0, free_qty: Number(i.free_qty) || 0 })));
         if (items.length > 0) {
           setRows(items.map(i => {
             const qty = Number(i.qty) || 0;
@@ -69,6 +69,7 @@ export default function SalesReturn() {
               batch: i.batch_no,
               expiry: i.expiry_date,
               qty: i.qty,
+              free_qty: i.free_qty || 0,
               rate,
               disc,
               gst,
@@ -97,7 +98,7 @@ export default function SalesReturn() {
   const [customerId, setCustomerId] = useState('');
   
   const [rows, setRows] = useState([
-    { id: 1, product: '', batch: '', expiry: '', qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }
+    { id: 1, product: '', batch: '', expiry: '', qty: 0, free_qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }
   ]);
   const [totals, setTotals] = useState({ sub: 0, disc: 0, gst: 0, net: 0 });
 
@@ -132,7 +133,7 @@ export default function SalesReturn() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), product: '', batch: '', expiry: '', qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }]);
+    setRows([...rows, { id: Date.now(), product: '', batch: '', expiry: '', qty: 0, free_qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }]);
   };
 
   const updateRow = (id, field, value) => {
@@ -197,6 +198,7 @@ export default function SalesReturn() {
           batch: item.batch_no,
           expiry: item.expiry_date,
           qty: item.qty,
+          free_qty: item.free_qty || 0,
           rate: item.sale_price || item.ptr || item.mrp, 
           disc: item.disc_percent || 0,
           gst: item.gst_rate || item.prod_gst || 12,
@@ -254,12 +256,12 @@ export default function SalesReturn() {
       const batchDelta = {};
       if (isEditMode && originalIsSalable) {
         for (const it of originalItems) {
-          batchDelta[it.batch_id] = (batchDelta[it.batch_id] || 0) - Math.round(Number(it.qty) || 0);
+          batchDelta[it.batch_id] = (batchDelta[it.batch_id] || 0) - Math.round(Number(it.qty) || 0) - Math.round(Number(it.free_qty) || 0);
         }
       }
       if (isSalable) {
         for (const { row, batchData } of prepared) {
-          batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) + Math.round(Number(row.qty) || 0);
+          batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) + Math.round(Number(row.qty) || 0) + Math.round(Number(row.free_qty) || 0);
         }
       }
 
@@ -292,9 +294,9 @@ export default function SalesReturn() {
       // 3) (Re)insert items — columns match the sale_return_items schema (mrp, sale_price).
       for (const { row, batchData, returnItemId } of prepared) {
         operations.push({
-          sql: `INSERT INTO sale_return_items (id, return_id, product_id, batch_id, qty, mrp, sale_price, net_amount, reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          params: [returnItemId, returnId, row.product, batchData.id, row.qty, batchData.mrp, row.rate, row.amount, mappedReason],
+          sql: `INSERT INTO sale_return_items (id, return_id, product_id, batch_id, qty, free_qty, mrp, sale_price, net_amount, reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [returnItemId, returnId, row.product, batchData.id, row.qty, row.free_qty || 0, batchData.mrp, row.rate, row.amount, mappedReason],
         });
       }
 
@@ -336,6 +338,7 @@ export default function SalesReturn() {
           productId: row.product,
           batchId: batchData.id,
           qty: Number(row.qty),
+          freeQty: Number(row.free_qty) || 0,
           mrp: Number(batchData.mrp),
           salePrice: Number(row.rate),
           netAmount: Number(row.amount),
@@ -355,7 +358,7 @@ export default function SalesReturn() {
         setTimeout(() => navigate('/reports/sales-return'), 800);
       } else {
         setSuccessMsg("Sales Return saved successfully!");
-        setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }]);
+        setRows([{ id: 1, product: '', batch: '', expiry: '', qty: 0, free_qty: 0, rate: 0, disc: 0, gst: 12, amount: 0 }]);
         setLookupInvoiceNo('');
         setOriginalSaleId(null);
       }
@@ -439,6 +442,7 @@ export default function SalesReturn() {
                 <th style={{ width: '150px' }}>Batch</th>
                 <th style={{ width: '100px' }}>Expiry</th>
                 <th style={{ width: '100px' }}>Return Qty (Strips)</th>
+                <th style={{ width: '100px' }}>Free Qty</th>
                 <th style={{ width: '120px' }}>Billed Rate (₹)</th>
                 <th style={{ width: '100px' }}>Disc %</th>
                 <th style={{ width: '100px' }}>GST%</th>
@@ -467,6 +471,7 @@ export default function SalesReturn() {
                     </td>
                     <td><input type="text" className="form-input form-input-sm" value={r.expiry} readOnly style={{ background: '#F8FAFC' }} /></td>
                     <td><input type="number" className="form-input form-input-sm" min="1" value={r.qty || ''} onChange={e => updateRow(r.id, 'qty', e.target.value)} /></td>
+                    <td><input type="number" className="form-input form-input-sm" min="0" value={r.free_qty || ''} onChange={e => updateRow(r.id, 'free_qty', e.target.value)} /></td>
                     <td><input type="number" className="form-input form-input-sm" value={r.rate || ''} onChange={e => updateRow(r.id, 'rate', e.target.value)} /></td>
                     <td><input type="number" className="form-input form-input-sm" value={r.disc || ''} onChange={e => updateRow(r.id, 'disc', e.target.value)} /></td>
                     <td>

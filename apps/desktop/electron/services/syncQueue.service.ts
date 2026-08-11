@@ -258,24 +258,37 @@ export async function reportBackup(success: boolean, error?: string): Promise<vo
 // is a DateTime and rejects MM/YY. Normalizing here also self-heals any rows that
 // were queued before this fix.
 function toIsoExpiry(v: any): any {
-  if (!v) return v;
+  if (!v) return null;
   const s = String(v).trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s).toISOString();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
   const m = s.match(/^(\d{1,2})\/(\d{2}|\d{4})$/);
-  if (!m) return v;
+  if (!m) return null;
   const mon = parseInt(m[1], 10);
   const yr = m[2].length === 2 ? 2000 + parseInt(m[2], 10) : parseInt(m[2], 10);
   const d = new Date(Date.UTC(yr, mon, 0, 23, 59, 59));
-  return isNaN(d.getTime()) ? v : d.toISOString();
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 // Build the request payload the backend push endpoint expects.
 function buildPushItems(rows: any[]) {
   return rows.map(row => {
     const payload = JSON.parse(row.payload);
-    // Batch expiry must be ISO for the cloud DateTime column.
-    if (row.table_name === 'Batch' && payload && payload.expiryDate) {
-      payload.expiryDate = toIsoExpiry(payload.expiryDate);
+    
+    // Normalize date fields to standard ISO string required by Prisma backend
+    if (payload) {
+      if (payload.createdAt) payload.createdAt = new Date(payload.createdAt).toISOString();
+      if (payload.updatedAt) payload.updatedAt = new Date(payload.updatedAt).toISOString();
+      if (row.table_name === 'Purchase' && payload.invoiceDate) {
+        payload.invoiceDate = new Date(payload.invoiceDate).toISOString();
+      }
+      if (row.table_name === 'Batch') {
+        const parsedExpiry = toIsoExpiry(payload.expiryDate);
+        // Fallback to 2099-12-31 to ensure Prisma doesn't reject it due to missing/invalid expiryDate
+        payload.expiryDate = parsedExpiry ? parsedExpiry : new Date(Date.UTC(2099, 11, 31, 23, 59, 59)).toISOString();
+      }
     }
     return {
       id: row.id,                       // sync_queue.id — echoed back as queueId
@@ -541,12 +554,12 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [r.id, r.companyId, r.code, r.description, r.status],
   }) },
   { key: 'suppliers', build: (s) => ({
-    sql: 'INSERT OR REPLACE INTO suppliers (id, company_id, code, name, gstin, drug_license, phone, email, address, city, state, pincode, credit_days, credit_limit, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status],
+    sql: 'INSERT OR REPLACE INTO suppliers (id, company_id, code, name, gstin, drug_license, drug_license_2, phone, email, address, city, state, pincode, credit_days, credit_limit, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.drugLicense2, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status],
   }) },
   { key: 'customers', build: (c) => ({
-    sql: 'INSERT OR REPLACE INTO customers (id, company_id, code, name, type, gstin, drug_license, phone, email, address, area, city, state, pincode, salesman, credit_limit, credit_days, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status],
+    sql: 'INSERT OR REPLACE INTO customers (id, company_id, code, name, type, gstin, drug_license, drug_license_2, phone, email, address, area, city, state, pincode, salesman, credit_limit, credit_days, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.drugLicense2, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status],
   }) },
   { key: 'products', build: (p) => ({
     sql: 'INSERT OR REPLACE INTO products (id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id, rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate, min_stock, max_stock, reorder_qty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -588,8 +601,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.companyId, item.entryNo, item.purchaseId, item.supplierId, item.returnDate, item.reason, item.debitNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'purchaseReturnItems', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO purchase_return_items (id, return_id, product_id, batch_id, qty, mrp, ptr, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.netAmount, item.reason],
+    sql: 'INSERT OR REPLACE INTO purchase_return_items (id, return_id, product_id, batch_id, qty, free_qty, mrp, ptr, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.freeQty || 0, item.mrp, item.ptr, item.netAmount, item.reason],
   }) },
   { key: 'saleReturns', build: (item) => ({
     sql: `INSERT INTO sale_returns (id, company_id, entry_no, sale_id, customer_id, return_date, reason, credit_note_no, net_amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -597,8 +610,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.companyId, item.entryNo, item.saleId, item.customerId, item.returnDate, item.reason, item.creditNoteNo, item.netAmount, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'saleReturnItems', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO sale_return_items (id, return_id, product_id, batch_id, qty, mrp, sale_price, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.mrp, item.salePrice, item.netAmount, item.reason],
+    sql: 'INSERT OR REPLACE INTO sale_return_items (id, return_id, product_id, batch_id, qty, free_qty, mrp, sale_price, net_amount, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.returnId, item.productId, item.batchId, item.qty, item.freeQty || 0, item.mrp, item.salePrice, item.netAmount, item.reason],
   }) },
   { key: 'stockAdjustments', build: (item) => ({
     sql: `INSERT INTO stock_adjustments (id, company_id, entry_no, date, type, reason, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -62,7 +62,7 @@ export default function Sales() {
         setCustomersList(custRes?.data || []);
 
         const prodRes = await window.pharmaAPI.db.query(`
-          SELECT p.id as product_id, p.name as product_name, p.gst_rate, p.packing, p.conversion_factor,
+          SELECT p.id as product_id, p.name as product_name, p.gst_rate, p.packing, p.conversion_factor, p.sale_unit,
                  b.id as batch_id, b.batch_no, b.expiry_date, b.mrp, b.ptr, b.current_qty as available
           FROM products p
           JOIN batches b ON p.id = b.product_id
@@ -78,6 +78,7 @@ export default function Sales() {
                 id: row.product_id,
                 name: row.product_name,
                 gst: row.gst_rate,
+                saleUnit: row.sale_unit || 'Strip',
                 boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10,
                 batches: []
               };
@@ -755,7 +756,7 @@ export default function Sales() {
                 const totalStripsNeeded = toStrips(r.qty, r.unit, packMultiplier) + toStrips(r.free, r.unit, packMultiplier);
                 const availStrips = Number(r.baseAvailable ?? toStrips(r.available, r.unit, packMultiplier));
                 const overStock = totalStripsNeeded > availStrips;
-                const availText = formatStock(availStrips, packMultiplier, 'Strip');
+                const availText = formatStock(availStrips, packMultiplier, prod?.saleUnit || 'Strip');
 
                 return (
                   <tr key={r.id} style={{ background: overStock ? '#FEF2F2' : 'transparent' }}>
@@ -817,7 +818,7 @@ export default function Sales() {
                         <input type="number" className="form-input form-input-sm" min="1" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} style={{ borderColor: overStock ? 'var(--danger)' : 'var(--border)', fontWeight: 600 }} />
                         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
                           <select className="form-select form-input-sm" value={r.unit || 'strip'} onChange={e => updateRow(r.id, 'unit', e.target.value)} style={{ padding: '1px 4px', height: '22px', fontSize: '11px', background: '#f8fafc', flex: 1 }}>
-                            <option value="strip">Per Strip</option>
+                            <option value="strip">Per {prod?.saleUnit || 'Strip'}</option>
                             <option value="box">Per Box</option>
                           </select>
                           {r.unit === 'box' && (
@@ -829,7 +830,7 @@ export default function Sales() {
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         <input type="number" className="form-input form-input-sm" min="0" placeholder="0" value={r.free === 0 ? '' : r.free} onChange={e => updateRow(r.id, 'free', e.target.value)} />
-                        <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>{r.unit === 'box' ? 'Boxes' : 'Strips'}</span>
+                        <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>{r.unit === 'box' ? 'Boxes' : (prod?.saleUnit || 'Strip') + 's'}</span>
                       </div>
                     </td>
                     <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.rate === 0 ? '' : r.rate} onChange={e => updateRow(r.id, 'rate', e.target.value)} /></td>

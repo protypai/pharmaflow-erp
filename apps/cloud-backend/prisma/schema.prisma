@@ -320,6 +320,7 @@ model Customer {
   type               CustomerType @default(retail)
   gstin              String?
   drugLicense        String?
+  drugLicense2       String?
   phone              String?
   email              String?
   address            String?
@@ -352,6 +353,7 @@ model Supplier {
   name               String
   gstin              String?
   drugLicense        String?
+  drugLicense2       String?
   phone              String?
   email              String?
   address            String?
@@ -518,6 +520,7 @@ model PurchaseReturnItem {
   productId  String
   batchId    String
   qty        Float
+  freeQty    Float   @default(0)
   mrp        Float
   ptr        Float
   netAmount  Float
@@ -555,6 +558,7 @@ model SaleReturnItem {
   productId  String
   batchId    String
   qty        Float
+  freeQty    Float   @default(0)
   mrp        Float
   salePrice  Float
   netAmount  Float
