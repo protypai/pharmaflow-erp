@@ -102,9 +102,6 @@ jobs:
             echo "Pulling pre-built images..."
             docker compose pull backend
 
-            echo "Resolving failed migration (if any) to unblock Prisma..."
-            docker compose run --rm --entrypoint sh backend -c "npx prisma migrate resolve --applied 20260811164500_add_freeqty_and_dl2 || true"
-
             echo "Starting services..."
             docker compose up -d --force-recreate --remove-orphans
 
