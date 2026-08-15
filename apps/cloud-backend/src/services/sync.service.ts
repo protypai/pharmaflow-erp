@@ -181,6 +181,20 @@ async function applyRecord(
   if (tableName === 'Batch' && !payload.batchNo) {
     payload.batchNo = `UNKNOWN-BATCH`;
   }
+
+  // If a Customer type is not valid for the CustomerType enum, map it to 'retail'
+  if (tableName === 'Customer' && payload.type) {
+    if (payload.type === 'hospital / clinic' || !['retail', 'wholesale'].includes(payload.type)) {
+      payload.type = 'retail';
+    }
+  }
+
+  // If a Sale status is not valid for the TxnStatus enum, map it to 'saved'
+  if (tableName === 'Sale' && payload.status) {
+    if (payload.status === 'completed' || !['draft', 'saved', 'cancelled'].includes(payload.status)) {
+      payload.status = 'saved';
+    }
+  }
   // ─────────────────────────────────────────────────────────────────────────
 
   if (operation === 'create') {
