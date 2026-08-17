@@ -241,7 +241,20 @@ async function applyRecord(
         if (payload[meta.parent.fk]) {
           await verifyParent(tx, meta, payload[meta.parent.fk], companyId);
         }
-        await delegate.create({ data: { ...payload } });
+        if (tableName === 'Batch') {
+          await delegate.upsert({
+            where: {
+              productId_batchNo: {
+                productId: payload.productId,
+                batchNo: payload.batchNo,
+              }
+            },
+            create: { ...payload },
+            update: data,
+          });
+        } else {
+          await delegate.create({ data: { ...payload } });
+        }
         return;
       }
       await verifyParent(tx, meta, child[meta.parent.fk], companyId);
