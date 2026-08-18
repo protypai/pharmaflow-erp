@@ -297,7 +297,14 @@ async function applyRecord(
     if (meta.parent) {
       const child = await delegate.findUnique({ where: { id } });
       if (!child) return; // Idempotent: already deleted or never synced
-      await verifyParent(tx, meta, child[meta.parent.fk], companyId);
+      try {
+        await verifyParent(tx, meta, child[meta.parent.fk], companyId);
+      } catch (err: any) {
+        // If parent is already deleted, we can still safely delete the child
+        if (err.message !== 'Parent not found or forbidden') {
+          throw err;
+        }
+      }
       try {
         await delegate.delete({ where: { id } });
       } catch (err: any) {
