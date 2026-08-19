@@ -11,6 +11,7 @@ export default function Sales() {
   const [originalItems, setOriginalItems] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [customerWarning, setCustomerWarning] = useState(null);
+  const [deletedDbIds, setDeletedDbIds] = useState([]);
 
   const [rows, setRows] = useState([
     { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
@@ -133,6 +134,7 @@ export default function Sales() {
                     
                     return {
                        id: crypto.randomUUID(),
+                       dbId: item.id, // Preserve original database ID
                        product: item.product_id || '',
                        productName: item.product_name || '',
                        productSearch: item.product_name || '',
@@ -326,6 +328,10 @@ export default function Sales() {
   };
 
   const removeRow = (id) => {
+    const rowToRemove = rows.find(r => r.id === id);
+    if (rowToRemove && rowToRemove.dbId) {
+      setDeletedDbIds([...deletedDbIds, rowToRemove.dbId]);
+    }
     setRows(rows.filter(r => r.id !== id));
   };
 
@@ -432,14 +438,15 @@ export default function Sales() {
       const syncItems = []; 
       
       if (isEditMode) {
-         for (const item of originalItems) {
+         // Only delete the specific items that were deleted from the UI
+         for (const dbId of deletedDbIds) {
             syncItems.push({
                tableName: 'SaleItem',
                operation: 'delete',
-               payload: { id: item.id }
+               payload: { id: dbId }
             });
+            operations.push({ sql: `DELETE FROM sale_items WHERE id = ?`, params: [dbId] });
          }
-         operations.push({ sql: `DELETE FROM sale_items WHERE sale_id = ?`, params: [saleId] });
       }
 
       for (const [batchId, diff] of Object.entries(batchStockDiff)) {
@@ -459,9 +466,9 @@ export default function Sales() {
         const stripRate = perStripPrice(row.rate, row.unit, packMultiplier);
         const stripMrp = perStripPrice(row.mrp, row.unit, packMultiplier);
 
-        const saleItemId = 'S-ITM-' + crypto.randomUUID();
+        const saleItemId = row.dbId || ('S-ITM-' + crypto.randomUUID());
         operations.push({
-          sql: `INSERT INTO sale_items (
+          sql: `INSERT OR REPLACE INTO sale_items (
             id, sale_id, product_id, batch_id, qty, free_qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
@@ -472,7 +479,7 @@ export default function Sales() {
 
         syncItems.push({
           tableName: 'SaleItem',
-          operation: 'create',
+          operation: row.dbId ? 'update' : 'create',
           payload: {
             id: saleItemId,
             saleId,
