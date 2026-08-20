@@ -506,8 +506,8 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         qty: item.qty || 0,
         free: 0,
         mrp: item.mrp || 0,
-        pts: item.batch_pts || item.ptr || 0,
-        ptr: item.ptr || item.purchase_price || 0,
+        pts: item.purchase_price || 0,
+        ptr: 0,
         amount: item.net_amount || 0,
         gst: item.gst_rate || 0,
         disc: item.disc_percent || 0
@@ -558,8 +558,8 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         qty: item.qty || 0,
         free: item.free_qty || 0,
         mrp: item.mrp || 0,
-        pts: item.batch_pts || item.ptr || 0,
-        ptr: item.ptr || item.purchase_price || 0,
+        pts: item.purchase_price || 0,
+        ptr: 0,
         amount: item.net_amount || 0,
         gst: item.gst_rate || 0,
         disc: item.disc_percent || 0

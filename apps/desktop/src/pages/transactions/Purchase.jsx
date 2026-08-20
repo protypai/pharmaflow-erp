@@ -142,7 +142,8 @@ export default function Purchase() {
           productName: prod.name,
           productSearch: prod.name,
           gst: prod.gst_rate ?? 12,
-          boxSize: (prod.conversion_factor && Number(prod.conversion_factor) > 0) ? Number(prod.conversion_factor) : 10
+          boxSize: (prod.conversion_factor && Number(prod.conversion_factor) > 0) ? Number(prod.conversion_factor) : 10,
+          batchId: undefined // Clear batchId so a new batch is matched or created
         };
       }
       return r;
@@ -157,6 +158,9 @@ export default function Purchase() {
         if (field === 'productSearch') {
           updated.product = '';
           updated.productName = '';
+          updated.batchId = undefined; // Clear batchId when product is being changed
+        } else if (field === 'batch') {
+          updated.batchId = undefined; // Clear batchId when batch number is manually edited
         }
         return updated;
       }
@@ -253,14 +257,17 @@ export default function Purchase() {
           if (!batchStockDiff[item.batch_id]) batchStockDiff[item.batch_id] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: item.product_id, batchNo: item.batch_no };
           batchStockDiff[item.batch_id].oldStrips += Number(item.qty || 0);
         }
-        // Only delete the specific items that were deleted from the UI
-        for (const dbId of deletedDbIds) {
-          syncItems.push({
-            tableName: 'PurchaseItem',
-            operation: 'delete',
-            payload: { id: dbId }
-          });
-          operations.push({ sql: `DELETE FROM purchase_items WHERE id = ?`, params: [dbId] });
+        // Delete any original items that are no longer in the valid rows (either deleted via trash or cleared out)
+        const validDbIds = validRows.map(r => r.dbId).filter(Boolean);
+        for (const item of originalItems) {
+          if (!validDbIds.includes(item.id)) {
+            syncItems.push({
+              tableName: 'PurchaseItem',
+              operation: 'delete',
+              payload: { id: item.id }
+            });
+            operations.push({ sql: `DELETE FROM purchase_items WHERE id = ?`, params: [item.id] });
+          }
         }
       }
 
@@ -351,9 +358,11 @@ export default function Purchase() {
             const cur = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [bId]);
             const currentQty = Number(cur?.data?.[0]?.current_qty ?? 0);
             if (currentQty + netAdd < 0) {
-              setIsSaving(false);
-              setErrorMsg(`Cannot reduce batch ${diff.batchNo}: only ${currentQty} strip(s) remain in stock (the rest were already sold). This edit would make stock negative.`);
-              return;
+              // TEMPORARILY DISABLED: Allow admin to fix historical errors
+              // setIsSaving(false);
+              // setErrorMsg(`Cannot reduce batch ${diff.batchNo}: only ${currentQty} strip(s) remain in stock (the rest were already sold). This edit would make stock negative.`);
+              // return;
+              console.warn(`Allowed negative stock for batch ${diff.batchNo}. New stock will be ${currentQty + netAdd}`);
             }
           }
         }
@@ -644,7 +653,7 @@ export default function Purchase() {
                 <th style={{ width: '70px' }}>Qty <span className="text-danger">*</span></th>
                 <th style={{ width: '160px' }}>Invoice Price (₹) <span className="text-danger">*</span></th>
                 <th style={{ width: '85px' }}>PTS (₹)</th>
-                <th style={{ width: '85px' }}>PTR (₹) <span className="text-danger">*</span></th>
+                <th style={{ width: '85px' }}>PTR (₹)</th>
                 <th style={{ width: '85px' }}>MRP (₹) <span className="text-danger">*</span></th>
                 <th style={{ width: '70px' }}>Disc %</th>
                 <th style={{ width: '75px' }}>GST %</th>
@@ -698,7 +707,7 @@ export default function Purchase() {
                       )}
                     </div>
                   </td>
-                  <td><input type="text" className="form-input form-input-sm" placeholder="Batch No" value={r.batch} onChange={e => updateRow(r.id, 'batch', e.target.value.toUpperCase())} /></td>
+                  <td><input type="text" className="form-input form-input-sm" placeholder="Batch No" value={r.batch} onChange={e => updateRow(r.id, 'batch', e.target.value.toUpperCase().trimStart())} onBlur={e => updateRow(r.id, 'batch', e.target.value.trim())} /></td>
                   <td><input type="text" className="form-input form-input-sm" placeholder="MM/YY" value={r.expiry} onChange={e => updateRow(r.id, 'expiry', e.target.value)} /></td>
                   <td><input type="number" className="form-input form-input-sm" min="0" value={r.qty === 0 ? '' : r.qty} onChange={e => updateRow(r.id, 'qty', e.target.value)} /></td>
                   <td>
@@ -715,8 +724,8 @@ export default function Purchase() {
                       </div>
                     </div>
                   </td>
-                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.pts === 0 ? '' : r.pts} onChange={e => updateRow(r.id, 'pts', e.target.value)} /></td>
-                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.ptr === 0 ? '' : r.ptr} onChange={e => updateRow(r.id, 'ptr', e.target.value)} /></td>
+                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.pts} onChange={e => updateRow(r.id, 'pts', e.target.value)} /></td>
+                  <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.ptr} onChange={e => updateRow(r.id, 'ptr', e.target.value)} /></td>
                   <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.mrp === 0 ? '' : r.mrp} onChange={e => updateRow(r.id, 'mrp', e.target.value)} /></td>
                   <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.disc === 0 ? '' : r.disc} onChange={e => updateRow(r.id, 'disc', e.target.value)} /></td>
                   <td>

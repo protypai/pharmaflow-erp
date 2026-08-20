@@ -575,8 +575,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
     params: [item.id, item.companyId, item.invoiceNo, item.customerId, item.date, item.salesman, item.gstType, item.subtotal, item.discountAmount, item.taxableAmount, item.cgstAmount, item.sgstAmount, item.igstAmount, item.netAmount, item.roundOff, item.paymentMode, item.paidAmount, item.notes, item.status, item.createdAt, item.updatedAt],
   }) },
   { key: 'saleItems', build: (item) => ({
-    sql: 'INSERT OR REPLACE INTO sale_items (id, sale_id, product_id, batch_id, qty, mrp, ptr, sale_price, disc_percent, disc_amount, gst_rate, cgst, sgst, igst, taxable_amt, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    params: [item.id, item.saleId, item.productId, item.batchId, item.qty, item.mrp, item.ptr, item.salePrice, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount],
+    sql: 'INSERT OR REPLACE INTO sale_items (id, sale_id, product_id, batch_id, qty, free_qty, mrp, ptr, sale_price, disc_percent, disc_amount, gst_rate, cgst, sgst, igst, taxable_amt, net_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    params: [item.id, item.saleId, item.productId, item.batchId, item.qty, item.freeQty || 0, item.mrp, item.ptr, item.salePrice, item.discPercent, item.discAmount, item.gstRate, item.cgst, item.sgst, item.igst, item.taxableAmt, item.netAmount],
   }) },
   { key: 'purchases', build: (item) => ({
     sql: `INSERT INTO purchases (id, company_id, entry_no, supplier_id, invoice_no, invoice_date, gst_type, subtotal, discount_amount, taxable_amount, cgst_amount, sgst_amount, igst_amount, net_amount, round_off, payment_mode, paid_amount, notes, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
