@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 
 // ─── Model metadata ─────────────────────────────────────────────────────────
 
-type DeleteStrategy = 'statusInactive' | 'txnCancel' | 'isActiveFalse' | 'hardDelete';
+type DeleteStrategy = 'statusInactive' | 'txnCancel' | 'isActiveFalse' | 'hardDelete' | 'zeroQty';
 
 interface ModelMeta {
   key: string; // Prisma delegate name on `db` / `tx`
@@ -32,7 +32,7 @@ const MODELS: Record<string, ModelMeta> = {
   Journal: { key: 'journal', hasCompanyId: true, hasUpdatedAt: false, deleteStrategy: 'hardDelete' },
   StockAdjustment: { key: 'stockAdjustment', hasCompanyId: true, hasUpdatedAt: false, deleteStrategy: 'hardDelete' },
   // Child tables — scoped by their parent (which carries companyId).
-  Batch: { key: 'batch', hasCompanyId: false, hasUpdatedAt: true, deleteStrategy: 'hardDelete', parent: { fk: 'productId', delegateKey: 'product' } },
+  Batch: { key: 'batch', hasCompanyId: false, hasUpdatedAt: true, deleteStrategy: 'zeroQty', parent: { fk: 'productId', delegateKey: 'product' } },
   SaleItem: { key: 'saleItem', hasCompanyId: false, hasUpdatedAt: false, deleteStrategy: 'hardDelete', parent: { fk: 'saleId', delegateKey: 'sale' } },
   PurchaseItem: { key: 'purchaseItem', hasCompanyId: false, hasUpdatedAt: false, deleteStrategy: 'hardDelete', parent: { fk: 'purchaseId', delegateKey: 'purchase' } },
   SaleReturnItem: { key: 'saleReturnItem', hasCompanyId: false, hasUpdatedAt: false, deleteStrategy: 'hardDelete', parent: { fk: 'returnId', delegateKey: 'saleReturn' } },
@@ -297,14 +297,7 @@ async function applyRecord(
     if (meta.parent) {
       const child = await delegate.findUnique({ where: { id } });
       if (!child) return; // Idempotent: already deleted or never synced
-      try {
-        await verifyParent(tx, meta, child[meta.parent.fk], companyId);
-      } catch (err: any) {
-        // If parent is already deleted, we can still safely delete the child
-        if (err.message !== 'Parent not found or forbidden') {
-          throw err;
-        }
-      }
+      await verifyParent(tx, meta, child[meta.parent.fk], companyId);
       try {
         await delegate.delete({ where: { id } });
       } catch (err: any) {
@@ -333,6 +326,11 @@ async function applyRecord(
       }
       case 'isActiveFalse': {
         const res = await delegate.updateMany({ where: { id, companyId }, data: { isActive: false } });
+        if (res.count === 0) return; // Idempotent
+        return;
+      }
+      case 'zeroQty': {
+        const res = await delegate.updateMany({ where: { id }, data: { currentQty: 0, freeQty: 0 } });
         if (res.count === 0) return; // Idempotent
         return;
       }
