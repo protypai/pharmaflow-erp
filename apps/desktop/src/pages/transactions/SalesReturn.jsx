@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
+import { toIsoExpiry } from '../../utils/dates';
 
 export default function SalesReturn() {
   const { id: editId } = useParams();
@@ -354,9 +355,23 @@ export default function SalesReturn() {
 
       // Sync each affected batch with its live absolute quantity (post-commit).
       for (const bId of Object.keys(batchDelta)) {
-        if (!batchDelta[bId]) continue;
-        const cur = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [bId]);
-        await syncEntity('Batch', 'update', { id: bId, currentQty: Number(cur?.data?.[0]?.current_qty ?? 0) });
+        const cur = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [bId]);
+        if (cur?.data?.length) {
+          const b = cur.data[0];
+          await syncEntity('Batch', 'update', {
+            id: b.id,
+            productId: b.product_id,
+            batchNo: b.batch_no,
+            expiryDate: b.expiry_date ? toIsoExpiry(b.expiry_date) : null,
+            mrp: b.mrp,
+            ptr: b.ptr,
+            pts: b.pts || 0,
+            purchasePrice: b.purchase_price,
+            gstRate: b.gst_rate,
+            currentQty: b.current_qty,
+            freeQty: b.free_qty || 0
+          });
+        }
       }
 
       if (isEditMode) {

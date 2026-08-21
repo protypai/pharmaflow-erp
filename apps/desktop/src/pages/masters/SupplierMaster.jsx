@@ -282,15 +282,15 @@ export default function SupplierMaster() {
                 </h4>
                 <div className="form-group">
                   <label className="form-label">Drug License No 1 <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="e.g. MH-CFA-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value})} />
+                  <input className="form-input" placeholder="e.g. MH-CFA-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Drug License No 2</label>
-                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value})} />
+                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">GSTIN <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value})} />
+                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Credit Limit (₹)</label>

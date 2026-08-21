@@ -30,6 +30,12 @@ export default function RackMaster() {
       return;
     }
 
+    const cleanCode = formData.name.trim().toUpperCase().replace(/-+$/, '');
+    if (!cleanCode) {
+      setErrorMsg("Invalid Rack Code.");
+      return;
+    }
+
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
@@ -41,13 +47,13 @@ export default function RackMaster() {
       if (!isNew) {
         const res = await window.pharmaAPI.db.run(`
           UPDATE racks SET code = ?, status = ?, updated_at = datetime('now') WHERE id = ?
-        `, [formData.name, formData.status, formData.id]);
+        `, [cleanCode, formData.status, formData.id]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       } else {
         const res = await window.pharmaAPI.db.run(`
           INSERT INTO racks (id, company_id, code, status, created_at, updated_at) 
           VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
-        `, [id, companyId, formData.name, formData.status]);
+        `, [id, companyId, cleanCode, formData.status]);
         if (!res.success) { setErrorMsg("Database error: " + res.error); return; }
       }
 
@@ -55,7 +61,7 @@ export default function RackMaster() {
       await syncEntity('Rack', isNew ? 'create' : 'update', {
         id,
         companyId,
-        code: formData.name, // The backend expects 'code'
+        code: cleanCode, // The backend expects 'code'
         status: formData.status
       });
 

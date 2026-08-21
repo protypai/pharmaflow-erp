@@ -332,15 +332,15 @@ export default function CustomerMaster() {
                 </h4>
                 <div className="form-group">
                   <label className="form-label">Drug License No 1</label>
-                  <input className="form-input" placeholder="e.g. MH-MUM-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value})} />
+                  <input className="form-input" placeholder="e.g. MH-MUM-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Drug License No 2</label>
-                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value})} />
+                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">GSTIN (Optional for Retail)</label>
-                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value})} />
+                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Credit Limit (₹)</label>

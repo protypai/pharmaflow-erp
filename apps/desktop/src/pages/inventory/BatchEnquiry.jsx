@@ -53,15 +53,15 @@ export default function BatchEnquiry() {
   const handleTrace = async (batch_id, batch_no) => {
     try {
       const res = await window.pharmaAPI.db.query(`
-        SELECT 'Inward (Purchase)' as type, p.invoice_date as date, p.invoice_no as description, s.name as party, pi.qty as qty
+        SELECT 'Inward (Purchase)' as type, p.invoice_date as date, p.invoice_no as description, s.name as party, (pi.qty + COALESCE(pi.free_qty, 0)) as qty
         FROM purchase_items pi JOIN purchases p ON pi.purchase_id = p.id LEFT JOIN suppliers s ON p.supplier_id = s.id
         WHERE pi.batch_id = ?
         UNION ALL
-        SELECT 'Outward (Sale)' as type, s.date as date, s.invoice_no as description, c.name as party, si.qty as qty
+        SELECT 'Outward (Sale)' as type, s.date as date, s.invoice_no as description, c.name as party, (si.qty + COALESCE(si.free_qty, 0)) as qty
         FROM sale_items si JOIN sales s ON si.sale_id = s.id LEFT JOIN customers c ON s.customer_id = c.id
         WHERE si.batch_id = ?
         UNION ALL
-        SELECT 'Inward (Sale Return)' as type, sr.return_date as date, sr.entry_no as description, c.name as party, sri.qty as qty
+        SELECT 'Inward (Sale Return)' as type, sr.return_date as date, sr.entry_no as description, c.name as party, (sri.qty + COALESCE(sri.free_qty, 0)) as qty
         FROM sale_return_items sri JOIN sale_returns sr ON sri.return_id = sr.id LEFT JOIN customers c ON sr.customer_id = c.id
         WHERE sri.batch_id = ?
         UNION ALL

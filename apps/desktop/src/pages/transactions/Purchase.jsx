@@ -50,10 +50,11 @@ export default function Purchase() {
             setSupplierId(purchase.supplier_id);
             setInvoiceNo(purchase.invoice_no);
             setInvoiceDate(purchase.invoice_date ? purchase.invoice_date.split('T')[0] : '');
-            setPaymentMode(purchase.payment_mode === 'credit' ? 'Credit' : (purchase.payment_mode === 'cash' ? 'Cash' : 'Bank / UPI'));
+            const mode = (purchase.payment_mode || '').toLowerCase();
+            setPaymentMode(mode === 'credit' ? 'Credit' : (mode === 'cash' ? 'Cash' : 'Bank / UPI'));
 
             const itemsRes = await window.pharmaAPI.db.query(`
-                SELECT pi.*, p.name as product_name, b.batch_no, b.expiry_date, p.conversion_factor, p.gst_rate
+                SELECT pi.*, p.name as product_name, b.batch_no, b.expiry_date, b.pts, p.conversion_factor, p.gst_rate
                 FROM purchase_items pi
                 LEFT JOIN products p ON pi.product_id = p.id
                 LEFT JOIN batches b ON pi.batch_id = b.id
@@ -189,16 +190,17 @@ export default function Purchase() {
       if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
       const companyId = compRes.data[0].id;
       const purchaseId = isEditMode ? editId : 'PUR-' + crypto.randomUUID();
-      const entryNo = isEditMode ? undefined : 'PE-' + crypto.randomUUID().slice(-6);
+      let entryNo = 'PE-' + crypto.randomUUID().slice(-6);
 
       const operations = [];
       const syncItems = [];
 
       let originalInvoiceNo = invoiceNo;
       if (isEditMode) {
-        const pRes = await window.pharmaAPI.db.query("SELECT invoice_no FROM purchases WHERE id = ?", [purchaseId]);
+        const pRes = await window.pharmaAPI.db.query("SELECT invoice_no, entry_no FROM purchases WHERE id = ?", [purchaseId]);
         if (pRes?.data?.length) {
           originalInvoiceNo = pRes.data[0].invoice_no;
+          entryNo = pRes.data[0].entry_no || entryNo;
         }
       }
 
@@ -218,7 +220,7 @@ export default function Purchase() {
              WHERE id = ?`,
           params: [
             supplierId, invoiceNo, invoiceDate, gstType,
-            totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, purchaseId
+            totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode.toLowerCase(), paymentMode === 'Credit' ? 0 : totals.net, purchaseId
           ]
         });
 
@@ -261,7 +263,7 @@ export default function Purchase() {
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
           params: [
             purchaseId, companyId, entryNo, supplierId, invoiceNo, invoiceDate, gstType,
-            totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net
+            totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode.toLowerCase(), paymentMode === 'Credit' ? 0 : totals.net
           ]
         });
 
@@ -328,7 +330,7 @@ export default function Purchase() {
         
         // Defensive validation fallback to prevent SQLite NOT NULL/NaN constraint crashes
         const rawPtr = row.ptr !== undefined && row.ptr !== '' && !isNaN(Number(row.ptr)) ? row.ptr : row.invPrice;
-        const rawPts = row.pts !== undefined && row.pts !== '' && !isNaN(Number(row.pts)) ? row.pts : row.invPrice;
+        const rawPts = row.pts !== undefined && row.pts !== '' && !isNaN(Number(row.pts)) && Number(row.pts) > 0 ? row.pts : 0;
 
         const savePtr = Number(perStripPrice(rawPtr, priceUnit, packMultiplier).toFixed(2));
         const savePts = Number(perStripPrice(rawPts, priceUnit, packMultiplier).toFixed(2));
@@ -642,7 +644,7 @@ export default function Purchase() {
             </div>
             <div className="form-group">
               <label className="form-label">Supplier Invoice No <span className="text-danger">*</span></label>
-              <input type="text" className="form-input" placeholder="e.g. INV-12345" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} />
+              <input type="text" className="form-input" placeholder="e.g. INV-12345" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value.toUpperCase())} />
             </div>
             <div className="form-group">
               <label className="form-label">Invoice Date <span className="text-danger">*</span></label>

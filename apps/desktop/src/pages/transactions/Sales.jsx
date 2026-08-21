@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml, normalizeInvoiceNumbers } from '../../utils/invoiceTemplate';
 import { packSize, toStrips, toBoxesFloat, perStripPrice, formatStock } from '../../utils/units';
+import { toIsoExpiry } from '../../utils/dates';
 export default function Sales() {
   const navigate = useNavigate();
   const { id: editId } = useParams();
@@ -58,7 +59,7 @@ export default function Sales() {
     const fetchMasterData = async () => {
       try {
         try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
-        const custRes = await window.pharmaAPI.db.query("SELECT id, name, area, credit_limit, opening_balance FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
+        const custRes = await window.pharmaAPI.db.query("SELECT id, name, type, area, credit_limit, opening_balance FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
         setCustomersList(custRes?.data || []);
 
         const prodRes = await window.pharmaAPI.db.query(`
@@ -105,7 +106,8 @@ export default function Sales() {
               setCustomerId(sale.customer_id);
               setInvoiceNo(sale.invoice_no);
               setInvoiceDate(sale.date ? sale.date.split('T')[0] : '');
-              setPaymentMode(sale.payment_mode === 'credit' ? 'Credit' : (sale.payment_mode === 'cash' ? 'Cash' : 'Bank / UPI'));
+              const mode = (sale.payment_mode || '').toLowerCase();
+              setPaymentMode(mode === 'credit' ? 'Credit' : (mode === 'cash' ? 'Cash' : 'Bank / UPI'));
               if (sale.notes && sale.notes.startsWith('Doctor: ')) {
                  setDoctorName(sale.notes.replace('Doctor: ', ''));
               }
@@ -184,6 +186,30 @@ export default function Sales() {
     } else {
       setCustomerWarning(null);
     }
+  }, [customerId, customersList]);
+
+  // Handle Price updates when Customer changes
+  useEffect(() => {
+    const activeCust = customersList.find(c => c.id === customerId);
+    const isWholesale = activeCust?.type === 'wholesale';
+    setRows(prevRows => prevRows.map(r => {
+        if (!r.batchId) return r;
+        const prod = productsList.find(p => p.id === r.product);
+        if (!prod) return r;
+        const bData = prod.batches.find(b => b.id === r.batchId);
+        if (!bData) return r;
+        
+        const defaultRate = isWholesale ? Number(bData.ptr || 0) : Number(bData.mrp || 0);
+        const factor = packSize(r.boxSize);
+        let updated = { ...r, baseRate: defaultRate };
+        
+        if (r.unit === 'box') {
+           updated.rate = Number((defaultRate * factor).toFixed(2));
+        } else {
+           updated.rate = defaultRate;
+        }
+        return updated;
+    }));
   }, [customerId, customersList]);
 
   // Handle Row Calculations
@@ -272,20 +298,23 @@ export default function Sales() {
           if (batchData) {
             updated.batchId = batchData.id;
             updated.expiry = batchData.expiry;
-            // batchData.qty is now current_qty in STRIPS (base unit).
             updated.baseAvailable = Number(batchData.qty);
-            updated.baseMrp = Number(batchData.mrp); // per strip
-            updated.baseRate = Number(batchData.mrp); // per strip
+            updated.baseMrp = Number(batchData.mrp);
+
+            const activeCust = customersList.find(c => c.id === customerId);
+            const isWholesale = activeCust?.type === 'wholesale';
+            const defaultRate = isWholesale ? Number(batchData.ptr || 0) : Number(batchData.mrp || 0);
+            updated.baseRate = defaultRate; 
 
             const factor = packSize(updated.boxSize);
             if (updated.unit === 'box') {
               updated.available = Number(toBoxesFloat(batchData.qty, factor).toFixed(2));
               updated.mrp = Number((batchData.mrp * factor).toFixed(2));
-              updated.rate = Number((batchData.mrp * factor).toFixed(2));
+              updated.rate = Number((defaultRate * factor).toFixed(2));
             } else {
               updated.available = Number(batchData.qty);
               updated.mrp = Number(batchData.mrp);
-              updated.rate = Number(batchData.mrp);
+              updated.rate = defaultRate;
             }
           }
         }
@@ -408,7 +437,7 @@ export default function Sales() {
               WHERE id = ?`,
             params: [
               customerId, invoiceNo, invoiceDate, user.name || 'Admin', 'exclusive',
-              totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
+              totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode.toLowerCase(), paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
             ]
          });
          
@@ -451,7 +480,7 @@ export default function Sales() {
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
            params: [
              saleId, companyId, invoiceNo, customerId, invoiceDate, user.name || 'Admin', 'exclusive',
-             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
+             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode.toLowerCase(), paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
            ]
          });
 
@@ -537,12 +566,25 @@ export default function Sales() {
 
       for (const [batchId, diff] of Object.entries(batchStockDiff)) {
          if (diff.newStrips - diff.oldStrips !== 0) {
-            const bRes = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [batchId]);
+            const bRes = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [batchId]);
             if (bRes?.data?.length) {
+               const b = bRes.data[0];
                syncItems.push({
                   tableName: 'Batch',
                   operation: 'update',
-                  payload: { id: batchId, currentQty: bRes.data[0].current_qty }
+                  payload: {
+                     id: b.id,
+                     productId: b.product_id,
+                     batchNo: b.batch_no,
+                     expiryDate: b.expiry_date ? toIsoExpiry(b.expiry_date) : null,
+                     mrp: b.mrp,
+                     ptr: b.ptr,
+                     pts: b.pts || 0,
+                     purchasePrice: b.purchase_price,
+                     gstRate: b.gst_rate,
+                     currentQty: b.current_qty,
+                     freeQty: b.free_qty || 0
+                  }
                });
             }
          }
@@ -744,7 +786,29 @@ export default function Sales() {
           <div className="form-row-4">
             <div className="form-group">
               <label className="form-label">Customer <span className="text-danger">*</span></label>
-              <select className="form-select" value={customerId} onChange={e => setCustomerId(e.target.value)}>
+              <select className="form-select" value={customerId} onChange={e => {
+                const newCustomerId = e.target.value;
+                setCustomerId(newCustomerId);
+                
+                const activeCust = customersList.find(c => c.id === newCustomerId);
+                const isWholesale = activeCust?.type === 'wholesale';
+                
+                setRows(rows => rows.map(r => {
+                  if (!r.product || !r.batch) return r;
+                  const prod = productsList.find(p => p.id === r.product);
+                  if (!prod) return r;
+                  const batchData = prod.batches.find(b => b.batch === r.batch);
+                  if (!batchData) return r;
+                  
+                  const defaultRate = isWholesale ? Number(batchData.ptr || 0) : Number(batchData.mrp || 0);
+                  const factor = packSize(r.boxSize);
+                  return {
+                    ...r,
+                    baseRate: defaultRate,
+                    rate: r.unit === 'box' ? Number((defaultRate * factor).toFixed(2)) : defaultRate
+                  };
+                }));
+              }}>
                 <option value="">Select Customer...</option>
                 {customersList.map(c => <option key={c.id} value={c.id}>{c.name} ({c.area})</option>)}
               </select>
