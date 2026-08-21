@@ -200,9 +200,9 @@ export default function PurchaseReturn() {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const returnId = isEditMode ? editId : 'PR-' + Date.now();
       const entryNo = isEditMode ? (existingEntryNo || 'RET-' + Date.now()) : 'RET-' + Date.now();
 

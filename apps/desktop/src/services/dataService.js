@@ -1,3 +1,5 @@
+import { toIsoExpiry } from '../utils/dates';
+
 // Helper to check if running inside Electron shell
 export const isElectron = () => {
   return typeof window !== 'undefined' && window.pharmaAPI !== undefined;
@@ -39,11 +41,6 @@ export async function syncEntity(cloudTableName, operation, payload) {
             const bRes = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [payload.id]);
             if (bRes?.data?.length) {
               const b = bRes.data[0];
-              const toIsoExpiry = (dateStr) => {
-                if (!dateStr) return null;
-                const d = new Date(dateStr);
-                return isNaN(d.getTime()) ? null : d.toISOString();
-              };
               // Merge the original payload over the full batch data to preserve the explicit update intent (e.g. currentQty)
               finalPayload = {
                 id: b.id,

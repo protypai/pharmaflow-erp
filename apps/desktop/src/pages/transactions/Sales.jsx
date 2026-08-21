@@ -376,29 +376,73 @@ export default function Sales() {
     try {
       try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const saleId = isEditMode ? editId : 'SAL-' + Date.now();
 
       const operations = [];
+      const syncItems = [];
+
+      let originalInvoiceNo = invoiceNo;
+      if (isEditMode) {
+         const sRes = await window.pharmaAPI.db.query("SELECT invoice_no FROM sales WHERE id = ?", [saleId]);
+         if (sRes?.data?.length) {
+            originalInvoiceNo = sRes.data[0].invoice_no;
+         }
+      }
+
+      const existingReceiptRes = await window.pharmaAPI.db.query("SELECT id, receipt_no FROM receipts WHERE notes = ?", ['Against Sale ' + originalInvoiceNo]);
+      const existingReceiptId = existingReceiptRes?.data?.[0]?.id;
+      const existingReceiptNo = existingReceiptRes?.data?.[0]?.receipt_no;
+
+      let receiptId = existingReceiptId || null;
+      let receiptNo = existingReceiptNo || null;
+      let pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
 
       if (isEditMode) {
          operations.push({
-           sql: `UPDATE sales SET 
-             customer_id = ?, invoice_no = ?, date = ?, salesman = ?, gst_type = ?,
-             subtotal = ?, discount_amount = ?, taxable_amount = ?, net_amount = ?, payment_mode = ?, paid_amount = ?, notes = ?, updated_at = datetime('now')
-             WHERE id = ?`,
-           params: [
-             customerId, invoiceNo, invoiceDate, user.name || 'Admin', 'exclusive',
-             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
-           ]
+            sql: `UPDATE sales SET 
+              customer_id = ?, invoice_no = ?, date = ?, salesman = ?, gst_type = ?,
+              subtotal = ?, discount_amount = ?, taxable_amount = ?, net_amount = ?, payment_mode = ?, paid_amount = ?, notes = ?, updated_at = datetime('now')
+              WHERE id = ?`,
+            params: [
+              customerId, invoiceNo, invoiceDate, user.name || 'Admin', 'exclusive',
+              totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
+            ]
          });
          
-         operations.push({
-            sql: `DELETE FROM receipts WHERE notes = ?`,
-            params: ['Against Sale ' + invoiceNo]
-         });
+         if (paymentMode !== 'Credit') {
+            if (existingReceiptId) {
+               operations.push({
+                  sql: `UPDATE receipts SET customer_id = ?, date = ?, amount = ?, payment_mode = ?, updated_at = datetime('now') WHERE id = ?`,
+                  params: [customerId, invoiceDate, totals.net, pModeNormalized, existingReceiptId]
+               });
+            } else {
+               receiptId = 'REC-' + Date.now();
+               receiptNo = 'RCT-' + Date.now().toString().slice(-6);
+               operations.push({
+                  sql: `INSERT INTO receipts (
+                    id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                  params: [
+                    receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
+                  ]
+               });
+            }
+         } else {
+            if (existingReceiptId) {
+               operations.push({
+                  sql: `DELETE FROM receipts WHERE id = ?`,
+                  params: [existingReceiptId]
+               });
+               syncItems.push({
+                  tableName: 'Receipt',
+                  operation: 'delete',
+                  payload: { id: existingReceiptId }
+               });
+            }
+         }
       } else {
          operations.push({
            sql: `INSERT INTO sales (
@@ -410,26 +454,21 @@ export default function Sales() {
              totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
            ]
          });
+
+         if (paymentMode !== 'Credit') {
+           receiptId = 'REC-' + Date.now();
+           receiptNo = 'RCT-' + Date.now().toString().slice(-6);
+           operations.push({
+             sql: `INSERT INTO receipts (
+               id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+             params: [
+               receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
+             ]
+           });
+         }
       }
 
-      let receiptId = null;
-      let pModeNormalized = null;
-      let receiptNo = null;
-      if (paymentMode !== 'Credit') {
-        pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
-        receiptId = 'REC-' + Date.now();
-        receiptNo = 'RCT-' + Date.now().toString().slice(-6);
-        operations.push({
-          sql: `INSERT INTO receipts (
-            id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-          params: [
-            receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
-          ]
-        });
-      }
-
-      const syncItems = []; 
       
       if (isEditMode) {
          for (const item of originalItems) {
@@ -536,7 +575,7 @@ export default function Sales() {
       });
 
       if (paymentMode !== 'Credit') {
-        await syncEntity('Receipt', 'create', {
+        await syncEntity('Receipt', existingReceiptId ? 'update' : 'create', {
           id: receiptId,
           companyId,
           receiptNo,

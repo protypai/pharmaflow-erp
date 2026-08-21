@@ -185,13 +185,30 @@ export default function Purchase() {
     setIsSaving(true);
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const purchaseId = isEditMode ? editId : 'PUR-' + crypto.randomUUID();
       const entryNo = isEditMode ? undefined : 'PE-' + crypto.randomUUID().slice(-6);
 
       const operations = [];
+      const syncItems = [];
+
+      let originalInvoiceNo = invoiceNo;
+      if (isEditMode) {
+        const pRes = await window.pharmaAPI.db.query("SELECT invoice_no FROM purchases WHERE id = ?", [purchaseId]);
+        if (pRes?.data?.length) {
+          originalInvoiceNo = pRes.data[0].invoice_no;
+        }
+      }
+
+      const existingPaymentRes = await window.pharmaAPI.db.query("SELECT id, payment_no FROM payments WHERE notes = ?", ['Against Purchase ' + originalInvoiceNo]);
+      const existingPaymentId = existingPaymentRes?.data?.[0]?.id;
+      const existingPaymentNo = existingPaymentRes?.data?.[0]?.payment_no;
+
+      let paymentId = existingPaymentId || null;
+      let paymentNo = existingPaymentNo || null;
+      let pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
 
       if (isEditMode) {
         operations.push({
@@ -205,10 +222,37 @@ export default function Purchase() {
           ]
         });
 
-        operations.push({
-          sql: `DELETE FROM payments WHERE notes = ?`,
-          params: ['Against Purchase ' + invoiceNo]
-        });
+        if (paymentMode !== 'Credit') {
+          if (existingPaymentId) {
+            operations.push({
+              sql: `UPDATE payments SET supplier_id = ?, date = ?, amount = ?, payment_mode = ?, updated_at = datetime('now') WHERE id = ?`,
+              params: [supplierId, invoiceDate, totals.net, pModeNormalized, existingPaymentId]
+            });
+          } else {
+            paymentId = 'PAY-' + crypto.randomUUID();
+            paymentNo = 'PMT-' + crypto.randomUUID().slice(-6);
+            operations.push({
+              sql: `INSERT INTO payments (
+                id, company_id, payment_no, supplier_id, date, amount, payment_mode, notes, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+              params: [
+                paymentId, companyId, paymentNo, supplierId, invoiceDate, totals.net, pModeNormalized, 'Against Purchase ' + invoiceNo
+              ]
+            });
+          }
+        } else {
+          if (existingPaymentId) {
+            operations.push({
+              sql: `DELETE FROM payments WHERE id = ?`,
+              params: [existingPaymentId]
+            });
+            syncItems.push({
+              tableName: 'Payment',
+              operation: 'delete',
+              payload: { id: existingPaymentId }
+            });
+          }
+        }
       } else {
         operations.push({
           sql: `INSERT INTO purchases (
@@ -220,26 +264,21 @@ export default function Purchase() {
             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net
           ]
         });
+
+        if (paymentMode !== 'Credit') {
+          paymentId = 'PAY-' + crypto.randomUUID();
+          paymentNo = 'PMT-' + crypto.randomUUID().slice(-6);
+          operations.push({
+            sql: `INSERT INTO payments (
+              id, company_id, payment_no, supplier_id, date, amount, payment_mode, notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+            params: [
+              paymentId, companyId, paymentNo, supplierId, invoiceDate, totals.net, pModeNormalized, 'Against Purchase ' + invoiceNo
+            ]
+          });
+        }
       }
 
-      let paymentId = null;
-      let pModeNormalized = null;
-      let paymentNo = null;
-      if (paymentMode !== 'Credit') {
-        pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
-        paymentId = 'PAY-' + crypto.randomUUID();
-        paymentNo = 'PMT-' + crypto.randomUUID().slice(-6);
-        operations.push({
-          sql: `INSERT INTO payments (
-            id, company_id, payment_no, supplier_id, date, amount, payment_mode, notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-          params: [
-            paymentId, companyId, paymentNo, supplierId, invoiceDate, totals.net, pModeNormalized, 'Against Purchase ' + invoiceNo
-          ]
-        });
-      }
-
-      const syncItems = [];
       const batchStockDiff = {};
 
       if (isEditMode) {
@@ -286,8 +325,13 @@ export default function Purchase() {
 
         const unitPurchasePrice = Number(perStripPrice(row.invPrice, priceUnit, packMultiplier).toFixed(2));
         const saveMrp = Number(perStripPrice(row.mrp, priceUnit, packMultiplier).toFixed(2));
-        const savePtr = Number(perStripPrice(row.ptr, priceUnit, packMultiplier).toFixed(2));
-        const savePts = Number(perStripPrice(row.pts, priceUnit, packMultiplier).toFixed(2));
+        
+        // Defensive validation fallback to prevent SQLite NOT NULL/NaN constraint crashes
+        const rawPtr = row.ptr !== undefined && row.ptr !== '' && !isNaN(Number(row.ptr)) ? row.ptr : row.invPrice;
+        const rawPts = row.pts !== undefined && row.pts !== '' && !isNaN(Number(row.pts)) ? row.pts : row.invPrice;
+
+        const savePtr = Number(perStripPrice(rawPtr, priceUnit, packMultiplier).toFixed(2));
+        const savePts = Number(perStripPrice(rawPts, priceUnit, packMultiplier).toFixed(2));
 
         batchStockDiff[actualBatchId].newPrices = {
           mrp: saveMrp,
@@ -446,7 +490,7 @@ export default function Purchase() {
       });
 
       if (paymentMode !== 'Credit') {
-        await syncEntity('Payment', 'create', {
+        await syncEntity('Payment', existingPaymentId ? 'update' : 'create', {
           id: paymentId,
           companyId,
           paymentNo,

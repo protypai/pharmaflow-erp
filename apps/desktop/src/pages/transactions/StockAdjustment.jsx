@@ -128,9 +128,9 @@ export default function StockAdjustment() {
   const handleSave = async () => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
 
       // Metadata-only edit of an existing adjustment (date/reference/reason/authorized-by).
       // Counted quantities are NOT changed here — a re-count should be a new adjustment.

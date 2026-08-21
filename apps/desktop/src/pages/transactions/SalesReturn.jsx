@@ -222,9 +222,9 @@ export default function SalesReturn() {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const returnId = isEditMode ? editId : 'SR-' + Date.now();
       const entryNo = isEditMode ? (existingEntryNo || 'SRET-' + Date.now()) : 'SRET-' + Date.now();
 
@@ -244,8 +244,14 @@ export default function SalesReturn() {
         const prod = products.find(p => p.id.toString() === row.product.toString());
         const batchData = prod?.batches.find(b => b.batch === row.batch);
         if (!batchData) throw new Error("Batch not found for product.");
+        
+        // Defensive validation fallback to prevent SQLite NOT NULL/NaN constraint crashes
+        const finalRate = row.rate !== undefined && row.rate !== '' && !isNaN(Number(row.rate)) 
+          ? Number(row.rate) 
+          : (batchData.ptr || batchData.sale_price || batchData.mrp || 0);
+
         const returnItemId = 'SRI-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-        prepared.push({ row, batchData, returnItemId });
+        prepared.push({ row: { ...row, rate: finalRate }, batchData, returnItemId });
       }
       if (prepared.length === 0) throw new Error("Please add at least one product to return.");
 
