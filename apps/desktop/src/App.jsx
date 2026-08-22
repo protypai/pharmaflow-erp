@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import UpdateNotification from './components/common/UpdateNotification';
@@ -103,6 +103,22 @@ function WithAdminLayout({ children }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Run local db repairs
+    const runRepairs = async () => {
+      try {
+        if (window.pharmaAPI && window.pharmaAPI.db) {
+          await window.pharmaAPI.db.run("UPDATE sales SET status = 'saved' WHERE status = 'completed';");
+          await window.pharmaAPI.db.run("UPDATE purchases SET status = 'saved' WHERE status = 'completed';");
+          console.log("Startup database repairs completed successfully.");
+        }
+      } catch (err) {
+        console.error("Failed to run startup database repairs:", err);
+      }
+    };
+    runRepairs();
+  }, []);
+
   return (
     <HashRouter>
       <UpdateNotification />

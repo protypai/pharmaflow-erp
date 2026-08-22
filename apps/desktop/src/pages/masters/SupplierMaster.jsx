@@ -38,9 +38,9 @@ export default function SupplierMaster() {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const isNew = !formData.id;
       const id = isNew ? 'SUPP-' + Date.now() : formData.id;
 
@@ -282,15 +282,15 @@ export default function SupplierMaster() {
                 </h4>
                 <div className="form-group">
                   <label className="form-label">Drug License No 1 <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="e.g. MH-CFA-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value})} />
+                  <input className="form-input" placeholder="e.g. MH-CFA-..." value={formData.drug_license} onChange={e => setFormData({...formData, drug_license: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Drug License No 2</label>
-                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value})} />
+                  <input className="form-input" placeholder="e.g. 21B-..." value={formData.drug_license_2} onChange={e => setFormData({...formData, drug_license_2: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">GSTIN <span className="text-danger">*</span></label>
-                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value})} />
+                  <input className="form-input" placeholder="15-digit GSTIN" maxLength="15" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Credit Limit (₹)</label>

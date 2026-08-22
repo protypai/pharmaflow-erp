@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Filter, Edit2, Package, History, X, Save } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
 import { formatStock } from '../../utils/units';
+import { toDisplayExpiry } from '../../utils/dates';
 
 export default function ProductMaster() {
   const [search, setSearch] = useState('');
@@ -78,9 +79,9 @@ export default function ProductMaster() {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const code = formData.code || ('ITM' + Math.floor(Math.random() * 100000));
       const isNew = !formData.id;
       const id = isNew ? 'PROD-' + Date.now() : formData.id;
@@ -546,7 +547,7 @@ export default function ProductMaster() {
                       <tr key={b.id}>
                         <td style={{ fontWeight: 600 }}>{b.batch_no}</td>
                         <td style={{ color: new Date(b.expiry_date) < new Date() ? 'var(--danger)' : 'inherit' }}>
-                          {b.expiry_date}
+                          {toDisplayExpiry(b.expiry_date)}
                         </td>
                         <td style={{ textAlign: 'right' }}>₹{b.mrp.toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>₹{b.ptr.toFixed(2)}</td>

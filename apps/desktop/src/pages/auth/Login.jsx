@@ -56,6 +56,34 @@ export default function Login() {
 
   const performInitialSync = async (data) => {
     const ops = [];
+    
+    (data.customers || []).forEach(c => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO customers (id, company_id, code, name, type, gstin, drug_license, drug_license_2, phone, email, address, area, city, state, pincode, salesman, credit_limit, credit_days, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.drugLicense2, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status]
+      });
+    });
+
+    (data.suppliers || []).forEach(s => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO suppliers (id, company_id, code, name, gstin, drug_license, drug_license_2, phone, email, address, city, state, pincode, credit_days, credit_limit, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.drugLicense2, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status]
+      });
+    });
+
+    (data.products || []).forEach(p => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO products (id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id, rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate, min_stock, max_stock, reorder_qty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [p.id, p.companyId, p.code, p.barcode, p.name, p.genericName, p.manufacturerId, p.categoryId, p.rackId, p.packing, p.purchaseUnit, p.saleUnit, p.conversionFactor, p.hsnCode, p.gstRate, p.minStock, p.maxStock, p.reorderQty, p.discontinued ? 1 : 0, p.status]
+      });
+    });
+
+    (data.batches || []).forEach(b => {
+      ops.push({
+        sql: 'INSERT OR REPLACE INTO batches (id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [b.id, b.productId, b.batchNo, b.expiryDate, b.mrp, b.ptr, b.pts, b.purchasePrice, b.gstRate, b.currentQty, b.freeQty]
+      });
+    });
 
     (data.manufacturers || []).forEach(m => {
       ops.push({
@@ -75,34 +103,6 @@ export default function Login() {
       ops.push({
         sql: 'INSERT OR REPLACE INTO racks (id, company_id, code, description, status) VALUES (?, ?, ?, ?, ?)',
         params: [r.id, r.companyId, r.code, r.description, r.status]
-      });
-    });
-
-    (data.products || []).forEach(p => {
-      ops.push({
-        sql: 'INSERT OR REPLACE INTO products (id, company_id, code, barcode, name, generic_name, manufacturer_id, category_id, rack_id, packing, purchase_unit, sale_unit, conversion_factor, hsn_code, gst_rate, min_stock, max_stock, reorder_qty, discontinued, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [p.id, p.companyId, p.code, p.barcode, p.name, p.genericName, p.manufacturerId, p.categoryId, p.rackId, p.packing, p.purchaseUnit, p.saleUnit, p.conversionFactor, p.hsnCode, p.gstRate, p.minStock, p.maxStock, p.reorderQty, p.discontinued ? 1 : 0, p.status]
-      });
-    });
-
-    (data.batches || []).forEach(b => {
-      ops.push({
-        sql: 'INSERT OR REPLACE INTO batches (id, product_id, batch_no, expiry_date, mrp, ptr, pts, purchase_price, gst_rate, current_qty, free_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [b.id, b.productId, b.batchNo, b.expiryDate, b.mrp, b.ptr, b.pts, b.purchasePrice, b.gstRate, b.currentQty, b.freeQty]
-      });
-    });
-    
-    (data.customers || []).forEach(c => {
-      ops.push({
-        sql: 'INSERT OR REPLACE INTO customers (id, company_id, code, name, type, gstin, drug_license, phone, email, address, area, city, state, pincode, salesman, credit_limit, credit_days, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [c.id, c.companyId, c.code, c.name, c.type, c.gstin, c.drugLicense, c.phone, c.email, c.address, c.area, c.city, c.state, c.pincode, c.salesman, c.creditLimit, c.creditDays, c.openingBalance, c.openingBalanceType, c.status]
-      });
-    });
-
-    (data.suppliers || []).forEach(s => {
-      ops.push({
-        sql: 'INSERT OR REPLACE INTO suppliers (id, company_id, code, name, gstin, drug_license, phone, email, address, city, state, pincode, credit_days, credit_limit, opening_balance, opening_balance_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [s.id, s.companyId, s.code, s.name, s.gstin, s.drugLicense, s.phone, s.email, s.address, s.city, s.state, s.pincode, s.creditDays, s.creditLimit, s.openingBalance, s.openingBalanceType, s.status]
       });
     });
 
@@ -205,7 +205,12 @@ export default function Login() {
     });
 
     if (ops.length > 0) {
-      await window.pharmaAPI.db.transaction(ops);
+      try {
+        await window.pharmaAPI.db.run("PRAGMA foreign_keys = OFF;");
+        await window.pharmaAPI.db.transaction(ops);
+      } finally {
+        await window.pharmaAPI.db.run("PRAGMA foreign_keys = ON;");
+      }
     }
   };
 

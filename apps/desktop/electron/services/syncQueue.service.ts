@@ -634,74 +634,8 @@ const PULL_UPSERTS: Array<{ key: string; build: UpsertBuilder }> = [
 ];
 
 export async function pullChanges(accessToken: string, refreshToken?: string): Promise<{ applied: number; serverTime?: string; newAccessToken?: string }> {
-  const db = getDb();
-  const since = getPullCursor();
-  let newAccessToken: string | undefined;
-
-  const doPull = async (token: string) => {
-    const url = `${getApiUrl()}/api/v1/sync/changes` + (since ? `?since=${encodeURIComponent(since)}` : '');
-    const response = await axios.get(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 30000,
-    });
-    return response.data?.data as { serverTime: string; changes: Record<string, any[]> };
-  };
-
-  let data;
-  try {
-    data = await doPull(accessToken);
-  } catch (err: any) {
-    if (isAccountDisabled(err)) throw new AccountDisabledError();
-    if (err?.response?.status === 401 && refreshToken) {
-      logger.info('Access token expired during sync pull, attempting refresh...');
-      try {
-        const refreshRes = await axios.post(
-          `${getApiUrl()}/api/v1/auth/refresh`,
-          { refreshToken },
-          { timeout: 15000 }
-        );
-        if (refreshRes.data?.success && refreshRes.data?.data?.accessToken) {
-          newAccessToken = refreshRes.data.data.accessToken;
-          await keytar.setPassword(SERVICE_NAME, ACCOUNT_NAME, newAccessToken!);
-          data = await doPull(newAccessToken!);
-        } else {
-          throw err;
-        }
-      } catch (refreshErr: any) {
-        if (isAccountDisabled(refreshErr)) throw new AccountDisabledError();
-        throw refreshErr;
-      }
-    } else {
-      throw err;
-    }
-  }
-
-  const changes = data?.changes || {};
-  let applied = 0;
-
-  const applyTx = db.transaction(() => {
-    for (const { key, build } of PULL_UPSERTS) {
-      const rows = changes[key];
-      if (!Array.isArray(rows) || rows.length === 0) continue;
-      for (const record of rows) {
-        try {
-          const { sql, params } = build(record);
-          db.prepare(sql).run(...params);
-          applied++;
-        } catch (rowErr: any) {
-          logger.warn(`pullChanges: failed to upsert ${key} row`, { error: rowErr.message });
-        }
-      }
-    }
-  });
-  applyTx();
-
-  if (data?.serverTime) {
-    setPullCursor(data.serverTime);
-  }
-
-  logger.info('Delta pull applied', { applied, serverTime: data?.serverTime });
-  return { applied, serverTime: data?.serverTime, newAccessToken };
+  logger.info('One-way sync active: pullChanges bypassed.');
+  return { applied: 0, serverTime: new Date().toISOString() };
 }
 
 export function getPendingCount(): number {

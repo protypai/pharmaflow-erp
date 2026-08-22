@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml, normalizeInvoiceNumbers } from '../../utils/invoiceTemplate';
 import { packSize, toStrips, toBoxesFloat, perStripPrice, formatStock } from '../../utils/units';
+import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 export default function Sales() {
   const navigate = useNavigate();
   const { id: editId } = useParams();
@@ -59,7 +60,7 @@ export default function Sales() {
     const fetchMasterData = async () => {
       try {
         try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
-        const custRes = await window.pharmaAPI.db.query("SELECT id, name, area, credit_limit, opening_balance FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
+        const custRes = await window.pharmaAPI.db.query("SELECT id, name, type, area, credit_limit, opening_balance FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
         setCustomersList(custRes?.data || []);
 
         const prodRes = await window.pharmaAPI.db.query(`
@@ -87,7 +88,7 @@ export default function Sales() {
             prodMap[row.product_id].batches.push({
               id: row.batch_id,
               batch: row.batch_no,
-              expiry: row.expiry_date,
+              expiry: toDisplayExpiry(row.expiry_date),
               mrp: row.mrp,
               ptr: row.ptr,
               qty: row.available
@@ -106,7 +107,8 @@ export default function Sales() {
               setCustomerId(sale.customer_id);
               setInvoiceNo(sale.invoice_no);
               setInvoiceDate(sale.date ? sale.date.split('T')[0] : '');
-              setPaymentMode(sale.payment_mode === 'credit' ? 'Credit' : (sale.payment_mode === 'cash' ? 'Cash' : 'Bank / UPI'));
+              const mode = (sale.payment_mode || '').toLowerCase();
+              setPaymentMode(mode === 'credit' ? 'Credit' : (mode === 'cash' ? 'Cash' : 'Bank / UPI'));
               if (sale.notes && sale.notes.startsWith('Doctor: ')) {
                  setDoctorName(sale.notes.replace('Doctor: ', ''));
               }
@@ -140,7 +142,7 @@ export default function Sales() {
                        productSearch: item.product_name || '',
                        batch: item.batch_no || '',
                        batchId: item.batch_id || '',
-                       expiry: item.expiry_date || '',
+                       expiry: toDisplayExpiry(item.expiry_date) || '',
                        qty: item.qty,
                        free: item.free_qty,
                        unit: 'strip',
@@ -186,6 +188,30 @@ export default function Sales() {
     } else {
       setCustomerWarning(null);
     }
+  }, [customerId, customersList]);
+
+  // Handle Price updates when Customer changes
+  useEffect(() => {
+    const activeCust = customersList.find(c => c.id === customerId);
+    const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
+    setRows(prevRows => prevRows.map(r => {
+        if (!r.batchId) return r;
+        const prod = productsList.find(p => p.id === r.product);
+        if (!prod) return r;
+        const bData = prod.batches.find(b => b.id === r.batchId);
+        if (!bData) return r;
+        
+        const defaultRate = isWholesale ? Number(bData.ptr || 0) : Number(bData.mrp || 0);
+        const factor = packSize(r.boxSize);
+        let updated = { ...r, baseRate: defaultRate };
+        
+        if (r.unit === 'box') {
+           updated.rate = Number((defaultRate * factor).toFixed(2));
+        } else {
+           updated.rate = defaultRate;
+        }
+        return updated;
+    }));
   }, [customerId, customersList]);
 
   // Handle Row Calculations
@@ -274,20 +300,23 @@ export default function Sales() {
           if (batchData) {
             updated.batchId = batchData.id;
             updated.expiry = batchData.expiry;
-            // batchData.qty is now current_qty in STRIPS (base unit).
             updated.baseAvailable = Number(batchData.qty);
-            updated.baseMrp = Number(batchData.mrp); // per strip
-            updated.baseRate = Number(batchData.mrp); // per strip
+            updated.baseMrp = Number(batchData.mrp);
+
+            const activeCust = customersList.find(c => c.id === customerId);
+            const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
+            const defaultRate = isWholesale ? Number(batchData.ptr || 0) : Number(batchData.mrp || 0);
+            updated.baseRate = defaultRate; 
 
             const factor = packSize(updated.boxSize);
             if (updated.unit === 'box') {
               updated.available = Number(toBoxesFloat(batchData.qty, factor).toFixed(2));
               updated.mrp = Number((batchData.mrp * factor).toFixed(2));
-              updated.rate = Number((batchData.mrp * factor).toFixed(2));
+              updated.rate = Number((defaultRate * factor).toFixed(2));
             } else {
               updated.available = Number(batchData.qty);
               updated.mrp = Number(batchData.mrp);
-              updated.rate = Number(batchData.mrp);
+              updated.rate = defaultRate;
             }
           }
         }
@@ -382,29 +411,73 @@ export default function Sales() {
     try {
       try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const saleId = isEditMode ? editId : 'SAL-' + Date.now();
 
       const operations = [];
+      const syncItems = [];
+
+      let originalInvoiceNo = invoiceNo;
+      if (isEditMode) {
+         const sRes = await window.pharmaAPI.db.query("SELECT invoice_no FROM sales WHERE id = ?", [saleId]);
+         if (sRes?.data?.length) {
+            originalInvoiceNo = sRes.data[0].invoice_no;
+         }
+      }
+
+      const existingReceiptRes = await window.pharmaAPI.db.query("SELECT id, receipt_no FROM receipts WHERE notes = ?", ['Against Sale ' + originalInvoiceNo]);
+      const existingReceiptId = existingReceiptRes?.data?.[0]?.id;
+      const existingReceiptNo = existingReceiptRes?.data?.[0]?.receipt_no;
+
+      let receiptId = existingReceiptId || null;
+      let receiptNo = existingReceiptNo || null;
+      let pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
 
       if (isEditMode) {
          operations.push({
-           sql: `UPDATE sales SET 
-             customer_id = ?, invoice_no = ?, date = ?, salesman = ?, gst_type = ?,
-             subtotal = ?, discount_amount = ?, taxable_amount = ?, net_amount = ?, payment_mode = ?, paid_amount = ?, notes = ?, updated_at = datetime('now')
-             WHERE id = ?`,
-           params: [
-             customerId, invoiceNo, invoiceDate, user.name || 'Admin', 'exclusive',
-             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
-           ]
+            sql: `UPDATE sales SET 
+              customer_id = ?, invoice_no = ?, date = ?, salesman = ?, gst_type = ?,
+              subtotal = ?, discount_amount = ?, taxable_amount = ?, net_amount = ?, payment_mode = ?, paid_amount = ?, notes = ?, updated_at = datetime('now')
+              WHERE id = ?`,
+            params: [
+              customerId, invoiceNo, invoiceDate, user.name || 'Admin', 'exclusive',
+              totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode.toLowerCase(), paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null, saleId
+            ]
          });
          
-         operations.push({
-            sql: `DELETE FROM receipts WHERE notes = ?`,
-            params: ['Against Sale ' + invoiceNo]
-         });
+         if (paymentMode !== 'Credit') {
+            if (existingReceiptId) {
+               operations.push({
+                  sql: `UPDATE receipts SET customer_id = ?, date = ?, amount = ?, payment_mode = ?, updated_at = datetime('now') WHERE id = ?`,
+                  params: [customerId, invoiceDate, totals.net, pModeNormalized, existingReceiptId]
+               });
+            } else {
+               receiptId = 'REC-' + Date.now();
+               receiptNo = 'RCT-' + Date.now().toString().slice(-6);
+               operations.push({
+                  sql: `INSERT INTO receipts (
+                    id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                  params: [
+                    receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
+                  ]
+               });
+            }
+         } else {
+            if (existingReceiptId) {
+               operations.push({
+                  sql: `DELETE FROM receipts WHERE id = ?`,
+                  params: [existingReceiptId]
+               });
+               syncItems.push({
+                  tableName: 'Receipt',
+                  operation: 'delete',
+                  payload: { id: existingReceiptId }
+               });
+            }
+         }
       } else {
          operations.push({
            sql: `INSERT INTO sales (
@@ -413,29 +486,24 @@ export default function Sales() {
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'saved', datetime('now'), datetime('now'))`,
            params: [
              saleId, companyId, invoiceNo, customerId, invoiceDate, user.name || 'Admin', 'exclusive',
-             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode, paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
+             totals.sub, totals.disc, totals.sub - totals.disc, totals.net, paymentMode.toLowerCase(), paymentMode === 'Credit' ? 0 : totals.net, doctorName ? 'Doctor: ' + doctorName : null
            ]
          });
+
+         if (paymentMode !== 'Credit') {
+           receiptId = 'REC-' + Date.now();
+           receiptNo = 'RCT-' + Date.now().toString().slice(-6);
+           operations.push({
+             sql: `INSERT INTO receipts (
+               id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+             params: [
+               receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
+             ]
+           });
+         }
       }
 
-      let receiptId = null;
-      let pModeNormalized = null;
-      let receiptNo = null;
-      if (paymentMode !== 'Credit') {
-        pModeNormalized = paymentMode === 'Cash' ? 'cash' : 'bank';
-        receiptId = 'REC-' + Date.now();
-        receiptNo = 'RCT-' + Date.now().toString().slice(-6);
-        operations.push({
-          sql: `INSERT INTO receipts (
-            id, company_id, receipt_no, customer_id, date, amount, payment_mode, notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-          params: [
-            receiptId, companyId, receiptNo, customerId, invoiceDate, totals.net, pModeNormalized, 'Against Sale ' + invoiceNo
-          ]
-        });
-      }
-
-      const syncItems = []; 
       
       if (isEditMode) {
          // Only delete the specific items that were deleted from the UI
@@ -505,12 +573,25 @@ export default function Sales() {
 
       for (const [batchId, diff] of Object.entries(batchStockDiff)) {
          if (diff.newStrips - diff.oldStrips !== 0) {
-            const bRes = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [batchId]);
+            const bRes = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [batchId]);
             if (bRes?.data?.length) {
+               const b = bRes.data[0];
                syncItems.push({
                   tableName: 'Batch',
                   operation: 'update',
-                  payload: { id: batchId, currentQty: bRes.data[0].current_qty }
+                  payload: {
+                     id: b.id,
+                     productId: b.product_id,
+                     batchNo: b.batch_no,
+                     expiryDate: b.expiry_date ? toIsoExpiry(b.expiry_date) : null,
+                     mrp: b.mrp,
+                     ptr: b.ptr,
+                     pts: b.pts || 0,
+                     purchasePrice: b.purchase_price,
+                     gstRate: b.gst_rate,
+                     currentQty: b.current_qty,
+                     freeQty: b.free_qty || 0
+                  }
                });
             }
          }
@@ -543,7 +624,7 @@ export default function Sales() {
       });
 
       if (paymentMode !== 'Credit') {
-        await syncEntity('Receipt', 'create', {
+        await syncEntity('Receipt', existingReceiptId ? 'update' : 'create', {
           id: receiptId,
           companyId,
           receiptNo,
@@ -644,7 +725,7 @@ export default function Sales() {
           if (!prodMap[row.product_id]) {
              prodMap[row.product_id] = { id: row.product_id, name: row.product_name, gst: row.gst_rate, boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10, batches: [] };
           }
-          prodMap[row.product_id].batches.push({ id: row.batch_id, batch: row.batch_no, expiry: row.expiry_date, mrp: row.mrp, ptr: row.ptr, qty: row.available });
+          prodMap[row.product_id].batches.push({ id: row.batch_id, batch: row.batch_no, expiry: toDisplayExpiry(row.expiry_date), mrp: row.mrp, ptr: row.ptr, qty: row.available });
         });
       }
       setProductsList(Object.values(prodMap));
@@ -712,7 +793,29 @@ export default function Sales() {
           <div className="form-row-4">
             <div className="form-group">
               <label className="form-label">Customer <span className="text-danger">*</span></label>
-              <select className="form-select" value={customerId} onChange={e => setCustomerId(e.target.value)}>
+              <select className="form-select" value={customerId} onChange={e => {
+                const newCustomerId = e.target.value;
+                setCustomerId(newCustomerId);
+                
+                const activeCust = customersList.find(c => c.id === newCustomerId);
+                const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
+                
+                setRows(rows => rows.map(r => {
+                  if (!r.product || !r.batch) return r;
+                  const prod = productsList.find(p => p.id === r.product);
+                  if (!prod) return r;
+                  const batchData = prod.batches.find(b => b.batch === r.batch);
+                  if (!batchData) return r;
+                  
+                  const defaultRate = isWholesale ? Number(batchData.ptr || 0) : Number(batchData.mrp || 0);
+                  const factor = packSize(r.boxSize);
+                  return {
+                    ...r,
+                    baseRate: defaultRate,
+                    rate: r.unit === 'box' ? Number((defaultRate * factor).toFixed(2)) : defaultRate
+                  };
+                }));
+              }}>
                 <option value="">Select Customer...</option>
                 {customersList.map(c => <option key={c.id} value={c.id}>{c.name} ({c.area})</option>)}
               </select>

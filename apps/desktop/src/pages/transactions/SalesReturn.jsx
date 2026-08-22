@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
+import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 
 export default function SalesReturn() {
   const { id: editId } = useParams();
@@ -40,7 +41,6 @@ export default function SalesReturn() {
         setOriginalSaleId(hdr.sale_id || null);
         setReturnDate(String(hdr.return_date || '').slice(0, 10) || new Date().toISOString().split('T')[0]);
         setReturnReason(hdr.reason || 'Salable Return (Add back to active stock)');
-        setOriginalIsSalable(String(hdr.reason || '').includes('Salable'));
         setExistingEntryNo(hdr.entry_no || null);
 
         const itRes = await window.pharmaAPI.db.query(`
@@ -67,7 +67,7 @@ export default function SalesReturn() {
               product: i.product_id.toString(),
               batch_id: i.batch_id,
               batch: i.batch_no,
-              expiry: i.expiry_date,
+              expiry: toDisplayExpiry(i.expiry_date),
               qty: i.qty,
               free_qty: i.free_qty || 0,
               rate,
@@ -90,9 +90,8 @@ export default function SalesReturn() {
   const [successMsg, setSuccessMsg] = useState('');
   const [originalSaleId, setOriginalSaleId] = useState(null);
   // Edit-mode context: the return's original items (to reverse stock + delete on save),
-  // whether the original return was salable (added stock), and its existing entry number.
+  // and its existing entry number.
   const [originalItems, setOriginalItems] = useState([]);
-  const [originalIsSalable, setOriginalIsSalable] = useState(false);
   const [existingEntryNo, setExistingEntryNo] = useState(null);
 
   const [customerId, setCustomerId] = useState('');
@@ -196,7 +195,7 @@ export default function SalesReturn() {
           product: item.product_id.toString(),
           batch_id: item.batch_id,
           batch: item.batch_no,
-          expiry: item.expiry_date,
+          expiry: toDisplayExpiry(item.expiry_date),
           qty: item.qty,
           free_qty: item.free_qty || 0,
           rate: item.sale_price || item.ptr || item.mrp, 
@@ -222,9 +221,9 @@ export default function SalesReturn() {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const userRes = await window.pharmaAPI.db.query("SELECT company_id FROM users WHERE id = ? OR email = ?", [user.id || '', user.email || '']);
-      if (!userRes?.data?.length) throw new Error("Admin user not found in local DB");
-      const companyId = userRes.data[0].company_id;
+      const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
+      if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
+      const companyId = compRes.data[0].id;
       const returnId = isEditMode ? editId : 'SR-' + Date.now();
       const entryNo = isEditMode ? (existingEntryNo || 'SRET-' + Date.now()) : 'SRET-' + Date.now();
 
@@ -235,7 +234,6 @@ export default function SalesReturn() {
         return 'quality_issue';
       };
       const mappedReason = mapReturnReason(returnReason);
-      const isSalable = returnReason.includes('Salable');
 
       // 1) Resolve & validate every row BEFORE writing anything (no ghost-header state).
       const prepared = [];
@@ -244,8 +242,14 @@ export default function SalesReturn() {
         const prod = products.find(p => p.id.toString() === row.product.toString());
         const batchData = prod?.batches.find(b => b.batch === row.batch);
         if (!batchData) throw new Error("Batch not found for product.");
+        
+        // Defensive validation fallback to prevent SQLite NOT NULL/NaN constraint crashes
+        const finalRate = row.rate !== undefined && row.rate !== '' && !isNaN(Number(row.rate)) 
+          ? Number(row.rate) 
+          : (batchData.ptr || batchData.sale_price || batchData.mrp || 0);
+
         const returnItemId = 'SRI-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-        prepared.push({ row, batchData, returnItemId });
+        prepared.push({ row: { ...row, rate: finalRate }, batchData, returnItemId });
       }
       if (prepared.length === 0) throw new Error("Please add at least one product to return.");
 
@@ -254,15 +258,13 @@ export default function SalesReturn() {
       // Net stock change per batch. A salable return ADDS stock back. On EDIT we reverse
       // the OLD return's stock effect first, then apply the NEW one — net delta per batch.
       const batchDelta = {};
-      if (isEditMode && originalIsSalable) {
+      if (isEditMode) {
         for (const it of originalItems) {
           batchDelta[it.batch_id] = (batchDelta[it.batch_id] || 0) - Math.round(Number(it.qty) || 0) - Math.round(Number(it.free_qty) || 0);
         }
       }
-      if (isSalable) {
-        for (const { row, batchData } of prepared) {
-          batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) + Math.round(Number(row.qty) || 0) + Math.round(Number(row.free_qty) || 0);
-        }
+      for (const { row, batchData } of prepared) {
+        batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) + Math.round(Number(row.qty) || 0) + Math.round(Number(row.free_qty) || 0);
       }
 
       // Negative-stock guard for any batch whose net change is a reduction.
@@ -348,9 +350,23 @@ export default function SalesReturn() {
 
       // Sync each affected batch with its live absolute quantity (post-commit).
       for (const bId of Object.keys(batchDelta)) {
-        if (!batchDelta[bId]) continue;
-        const cur = await window.pharmaAPI.db.query("SELECT current_qty FROM batches WHERE id = ?", [bId]);
-        await syncEntity('Batch', 'update', { id: bId, currentQty: Number(cur?.data?.[0]?.current_qty ?? 0) });
+        const cur = await window.pharmaAPI.db.query("SELECT * FROM batches WHERE id = ?", [bId]);
+        if (cur?.data?.length) {
+          const b = cur.data[0];
+          await syncEntity('Batch', 'update', {
+            id: b.id,
+            productId: b.product_id,
+            batchNo: b.batch_no,
+            expiryDate: b.expiry_date ? toIsoExpiry(b.expiry_date) : null,
+            mrp: b.mrp,
+            ptr: b.ptr,
+            pts: b.pts || 0,
+            purchasePrice: b.purchase_price,
+            gstRate: b.gst_rate,
+            currentQty: b.current_qty,
+            freeQty: b.free_qty || 0
+          });
+        }
       }
 
       if (isEditMode) {
