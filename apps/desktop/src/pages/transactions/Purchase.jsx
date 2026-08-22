@@ -27,7 +27,6 @@ export default function Purchase() {
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState(null); // { html, no }
-  const [deletedDbIds, setDeletedDbIds] = useState([]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -68,7 +67,6 @@ export default function Purchase() {
                 const boxSize = (item.conversion_factor && Number(item.conversion_factor) > 0) ? Number(item.conversion_factor) : 10;
                 return {
                   id: crypto.randomUUID(),
-                  dbId: item.id, // Preserve original database ID
                   product: item.product_id || '',
                   productName: item.product_name || '',
                   productSearch: item.product_name || '',
@@ -166,10 +164,6 @@ export default function Purchase() {
   };
 
   const removeRow = (id) => {
-    const rowToRemove = rows.find(r => r.id === id);
-    if (rowToRemove && rowToRemove.dbId) {
-      setDeletedDbIds([...deletedDbIds, rowToRemove.dbId]);
-    }
     setRows(rows.filter(r => r.id !== id));
   };
 
@@ -291,18 +285,15 @@ export default function Purchase() {
 
       if (isEditMode) {
         for (const item of originalItems) {
-          if (!batchStockDiff[item.batch_id]) batchStockDiff[item.batch_id] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: item.product_id, batchNo: item.batch_no };
-          batchStockDiff[item.batch_id].oldStrips += Number(item.qty || 0);
-        }
-        // Only delete the specific items that were deleted from the UI
-        for (const dbId of deletedDbIds) {
           syncItems.push({
             tableName: 'PurchaseItem',
             operation: 'delete',
-            payload: { id: dbId }
+            payload: { id: item.id }
           });
-          operations.push({ sql: `DELETE FROM purchase_items WHERE id = ?`, params: [dbId] });
+          if (!batchStockDiff[item.batch_id]) batchStockDiff[item.batch_id] = { oldStrips: 0, newStrips: 0, newPrices: null, productId: item.product_id, batchNo: item.batch_no };
+          batchStockDiff[item.batch_id].oldStrips += Number(item.qty || 0);
         }
+        operations.push({ sql: `DELETE FROM purchase_items WHERE purchase_id = ?`, params: [purchaseId] });
       }
 
       const itemOperations = [];
@@ -353,9 +344,9 @@ export default function Purchase() {
           expiryDate: row.expiry || '12/99'
         };
 
-        const purchaseItemId = row.dbId || ('P-ITM-' + crypto.randomUUID());
+        const purchaseItemId = 'P-ITM-' + crypto.randomUUID();
         itemOperations.push({
-          sql: `INSERT OR REPLACE INTO purchase_items (
+          sql: `INSERT INTO purchase_items (
             id, purchase_id, product_id, batch_id, qty, free_qty, purchase_price, ptr, mrp, disc_percent, gst_rate, net_amount
           ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
           params: [
@@ -369,7 +360,7 @@ export default function Purchase() {
 
         itemSyncItems.push({
           tableName: 'PurchaseItem',
-          operation: row.dbId ? 'update' : 'create',
+          operation: 'create',
           payload: {
             id: purchaseItemId,
             purchaseId,
