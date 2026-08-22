@@ -3,8 +3,8 @@ import { Save, Plus, Trash2, Printer, Calculator, AlertTriangle, ArrowLeft, Down
 import { useNavigate, useParams } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml } from '../../utils/invoiceTemplate';
-import { packSize, toStrips, perStripPrice } from '../../utils/units';
-import { toIsoExpiry } from '../../utils/dates';
+import { toStrips, packSize, toBoxesFloat, perStripPrice } from '../../utils/units';
+import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 export default function Purchase() {
   const navigate = useNavigate();
   const { id: editId } = useParams();
@@ -72,7 +72,7 @@ export default function Purchase() {
                   productSearch: item.product_name || '',
                   batch: item.batch_no || '',
                   batchId: item.batch_id,
-                  expiry: item.expiry_date || '',
+                  expiry: toDisplayExpiry(item.expiry_date) || '',
                   qty: item.qty,
                   invPrice: item.purchase_price,
                   priceUnit: 'strip',

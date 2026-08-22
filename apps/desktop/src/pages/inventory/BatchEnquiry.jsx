@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, History, Package } from 'lucide-react';
 import { formatStock } from '../../utils/units';
+import { toDisplayExpiry } from '../../utils/dates';
 
 
 export default function BatchEnquiry() {
@@ -136,7 +137,7 @@ export default function BatchEnquiry() {
                   <tr key={`${batch.product.id}-${enriched.batch}`}>
                     <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{batch.product.name}</td>
                     <td style={{ fontWeight: 600 }}>{enriched.batch}</td>
-                    <td>{enriched.expiry}</td>
+                    <td>{toDisplayExpiry(enriched.expiry)}</td>
                     <td>
                       <span style={{ fontWeight: 600, color: enriched.qty === 0 ? 'var(--danger)' : 'inherit' }}>
                         {formatStock(enriched.qty, batch.product.conversion_factor, batch.product.sale_unit)}

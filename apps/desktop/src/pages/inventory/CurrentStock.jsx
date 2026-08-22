@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Printer, Download, Package, X } from 'lucide-react';
 import { formatStock } from '../../utils/units';
+import { toDisplayExpiry } from '../../utils/dates';
 
 export default function CurrentStock() {
   const [products, set_products] = useState([]);
@@ -137,7 +138,7 @@ export default function CurrentStock() {
                 </td>
                 <td style={{ fontWeight: 600 }}>{prod.batch_no}</td>
                 <td style={{ color: new Date(prod.expiry_date) < new Date() ? 'var(--danger)' : 'inherit' }}>
-                  {prod.expiry_date}
+                  {toDisplayExpiry(prod.expiry_date)}
                 </td>
                 <td>{prod.rack}</td>
                 <td>

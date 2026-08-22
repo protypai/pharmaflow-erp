@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml, normalizeInvoiceNumbers } from '../../utils/invoiceTemplate';
 import { packSize, toStrips, toBoxesFloat, perStripPrice, formatStock } from '../../utils/units';
-import { toIsoExpiry } from '../../utils/dates';
+import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 export default function Sales() {
   const navigate = useNavigate();
   const { id: editId } = useParams();
@@ -87,7 +87,7 @@ export default function Sales() {
             prodMap[row.product_id].batches.push({
               id: row.batch_id,
               batch: row.batch_no,
-              expiry: row.expiry_date,
+              expiry: toDisplayExpiry(row.expiry_date),
               mrp: row.mrp,
               ptr: row.ptr,
               qty: row.available
@@ -140,7 +140,7 @@ export default function Sales() {
                        productSearch: item.product_name || '',
                        batch: item.batch_no || '',
                        batchId: item.batch_id || '',
-                       expiry: item.expiry_date || '',
+                       expiry: toDisplayExpiry(item.expiry_date) || '',
                        qty: item.qty,
                        free: item.free_qty,
                        unit: 'strip',
@@ -191,7 +191,7 @@ export default function Sales() {
   // Handle Price updates when Customer changes
   useEffect(() => {
     const activeCust = customersList.find(c => c.id === customerId);
-    const isWholesale = activeCust?.type === 'wholesale';
+    const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
     setRows(prevRows => prevRows.map(r => {
         if (!r.batchId) return r;
         const prod = productsList.find(p => p.id === r.product);
@@ -302,7 +302,7 @@ export default function Sales() {
             updated.baseMrp = Number(batchData.mrp);
 
             const activeCust = customersList.find(c => c.id === customerId);
-            const isWholesale = activeCust?.type === 'wholesale';
+            const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
             const defaultRate = isWholesale ? Number(batchData.ptr || 0) : Number(batchData.mrp || 0);
             updated.baseRate = defaultRate; 
 
@@ -718,7 +718,7 @@ export default function Sales() {
           if (!prodMap[row.product_id]) {
              prodMap[row.product_id] = { id: row.product_id, name: row.product_name, gst: row.gst_rate, boxSize: (row.conversion_factor && Number(row.conversion_factor) > 0) ? Number(row.conversion_factor) : 10, batches: [] };
           }
-          prodMap[row.product_id].batches.push({ id: row.batch_id, batch: row.batch_no, expiry: row.expiry_date, mrp: row.mrp, ptr: row.ptr, qty: row.available });
+          prodMap[row.product_id].batches.push({ id: row.batch_id, batch: row.batch_no, expiry: toDisplayExpiry(row.expiry_date), mrp: row.mrp, ptr: row.ptr, qty: row.available });
         });
       }
       setProductsList(Object.values(prodMap));
@@ -791,7 +791,7 @@ export default function Sales() {
                 setCustomerId(newCustomerId);
                 
                 const activeCust = customersList.find(c => c.id === newCustomerId);
-                const isWholesale = activeCust?.type === 'wholesale';
+                const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
                 
                 setRows(rows => rows.map(r => {
                   if (!r.product || !r.batch) return r;

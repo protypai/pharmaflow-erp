@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Filter, Edit2, Package, History, X, Save } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
 import { formatStock } from '../../utils/units';
+import { toDisplayExpiry } from '../../utils/dates';
 
 export default function ProductMaster() {
   const [search, setSearch] = useState('');
@@ -546,7 +547,7 @@ export default function ProductMaster() {
                       <tr key={b.id}>
                         <td style={{ fontWeight: 600 }}>{b.batch_no}</td>
                         <td style={{ color: new Date(b.expiry_date) < new Date() ? 'var(--danger)' : 'inherit' }}>
-                          {b.expiry_date}
+                          {toDisplayExpiry(b.expiry_date)}
                         </td>
                         <td style={{ textAlign: 'right' }}>₹{b.mrp.toFixed(2)}</td>
                         <td style={{ textAlign: 'right' }}>₹{b.ptr.toFixed(2)}</td>

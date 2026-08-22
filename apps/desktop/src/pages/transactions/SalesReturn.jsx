@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
-import { toIsoExpiry } from '../../utils/dates';
+import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 
 export default function SalesReturn() {
   const { id: editId } = useParams();
@@ -67,7 +67,7 @@ export default function SalesReturn() {
               product: i.product_id.toString(),
               batch_id: i.batch_id,
               batch: i.batch_no,
-              expiry: i.expiry_date,
+              expiry: toDisplayExpiry(i.expiry_date),
               qty: i.qty,
               free_qty: i.free_qty || 0,
               rate,
@@ -195,7 +195,7 @@ export default function SalesReturn() {
           product: item.product_id.toString(),
           batch_id: item.batch_id,
           batch: item.batch_no,
-          expiry: item.expiry_date,
+          expiry: toDisplayExpiry(item.expiry_date),
           qty: item.qty,
           free_qty: item.free_qty || 0,
           rate: item.sale_price || item.ptr || item.mrp, 

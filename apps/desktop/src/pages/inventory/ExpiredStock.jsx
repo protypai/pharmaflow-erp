@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShieldAlert, Trash2, Printer, ArrowRightLeft } from 'lucide-react';
 import { formatStock } from '../../utils/units';
+import { toDisplayExpiry } from '../../utils/dates';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -138,7 +139,7 @@ export default function ExpiredStock() {
                     {formatStock(b.qty, b.conversionFactor, b.saleUnit)} Locked
                   </span>
                 </td>
-                <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{b.expiry}</td>
+                <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{toDisplayExpiry(b.expiry)}</td>
                 <td style={{ color: 'var(--text-secondary)' }}>{b.supplierName}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600, color: '#991B1B' }}>₹ {b.stockValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td className="col-actions">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, ArrowRightLeft, Printer } from 'lucide-react';
 import { formatStock } from '../../utils/units';
+import { toDisplayExpiry } from '../../utils/dates';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -140,7 +141,7 @@ export default function NearExpiry() {
                 <td style={{ fontWeight: 600 }}>{b.productName}</td>
                 <td>{b.batch}</td>
                 <td style={{ fontWeight: 600 }}>{formatStock(b.qty, b.conversionFactor, b.saleUnit)}</td>
-                <td style={{ color: 'var(--danger)', fontWeight: 500 }}>{b.expiry}</td>
+                <td style={{ color: 'var(--danger)', fontWeight: 500 }}>{toDisplayExpiry(b.expiry)}</td>
                 <td>
                   <span style={{ 
                     background: b.daysRemaining <= 30 ? 'var(--danger)' : '#EA580C', 

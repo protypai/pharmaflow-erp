@@ -34,6 +34,17 @@ function qtyInt(v) {
   return String(Math.round(num(v)));
 }
 
+function formatExpiry(v) {
+  if (!v) return '';
+  const s = String(v);
+  if (/^\d{1,2}\/\d{2,4}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yy = String(d.getUTCFullYear()).slice(-2);
+  return `${mm}/${yy}`;
+}
+
 // Indian numbering number-to-words (handles up to crores). Integer rupees.
 function numberToIndianWords(amount) {
   const n = Math.floor(Math.abs(num(amount)));
@@ -130,7 +141,7 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
       <td class="ln">${esc(val(it.hsn))}</td>
       <td class="ln">${esc(val(it.pack))}</td>
       <td class="ln">${esc(val(it.batch))}</td>
-      <td class="ln">${esc(val(it.exp))}</td>
+      <td class="ln">${esc(formatExpiry(val(it.exp)))}</td>
       <td class="r" style="font-weight:bold;">${qtyInt(it.qty)}</td>
       <td class="r">${qtyInt(it.free)}</td>
       <td class="r">${money(it.mrp)}</td>
@@ -152,7 +163,7 @@ export function buildInvoiceHtml({ type = 'sales', company = {}, party = {}, inv
 
   const companyName = esc(val(company.name, isPurchase ? 'Purchase Enterprise' : 'Medical Enterprise'));
   const dlLine1 = val(party.drug_license1 ?? party.drug_license);
-  const dlLine2 = val(party.drug_license2);
+  const dlLine2 = val(party.drug_license_2);
   let titleText = isPurchase ? 'PURCHASE INVOICE' : 'INVOICE / TAX INVOICE';
   if (type === 'sales_return') titleText = 'CREDIT NOTE / RETURN';
   if (type === 'purchase_return') titleText = 'DEBIT NOTE / RETURN';
@@ -408,7 +419,7 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         qty: item.qty || 0,
         free: item.free_qty || 0,
         mrp: item.mrp || 0,
-        pts: party.type === 'wholesale' ? (item.batch_pts || 0) : (item.ptr || item.sale_price || 0),
+        pts: (party.type || '').toLowerCase() === 'wholesale' ? (item.batch_pts || 0) : (item.ptr || item.sale_price || 0),
         ptr: item.ptr || item.sale_price || 0,
         amount: item.net_amount || 0,
         gst: item.gst_rate || 0,
@@ -457,7 +468,7 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         qty: item.qty || 0,
         free: 0,
         mrp: item.mrp || 0,
-        pts: party.type === 'wholesale' ? (item.batch_pts || 0) : (item.ptr || item.sale_price || 0),
+        pts: (party.type || '').toLowerCase() === 'wholesale' ? (item.batch_pts || 0) : (item.ptr || item.sale_price || 0),
         ptr: item.ptr || item.sale_price || 0,
         amount: item.net_amount || 0,
         gst: item.gst_rate || 0,
@@ -506,7 +517,7 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         qty: item.qty || 0,
         free: 0,
         mrp: item.mrp || 0,
-        pts: item.batch_pts || item.ptr || 0,
+        pts: item.batch_pts || 0,
         ptr: item.ptr || item.purchase_price || 0,
         amount: item.net_amount || 0,
         gst: item.gst_rate || 0,
@@ -558,7 +569,7 @@ export async function exportPastInvoice(type = 'sales', recordId, action = 'pdf'
         qty: item.qty || 0,
         free: item.free_qty || 0,
         mrp: item.mrp || 0,
-        pts: item.batch_pts || item.ptr || 0,
+        pts: item.batch_pts || 0,
         ptr: item.ptr || item.purchase_price || 0,
         amount: item.net_amount || 0,
         gst: item.gst_rate || 0,
