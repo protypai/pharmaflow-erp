@@ -41,7 +41,6 @@ export default function SalesReturn() {
         setOriginalSaleId(hdr.sale_id || null);
         setReturnDate(String(hdr.return_date || '').slice(0, 10) || new Date().toISOString().split('T')[0]);
         setReturnReason(hdr.reason || 'Salable Return (Add back to active stock)');
-        setOriginalIsSalable(String(hdr.reason || '').includes('Salable'));
         setExistingEntryNo(hdr.entry_no || null);
 
         const itRes = await window.pharmaAPI.db.query(`
@@ -91,9 +90,8 @@ export default function SalesReturn() {
   const [successMsg, setSuccessMsg] = useState('');
   const [originalSaleId, setOriginalSaleId] = useState(null);
   // Edit-mode context: the return's original items (to reverse stock + delete on save),
-  // whether the original return was salable (added stock), and its existing entry number.
+  // and its existing entry number.
   const [originalItems, setOriginalItems] = useState([]);
-  const [originalIsSalable, setOriginalIsSalable] = useState(false);
   const [existingEntryNo, setExistingEntryNo] = useState(null);
 
   const [customerId, setCustomerId] = useState('');
@@ -236,7 +234,6 @@ export default function SalesReturn() {
         return 'quality_issue';
       };
       const mappedReason = mapReturnReason(returnReason);
-      const isSalable = returnReason.includes('Salable');
 
       // 1) Resolve & validate every row BEFORE writing anything (no ghost-header state).
       const prepared = [];
@@ -261,15 +258,13 @@ export default function SalesReturn() {
       // Net stock change per batch. A salable return ADDS stock back. On EDIT we reverse
       // the OLD return's stock effect first, then apply the NEW one — net delta per batch.
       const batchDelta = {};
-      if (isEditMode && originalIsSalable) {
+      if (isEditMode) {
         for (const it of originalItems) {
           batchDelta[it.batch_id] = (batchDelta[it.batch_id] || 0) - Math.round(Number(it.qty) || 0) - Math.round(Number(it.free_qty) || 0);
         }
       }
-      if (isSalable) {
-        for (const { row, batchData } of prepared) {
-          batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) + Math.round(Number(row.qty) || 0) + Math.round(Number(row.free_qty) || 0);
-        }
+      for (const { row, batchData } of prepared) {
+        batchDelta[batchData.id] = (batchDelta[batchData.id] || 0) + Math.round(Number(row.qty) || 0) + Math.round(Number(row.free_qty) || 0);
       }
 
       // Negative-stock guard for any batch whose net change is a reduction.

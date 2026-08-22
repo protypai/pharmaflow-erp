@@ -329,7 +329,7 @@ export default function Purchase() {
         const saveMrp = Number(perStripPrice(row.mrp, priceUnit, packMultiplier).toFixed(2));
         
         // Defensive validation fallback to prevent SQLite NOT NULL/NaN constraint crashes
-        const rawPtr = row.ptr !== undefined && row.ptr !== '' && !isNaN(Number(row.ptr)) ? row.ptr : row.invPrice;
+        const rawPtr = row.ptr !== undefined && row.ptr !== '' && !isNaN(Number(row.ptr)) && Number(row.ptr) > 0 ? row.ptr : row.invPrice;
         const rawPts = row.pts !== undefined && row.pts !== '' && !isNaN(Number(row.pts)) && Number(row.pts) > 0 ? row.pts : 0;
 
         const savePtr = Number(perStripPrice(rawPtr, priceUnit, packMultiplier).toFixed(2));
