@@ -477,6 +477,7 @@ model SaleItem {
   freeQty     Float   @default(0)
   mrp         Float
   ptr         Float
+  pts         Float?
   salePrice   Float
   discPercent Float   @default(0)
   discAmount  Float   @default(0)
