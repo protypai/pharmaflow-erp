@@ -14,7 +14,7 @@ export default function Sales() {
   const [customerWarning, setCustomerWarning] = useState(null);
 
   const [rows, setRows] = useState([
-    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
+    { id: 1, product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, ptr: 0, basePtr: 0, pts: 0, basePts: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }
   ]);
   const [activeRowSearch, setActiveRowSearch] = useState(null);
   const [totals, setTotals] = useState({ sub: 0, disc: 0, gst: 0, net: 0 });
@@ -59,6 +59,7 @@ export default function Sales() {
     const fetchMasterData = async () => {
       try {
         try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
+        try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN pts REAL DEFAULT 0;"); } catch (e) { }
         const custRes = await window.pharmaAPI.db.query("SELECT id, name, type, area, credit_limit, opening_balance FROM customers WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
         setCustomersList(custRes?.data || []);
 
@@ -199,7 +200,7 @@ export default function Sales() {
         const bData = prod.batches.find(b => b.id === r.batchId);
         if (!bData) return r;
         
-        const defaultRate = isWholesale ? Number(bData.ptr || 0) : Number(bData.mrp || 0);
+        const defaultRate = isWholesale ? Number(bData.pts || 0) : Number(bData.ptr || 0); // Retail gets PTR, Wholesale gets PTS!
         const factor = packSize(r.boxSize);
         let updated = { ...r, baseRate: defaultRate };
         
@@ -244,7 +245,7 @@ export default function Sales() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
+    setRows([...rows, { id: crypto.randomUUID(), product: '', productName: '', productSearch: '', batch: '', expiry: '', qty: 0, free: 0, unit: 'strip', boxSize: 10, available: 0, baseAvailable: 0, ptr: 0, basePtr: 0, pts: 0, basePts: 0, rate: 0, baseRate: 0, mrp: 0, baseMrp: 0, disc: 0, gst: 12, amount: 0, batchId: '' }]);
   };
 
   const selectProduct = (id, prod) => {
@@ -262,6 +263,10 @@ export default function Sales() {
           expiry: '',
           available: 0,
           baseAvailable: 0,
+          ptr: 0,
+          basePtr: 0,
+          pts: 0,
+          basePts: 0,
           rate: 0,
           baseRate: 0,
           mrp: 0,
@@ -300,20 +305,26 @@ export default function Sales() {
             updated.expiry = batchData.expiry;
             updated.baseAvailable = Number(batchData.qty);
             updated.baseMrp = Number(batchData.mrp);
+            updated.basePtr = Number(batchData.ptr || 0);
+            updated.basePts = Number(batchData.pts || 0);
 
             const activeCust = customersList.find(c => c.id === customerId);
             const isWholesale = (activeCust?.type || '').toLowerCase() === 'wholesale';
-            const defaultRate = isWholesale ? Number(batchData.ptr || 0) : Number(batchData.mrp || 0);
+            const defaultRate = isWholesale ? Number(batchData.pts || 0) : Number(batchData.ptr || 0);
             updated.baseRate = defaultRate; 
 
             const factor = packSize(updated.boxSize);
             if (updated.unit === 'box') {
               updated.available = Number(toBoxesFloat(batchData.qty, factor).toFixed(2));
               updated.mrp = Number((batchData.mrp * factor).toFixed(2));
+              updated.ptr = Number((batchData.ptr * factor).toFixed(2));
+              updated.pts = Number((batchData.pts * factor).toFixed(2));
               updated.rate = Number((defaultRate * factor).toFixed(2));
             } else {
               updated.available = Number(batchData.qty);
               updated.mrp = Number(batchData.mrp);
+              updated.ptr = Number(batchData.ptr || 0);
+              updated.pts = Number(batchData.pts || 0);
               updated.rate = defaultRate;
             }
           }
@@ -328,10 +339,14 @@ export default function Sales() {
         if (oldUnit === 'box' && newUnit === 'strip') {
           updated.rate = Number((r.baseRate || 0).toFixed(2));
           updated.mrp = Number((r.baseMrp || 0).toFixed(2));
+          updated.ptr = Number((r.basePtr || 0).toFixed(2));
+          updated.pts = Number((r.basePts || 0).toFixed(2));
           updated.available = Number(baseStrips);
         } else if (oldUnit === 'strip' && newUnit === 'box') {
           updated.rate = Number(((r.baseRate || 0) * factor).toFixed(2));
           updated.mrp = Number(((r.baseMrp || 0) * factor).toFixed(2));
+          updated.ptr = Number(((r.basePtr || 0) * factor).toFixed(2));
+          updated.pts = Number(((r.basePts || 0) * factor).toFixed(2));
           updated.available = Number(toBoxesFloat(baseStrips, factor).toFixed(2));
         }
       }
@@ -342,11 +357,35 @@ export default function Sales() {
         if (r.unit === 'box') {
           updated.rate = Number(((r.baseRate || 0) * newFactor).toFixed(2));
           updated.mrp = Number(((r.baseMrp || 0) * newFactor).toFixed(2));
+          updated.ptr = Number(((r.basePtr || 0) * newFactor).toFixed(2));
+          updated.pts = Number(((r.basePts || 0) * newFactor).toFixed(2));
           updated.available = Number(toBoxesFloat(baseStrips, newFactor).toFixed(2));
         } else {
           updated.rate = Number(r.baseRate || 0);
           updated.mrp = Number(r.baseMrp || 0);
+          updated.ptr = Number(r.basePtr || 0);
+          updated.pts = Number(r.basePts || 0);
           updated.available = Number(baseStrips);
+        }
+      }
+
+      if (field === 'ptr') {
+        const factor = packSize(updated.boxSize);
+        updated.basePtr = updated.unit === 'box' ? Number(value) / factor : Number(value);
+        const activeCust = customersList.find(c => c.id === customerId);
+        if (!activeCust || (activeCust.type || '').toLowerCase() !== 'wholesale') {
+          updated.rate = value;
+          updated.baseRate = updated.basePtr;
+        }
+      }
+      
+      if (field === 'pts') {
+        const factor = packSize(updated.boxSize);
+        updated.basePts = updated.unit === 'box' ? Number(value) / factor : Number(value);
+        const activeCust = customersList.find(c => c.id === customerId);
+        if (activeCust && (activeCust.type || '').toLowerCase() === 'wholesale') {
+          updated.rate = value;
+          updated.baseRate = updated.basePts;
         }
       }
 
@@ -404,6 +443,7 @@ export default function Sales() {
     setIsSaving(true);
     try {
       try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN free_qty REAL DEFAULT 0;"); } catch (e) { }
+      try { await window.pharmaAPI.db.run("ALTER TABLE sale_items ADD COLUMN pts REAL DEFAULT 0;"); } catch (e) { }
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const compRes = await window.pharmaAPI.db.query("SELECT id FROM companies LIMIT 1");
       if (!compRes?.data?.length) throw new Error("Company profile not found in local DB");
@@ -528,13 +568,15 @@ export default function Sales() {
         const stripMrp = perStripPrice(row.mrp, row.unit, packMultiplier);
 
         const saleItemId = 'S-ITM-' + crypto.randomUUID();
+        const stripPtr = perStripPrice(row.ptr, row.unit, packMultiplier);
+        const stripPts = perStripPrice(row.pts, row.unit, packMultiplier);
         operations.push({
           sql: `INSERT INTO sale_items (
-            id, sale_id, product_id, batch_id, qty, free_qty, mrp, ptr, sale_price, disc_percent, gst_rate, net_amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, sale_id, product_id, batch_id, qty, free_qty, mrp, ptr, pts, sale_price, disc_percent, gst_rate, net_amount
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           params: [
             saleItemId,
-            saleId, row.product, row.batchId, billedStrips, freeStrips, stripMrp, stripRate, stripRate, Number(row.disc || 0), Number(row.gst || 0), row.amount
+            saleId, row.product, row.batchId, billedStrips, freeStrips, stripMrp, stripPtr, stripPts, stripRate, Number(row.disc || 0), Number(row.gst || 0), row.amount
           ]
         });
 
@@ -549,7 +591,8 @@ export default function Sales() {
             qty: billedStrips,
             freeQty: freeStrips,
             mrp: stripMrp,
-            ptr: stripRate,
+            ptr: stripPtr,
+            pts: stripPts,
             salePrice: stripRate,
             discPercent: Number(row.disc || 0),
             gstRate: Number(row.gst || 0),
@@ -668,8 +711,8 @@ export default function Sales() {
             qty: toStrips(r.qty, r.unit, pack),
             free: toStrips(r.free, r.unit, pack),
             mrp: perStripPrice(r.mrp, r.unit, pack),
-            pts: '',
-            ptr: perStripPrice(r.rate, r.unit, pack),
+            pts: perStripPrice(r.pts, r.unit, pack),
+            ptr: perStripPrice(r.ptr, r.unit, pack),
             amount: r.amount,
             gst: r.gst,
             disc: r.disc
@@ -844,6 +887,8 @@ export default function Sales() {
                 <th style={{ width: '110px' }}>Available</th>
                 <th style={{ width: '130px' }}>Bill Qty & Unit</th>
                 <th style={{ width: '70px' }}>Free</th>
+                <th style={{ width: '80px' }}>PTR (₹)</th>
+                <th style={{ width: '80px' }}>PTS (₹)</th>
                 <th style={{ width: '85px' }}>Rate (₹)</th>
                 <th style={{ width: '85px' }}>MRP (₹)</th>
                 <th style={{ width: '65px' }}>Disc%</th>
@@ -936,6 +981,8 @@ export default function Sales() {
                         <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>{r.unit === 'box' ? 'Boxes' : (prod?.saleUnit || 'Strip') + 's'}</span>
                       </div>
                     </td>
+                    <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.ptr === 0 ? '' : r.ptr} onChange={e => updateRow(r.id, 'ptr', e.target.value)} /></td>
+                    <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.pts === 0 ? '' : r.pts} onChange={e => updateRow(r.id, 'pts', e.target.value)} /></td>
                     <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.rate === 0 ? '' : r.rate} onChange={e => updateRow(r.id, 'rate', e.target.value)} /></td>
                     <td><input type="number" className="form-input form-input-sm" value={r.mrp === 0 ? '' : r.mrp} readOnly style={{ background: '#F8FAFC' }} /></td>
                     <td><input type="number" className="form-input form-input-sm" min="0" step="0.01" value={r.disc === 0 ? '' : r.disc} onChange={e => updateRow(r.id, 'disc', e.target.value)} /></td>
@@ -952,7 +999,7 @@ export default function Sales() {
                 );
               })}
               <tr>
-                <td colSpan="12">
+                <td colSpan="14">
                   <button className="btn btn-ghost btn-sm" onClick={addRow} style={{ color: 'var(--primary)' }}>
                     <Plus size={16} /> Add Product Row
                   </button>

@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   free_qty REAL DEFAULT 0,
   mrp REAL NOT NULL,
   ptr REAL NOT NULL,
+  pts REAL DEFAULT 0,
   sale_price REAL NOT NULL,
   disc_percent REAL DEFAULT 0,
   disc_amount REAL DEFAULT 0,

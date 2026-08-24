@@ -26,10 +26,13 @@ export default function ProfitReport() {
       SELECT p.*, c.name as categoryName,
              SUM(si.qty) as qtySold,
              SUM(si.net_amount) as salesRevenue,
-             SUM(si.qty * si.ptr) as cogs
+             SUM(si.qty * b.purchase_price) as cogs,
+             AVG(si.ptr) as avgPtr,
+             AVG(si.pts) as avgPts
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN sale_items si ON p.id = si.product_id ${saleFilter}
+      LEFT JOIN batches b ON si.batch_id = b.id
       GROUP BY p.id
     `, params);
     set_products(res_products?.data || []);
@@ -50,6 +53,8 @@ export default function ProfitReport() {
         const qtySold = p.qtySold || 0;
         const salesRevenue = p.salesRevenue || 0;
         const cogs = p.cogs || 0;
+        const avgPtr = p.avgPtr || 0;
+        const avgPts = p.avgPts || 0;
         
         const grossProfit = salesRevenue - cogs;
         const marginPercent = salesRevenue > 0 ? (grossProfit / salesRevenue) * 100 : 0;
@@ -59,6 +64,8 @@ export default function ProfitReport() {
           entityName: p.name,
           details: `${p.genericName} • ${p.manufacturer}`,
           qtySold,
+          avgPtr,
+          avgPts,
           salesRevenue,
           cogs,
           grossProfit,
@@ -110,15 +117,26 @@ export default function ProfitReport() {
   const averageMargin = totals.revenue > 0 ? (totals.gp / totals.revenue) * 100 : 0;
 
   const marginFmt = (v) => `${(Number(v) || 0).toFixed(1)}%`;
-  const columns = [
-    { header: groupBy === 'product' ? 'Product Name' : 'Category Name', key: 'entityName' },
-    { header: 'Details', key: 'details' },
-    { header: 'Qty Sold', key: 'qtySold', format: 'int' },
-    { header: 'Sales Revenue (₹)', key: 'salesRevenue', format: 'number' },
-    { header: 'COGS (₹)', key: 'cogs', format: 'number' },
-    { header: 'Gross Profit (₹)', key: 'grossProfit', format: 'number' },
-    { header: 'Margin %', key: 'marginPercent', format: marginFmt },
-  ];
+  const columns = useMemo(() => {
+    const base = [
+      { header: groupBy === 'product' ? 'Product Name' : 'Category Name', key: 'entityName' },
+      { header: 'Details', key: 'details' },
+    ];
+    if (groupBy === 'product') {
+      base.push(
+        { header: 'Avg PTR (₹)', key: 'avgPtr', format: 'number' },
+        { header: 'Avg PTS (₹)', key: 'avgPts', format: 'number' }
+      );
+    }
+    base.push(
+      { header: 'Qty Sold', key: 'qtySold', format: 'int' },
+      { header: 'Sales Revenue (₹)', key: 'salesRevenue', format: 'number' },
+      { header: 'COGS (₹)', key: 'cogs', format: 'number' },
+      { header: 'Gross Profit (₹)', key: 'grossProfit', format: 'number' },
+      { header: 'Margin %', key: 'marginPercent', format: marginFmt }
+    );
+    return base;
+  }, [groupBy]);
   const footerTotals = {
     salesRevenue: totals.revenue,
     cogs: totals.cogs,
@@ -218,6 +236,8 @@ export default function ProfitReport() {
             <tr>
               <th>{groupBy === 'product' ? 'Product Name' : 'Category Name'}</th>
               <th>Details</th>
+              {groupBy === 'product' && <th style={{ textAlign: 'right' }}>Avg PTR (₹)</th>}
+              {groupBy === 'product' && <th style={{ textAlign: 'right' }}>Avg PTS (₹)</th>}
               <th style={{ textAlign: 'center' }}>Qty Sold</th>
               <th style={{ textAlign: 'right' }}>Sales Revenue (₹)</th>
               <th style={{ textAlign: 'right' }}>COGS (₹)</th>
@@ -227,7 +247,7 @@ export default function ProfitReport() {
           </thead>
           <tbody>
             {profitData.length === 0 ? (
-              <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>No profit data found for this period.</td></tr>
+              <tr><td colSpan={groupBy === 'product' ? 9 : 7} style={{ textAlign: 'center', padding: '2rem' }}>No profit data found for this period.</td></tr>
             ) : profitData.map((row, i) => (
               <tr key={row.id}>
                 <td style={{ fontWeight: 600 }}>
@@ -237,6 +257,8 @@ export default function ProfitReport() {
                   </div>
                 </td>
                 <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{row.details}</td>
+                {groupBy === 'product' && <td style={{ textAlign: 'right', fontWeight: 500 }}>₹ {(row.avgPtr || 0).toFixed(2)}</td>}
+                {groupBy === 'product' && <td style={{ textAlign: 'right', fontWeight: 500 }}>₹ {(row.avgPts || 0).toFixed(2)}</td>}
                 <td style={{ textAlign: 'center', fontWeight: 500 }}>{row.qtySold}</td>
                 <td style={{ textAlign: 'right', color: '#15803D' }}>{row.salesRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style={{ textAlign: 'right', color: 'var(--danger)' }}>{row.cogs.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
