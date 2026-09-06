@@ -1,9 +1,10 @@
 # Stage 1: Builder
 FROM node:20-alpine AS builder
 WORKDIR /app
+ENV NODE_ENV=development
 RUN apk add --no-cache openssl libc6-compat
 COPY package*.json ./
-RUN npm install --no-audit --no-fund
+RUN npm install --include=dev --no-audit --no-fund
 COPY prisma ./prisma
 RUN npx --no-install prisma generate
 COPY tsconfig.json ./
