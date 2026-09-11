@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Printer, Download, TrendingUp, TrendingDown } from 'lucide-react';
+import { printHtml, buildReportHtml, exportCsv, getCompanyProfile, numberFmt } from '../../utils/export';
 
 
 export default function Outstanding() {
+  const navigate = useNavigate();
   const [customers, set_customers] = useState([]);
   const [suppliers, set_suppliers] = useState([]);
 
@@ -88,7 +91,7 @@ export default function Outstanding() {
 
     // Sort by highest pending amount first
     return data.sort((a, b) => b.pendingAmt - a.pendingAmt);
-  }, [viewType, search]);
+  }, [viewType, search, customers, suppliers]);
 
   const totalOutstanding = outstandingData.reduce((sum, d) => sum + d.pendingAmt, 0);
 
@@ -100,8 +103,31 @@ export default function Outstanding() {
           <div className="page-sub">Track money owed to you and money you owe</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Report</button>
-          <button className="btn btn-outline" onClick={() => alert("Data exported successfully as CSV!")}><Download size={16} /> Export CSV</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: viewType === 'receivables' ? 'Customer Name' : 'Supplier Name', key: 'partyName' },
+              { header: 'Contact', key: 'contact' },
+              { header: 'City', key: 'city' },
+              { header: 'Total Billed (₹)', key: 'totalBilled', format: 'number' },
+              { header: 'Pending Balance (₹)', key: 'pendingAmt', format: 'number' },
+              { header: 'Oldest Due (Days)', key: 'oldestDueDays', format: 'int' },
+              { header: 'Status', key: 'status' },
+            ];
+            printHtml(buildReportHtml({ title: `Outstanding ${viewType === 'receivables' ? 'Receivables' : 'Payables'}`, company: co, columns: cols, rows: outstandingData, totals: { pendingAmt: totalOutstanding } }));
+          }}><Printer size={16} /> Print Report</button>
+          <button className="btn btn-outline" onClick={() => {
+            const cols = [
+              { header: viewType === 'receivables' ? 'Customer Name' : 'Supplier Name', key: 'partyName' },
+              { header: 'Contact', key: 'contact' },
+              { header: 'City', key: 'city' },
+              { header: 'Total Billed (₹)', key: 'totalBilled', format: 'number' },
+              { header: 'Pending Balance (₹)', key: 'pendingAmt', format: 'number' },
+              { header: 'Oldest Due (Days)', key: 'oldestDueDays', format: 'int' },
+              { header: 'Status', key: 'status' },
+            ];
+            exportCsv(`outstanding_${viewType}`, cols, outstandingData);
+          }}><Download size={16} /> Export CSV</button>
         </div>
       </div>
 
@@ -214,9 +240,16 @@ export default function Outstanding() {
                 <td className="col-actions">
                   <button 
                     className="btn btn-outline btn-sm" 
-                    title={viewType === 'receivables' ? "Send Payment Reminder" : "Plan Payment"}
+                    title={viewType === 'receivables' ? "Receive Payment" : "Plan Payment"}
+                    onClick={() => {
+                      if (viewType === 'receivables') {
+                        navigate('/transactions/receipts', { state: { autoFillCustomer: row.id } });
+                      } else {
+                        navigate('/transactions/payments', { state: { autoFillSupplier: row.id } });
+                      }
+                    }}
                   >
-                    {viewType === 'receivables' ? 'Send Reminder' : 'Pay Now'}
+                    {viewType === 'receivables' ? 'Receive' : 'Pay Now'}
                   </button>
                 </td>
               </tr>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Printer, Download, Package, X } from 'lucide-react';
 import { formatStock } from '../../utils/units';
 import { toDisplayExpiry } from '../../utils/dates';
+import { printHtml, buildReportHtml, exportCsv, getCompanyProfile } from '../../utils/export';
 
 export default function CurrentStock() {
   const [products, set_products] = useState([]);
@@ -81,8 +82,37 @@ export default function CurrentStock() {
       <div className="card-header">
         <h2 className="card-title">Current Stock Valuation</h2>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print</button>
-          <button className="btn btn-outline" onClick={() => alert("Data exported successfully as CSV!")}><Download size={16} /> Export CSV</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Item Code', key: 'code' },
+              { header: 'Product', key: 'name' },
+              { header: 'Batch No', key: 'batch_no' },
+              { header: 'Expiry', key: 'expiry_date' },
+              { header: 'Rack', key: 'rack' },
+              { header: 'Qty', key: 'totalQty', format: 'int' },
+              { header: 'Unit', key: 'sale_unit' },
+              { header: 'PTR (₹)', key: 'ptr', format: 'number' },
+              { header: 'MRP (₹)', key: 'mrp', format: 'number' },
+              { header: 'Stock Value (PTR)', key: 'totalValuePTR', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: 'Current Stock Valuation', company: co, columns: cols, rows: stockData, totals: { totalQty: grandTotals.qty, totalValuePTR: grandTotals.ptrValue } }));
+          }}><Printer size={16} /> Print</button>
+          <button className="btn btn-outline" onClick={() => {
+            const cols = [
+              { header: 'Item Code', key: 'code' },
+              { header: 'Product', key: 'name' },
+              { header: 'Batch No', key: 'batch_no' },
+              { header: 'Expiry', key: 'expiry_date' },
+              { header: 'Rack', key: 'rack' },
+              { header: 'Qty', key: 'totalQty', format: 'int' },
+              { header: 'Unit', key: 'sale_unit' },
+              { header: 'PTR (₹)', key: 'ptr', format: 'number' },
+              { header: 'MRP (₹)', key: 'mrp', format: 'number' },
+              { header: 'Stock Value (PTR)', key: 'totalValuePTR', format: 'number' },
+            ];
+            exportCsv('current_stock', cols, stockData);
+          }}><Download size={16} /> Export CSV</button>
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Save, Printer, IndianRupee, Edit, X } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 export default function Payments() {
   const [suppliers, set_suppliers] = useState([]);
@@ -50,7 +52,8 @@ export default function Payments() {
     setBills([]);
   };
 
-  const [supplierId, setSupplierId] = useState('');
+  const location = useLocation();
+  const [supplierId, setSupplierId] = useState(location.state?.autoFillSupplier || '');
   const [amountPaid, setAmountPaid] = useState(0);
   const [payMode, setPayMode] = useState('bank');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -223,7 +226,17 @@ export default function Payments() {
           {editingPaymentId && (
             <button className="btn btn-outline" onClick={resetForm}><X size={16} /> Cancel</button>
           )}
-          <button className="btn btn-outline"><Printer size={16} /> Print Voucher</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Payment No', key: 'payment_no' },
+              { header: 'Date', key: 'date', format: (v) => String(v || '').slice(0, 10) },
+              { header: 'Supplier', key: 'supplierName' },
+              { header: 'Amount (₹)', key: 'amount', format: 'number' },
+              { header: 'Mode', key: 'payment_mode' },
+            ];
+            printHtml(buildReportHtml({ title: 'Payments Voucher Report', company: co, columns: cols, rows: paymentsList }));
+          }}><Printer size={16} /> Print Voucher</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={editingPaymentId ? false : (!amountPaid || Number(amountPaid) <= 0 || allocatedTotal > (Number(amountPaid)||0))}><Save size={16} /> {editingPaymentId ? 'Update Details' : 'Save Payment'}</button>
         </div>
       </div>

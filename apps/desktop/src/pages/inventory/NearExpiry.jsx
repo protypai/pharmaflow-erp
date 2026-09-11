@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, ArrowRightLeft, Printer } from 'lucide-react';
 import { formatStock } from '../../utils/units';
 import { toDisplayExpiry } from '../../utils/dates';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -99,7 +100,19 @@ export default function NearExpiry() {
           <div className="page-sub" style={{ color: '#9A3412' }}>Monitor and return stock before it becomes dead capital</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" style={{ borderColor: '#C2410C', color: '#C2410C' }}><Printer size={16} /> Print Report</button>
+          <button className="btn btn-outline" style={{ borderColor: '#C2410C', color: '#C2410C' }} onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Product', key: 'productName' },
+              { header: 'Batch', key: 'batch' },
+              { header: 'Qty', key: 'qty', format: 'int' },
+              { header: 'Expiry Date', key: 'expiry' },
+              { header: 'Days Remaining', key: 'daysRemaining', format: 'int' },
+              { header: 'Supplier', key: 'supplierName' },
+              { header: 'Stock Value (PTR)', key: 'stockValue', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: `Near Expiry Report (Within ${daysFilter} Days)`, company: co, columns: cols, rows: getExpiringBatches, totals: { stockValue: totalValueAtRisk } }));
+          }}><Printer size={16} /> Print Report</button>
         </div>
       </div>
 

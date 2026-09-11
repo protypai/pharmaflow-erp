@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ShieldAlert, Trash2, Printer, ArrowRightLeft } from 'lucide-react';
 import { formatStock } from '../../utils/units';
 import { toDisplayExpiry } from '../../utils/dates';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -93,7 +94,18 @@ export default function ExpiredStock() {
           <div className="page-sub" style={{ color: '#7F1D1D' }}>This stock is legally locked from sales billing. Action required.</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" style={{ borderColor: '#991B1B', color: '#991B1B' }}><Printer size={16} /> Print Damage Report</button>
+          <button className="btn btn-outline" style={{ borderColor: '#991B1B', color: '#991B1B' }} onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Product', key: 'productName' },
+              { header: 'Batch', key: 'batch' },
+              { header: 'Locked Qty', key: 'qty', format: 'int' },
+              { header: 'Expired Date', key: 'expiry' },
+              { header: 'Supplier', key: 'supplierName' },
+              { header: 'Loss Value (PTR)', key: 'stockValue', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: 'Expired Stock - Damage Report', company: co, columns: cols, rows: getExpiredBatches, totals: { stockValue: totalFinancialLoss } }));
+          }}><Printer size={16} /> Print Damage Report</button>
         </div>
       </div>
 

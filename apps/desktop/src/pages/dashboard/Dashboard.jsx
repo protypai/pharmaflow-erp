@@ -12,8 +12,9 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(true);
   const [activeAlertTab, setActiveAlertTab] = useState('lowStock'); // 'lowStock' | 'expiry'
-  const [activeTxTab, setActiveTxTab] = useState('sales'); // 'sales' | 'purchases'
+  const [activeTxTab, setActiveTxTab] = useState('sales'); // 'sales' | 'purchases' | 'collections' | 'payments'
   const [selectedTx, setSelectedTx] = useState(null); // Modal item preview
+  const [todayLists, setTodayLists] = useState({ sales: [], purchases: [], collections: [], payments: [] });
 
   const [stats, setStats] = useState({
     todaySales: { amount: 0, count: 0 },
@@ -46,6 +47,11 @@ export default function Dashboard() {
       const purchRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(net_amount) as total FROM purchases WHERE invoice_date LIKE '${today}%'`);
       const collRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(amount) as total FROM receipts WHERE date LIKE '${today}%'`);
       const payRes = await window.pharmaAPI.db.query(`SELECT COUNT(*) as count, SUM(amount) as total FROM payments WHERE date LIKE '${today}%'`);
+
+      const salesListRes = await window.pharmaAPI.db.query(`SELECT s.*, c.name as customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE s.date LIKE '${today}%' ORDER BY s.created_at DESC`);
+      const purchListRes = await window.pharmaAPI.db.query(`SELECT p.*, sup.name as supplier_name FROM purchases p LEFT JOIN suppliers sup ON p.supplier_id = sup.id WHERE p.invoice_date LIKE '${today}%' ORDER BY p.created_at DESC`);
+      const collListRes = await window.pharmaAPI.db.query(`SELECT r.*, c.name as customer_name FROM receipts r LEFT JOIN customers c ON r.customer_id = c.id WHERE r.date LIKE '${today}%' ORDER BY r.created_at DESC`);
+      const payListRes = await window.pharmaAPI.db.query(`SELECT p.*, sup.name as supplier_name FROM payments p LEFT JOIN suppliers sup ON p.supplier_id = sup.id WHERE p.date LIKE '${today}%' ORDER BY p.created_at DESC`);
 
       const recRes = await window.pharmaAPI.db.query(`
         SELECT 
@@ -96,7 +102,7 @@ export default function Dashboard() {
       // 3. Actionable Expiry Watchlist Query (Detailed specific batches)
       const batchRes = await window.pharmaAPI.db.query(`
         SELECT 
-          b.id, b.batch_no, b.expiry_date, b.current_qty, b.mrp, b.ptr,
+          b.id, b.batch_no, b.expiry_date, b.current_qty, b.mrp, b.ptr, b.product_id,
           p.name as product_name, p.code as product_code
         FROM batches b
         JOIN products p ON b.product_id = p.id
@@ -127,11 +133,13 @@ export default function Dashboard() {
 
           formattedExpiry.push({
             id: b.id,
+            productId: b.product_id,
             productName: b.product_name,
             batchNo: b.batch_no,
             expiryDate: b.expiry_date,
             qty: b.current_qty,
             mrp: b.mrp,
+            ptr: b.ptr,
             daysLeft,
             status: daysLeft <= 0 ? 'expired' : daysLeft <= 30 ? 'critical' : daysLeft <= 90 ? 'warning' : 'info'
           });
@@ -215,6 +223,13 @@ export default function Dashboard() {
         expiredCount: expCount,
         lowStockCount: lowStockData.filter(i => i.total_qty > 0).length,
         outOfStockCount: lowStockData.filter(i => i.total_qty <= 0).length,
+      });
+
+      setTodayLists({
+        sales: salesListRes?.data || [],
+        purchases: purchListRes?.data || [],
+        collections: collListRes?.data || [],
+        payments: payListRes?.data || []
       });
 
       setLowStockItems(lowStockData);
@@ -333,7 +348,7 @@ export default function Dashboard() {
           <button 
             className="btn btn-ghost btn-sm"
             style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid var(--border-color)' }}
-            onClick={() => navigate('/inventory/stock-adjustment')}
+            onClick={() => navigate('/transactions/stock-adjustment')}
           >
             <Package size={16} /> Stock Adjust
           </button>
@@ -511,7 +526,7 @@ export default function Dashboard() {
                         <button
                           className="btn btn-primary btn-sm"
                           style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
-                          onClick={() => navigate('/transactions/purchase')}
+                          onClick={() => navigate('/transactions/purchase', { state: { autoFillItem: item } })}
                         >
                           <ShoppingCart size={12} /> Reorder
                         </button>
@@ -560,13 +575,20 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td>{formatCurr(item.mrp)}</td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right', display: 'flex', gap: '0.3rem', justifyContent: 'flex-end' }}>
                         <button
                           className="btn btn-ghost btn-sm"
                           style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', border: '1px solid var(--border-color)' }}
-                          onClick={() => navigate('/inventory/stock-adjustment')}
+                          onClick={() => navigate('/transactions/stock-adjustment')}
                         >
-                          Adjust / Return
+                          Adjust
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', border: '1px solid var(--warning)', color: 'var(--warning)' }}
+                          onClick={() => navigate('/transactions/purchase-return', { state: { autoFillItem: item } })}
+                        >
+                          Return
                         </button>
                       </td>
                     </tr>
@@ -578,73 +600,78 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ─── SECTION 3: RECENT TRANSACTIONS STREAM & AGING (SPLIT PANELS) ─── */}
+      {/* ─── SECTION 3: TODAY'S TRANSACTIONS STREAM & AGING (SPLIT PANELS) ─── */}
       <div className="grid-2">
-        {/* RECENT SALES & PURCHASES RECENT STREAM */}
+        {/* TODAY'S TRANSACTIONS STREAM */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="card-header" style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'var(--content-bg)' }}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="card-header" style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'var(--content-bg)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button
                 className={`btn btn-sm ${activeTxTab === 'sales' ? 'btn-primary' : 'btn-ghost'}`}
                 onClick={() => setActiveTxTab('sales')}
                 style={{ fontSize: '0.8rem' }}
               >
-                Recent Sales ({recentSales.length})
+                Sales ({todayLists.sales.length})
               </button>
               <button
                 className={`btn btn-sm ${activeTxTab === 'purchases' ? 'btn-primary' : 'btn-ghost'}`}
                 onClick={() => setActiveTxTab('purchases')}
                 style={{ fontSize: '0.8rem' }}
               >
-                Recent Purchases ({recentPurchases.length})
+                Purchases ({todayLists.purchases.length})
+              </button>
+              <button
+                className={`btn btn-sm ${activeTxTab === 'collections' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setActiveTxTab('collections')}
+                style={{ fontSize: '0.8rem' }}
+              >
+                Collections ({todayLists.collections.length})
+              </button>
+              <button
+                className={`btn btn-sm ${activeTxTab === 'payments' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setActiveTxTab('payments')}
+                style={{ fontSize: '0.8rem' }}
+              >
+                Payments ({todayLists.payments.length})
               </button>
             </div>
             
             <button 
               className="btn btn-ghost btn-sm"
-              onClick={() => navigate(activeTxTab === 'sales' ? '/reports/sales' : '/reports/purchases')}
+              onClick={() => navigate(activeTxTab === 'sales' ? '/reports/sales' : activeTxTab === 'purchases' ? '/reports/purchase' : activeTxTab === 'collections' ? '/transactions/receipts' : '/transactions/payments')}
             >
-              All Records →
+              View Full Report →
             </button>
           </div>
 
           <div className="card-body no-pad" style={{ maxHeight: '340px', overflowY: 'auto' }}>
-            {activeTxTab === 'sales' ? (
+            {activeTxTab === 'sales' && (
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Invoice #</th>
                     <th>Customer</th>
-                    <th>Date</th>
                     <th>Amount</th>
                     <th>Mode</th>
                     <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentSales.length === 0 ? (
+                  {todayLists.sales.length === 0 ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
                         No sales recorded yet today.
                       </td>
                     </tr>
                   ) : (
-                    recentSales.map((s) => (
-                      <tr key={s.id}>
+                    todayLists.sales.map((s) => (
+                      <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => openTxDetails('sale', s.id)}>
                         <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{s.invoice_no}</td>
                         <td style={{ fontWeight: 500 }}>{s.customer_name || 'Cash Customer'}</td>
-                        <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {s.date ? s.date.split('T')[0] : ''}
-                        </td>
                         <td style={{ fontWeight: 600, color: 'var(--success)' }}>{formatCurr(s.net_amount)}</td>
                         <td><span className="badge badge-secondary">{s.payment_mode || 'cash'}</span></td>
                         <td style={{ textAlign: 'right' }}>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: '0.2rem 0.4rem' }}
-                            onClick={() => openTxDetails('sale', s.id)}
-                            title="Quick Inspection"
-                          >
+                          <button className="btn btn-ghost btn-sm" style={{ padding: '0.2rem 0.4rem' }} title="Quick Inspection">
                             <Eye size={14} />
                           </button>
                         </td>
@@ -653,43 +680,98 @@ export default function Dashboard() {
                   )}
                 </tbody>
               </table>
-            ) : (
+            )}
+
+            {activeTxTab === 'purchases' && (
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Bill / Entry #</th>
                     <th>Supplier</th>
-                    <th>Invoice Date</th>
-                    <th>Net Amount</th>
+                    <th>Amount</th>
                     <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentPurchases.length === 0 ? (
+                  {todayLists.purchases.length === 0 ? (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                        No purchase entries logged recently.
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                        No purchase entries logged today.
                       </td>
                     </tr>
                   ) : (
-                    recentPurchases.map((p) => (
-                      <tr key={p.id}>
+                    todayLists.purchases.map((p) => (
+                      <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => openTxDetails('purchase', p.id)}>
                         <td style={{ fontWeight: 600, color: 'var(--purple)' }}>{p.invoice_no || p.entry_no}</td>
                         <td style={{ fontWeight: 500 }}>{p.supplier_name || 'N/A'}</td>
-                        <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {p.invoice_date ? p.invoice_date.split('T')[0] : ''}
-                        </td>
                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurr(p.net_amount)}</td>
                         <td style={{ textAlign: 'right' }}>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: '0.2rem 0.4rem' }}
-                            onClick={() => openTxDetails('purchase', p.id)}
-                            title="Quick Inspection"
-                          >
+                          <button className="btn btn-ghost btn-sm" style={{ padding: '0.2rem 0.4rem' }} title="Quick Inspection">
                             <Eye size={14} />
                           </button>
                         </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {activeTxTab === 'collections' && (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Receipt #</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Mode</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayLists.collections.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                        No receipts logged today.
+                      </td>
+                    </tr>
+                  ) : (
+                    todayLists.collections.map((r) => (
+                      <tr key={r.id}>
+                        <td style={{ fontWeight: 600 }}>{r.receipt_no}</td>
+                        <td style={{ fontWeight: 500 }}>{r.customer_name || '—'}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--success)' }}>{formatCurr(r.amount)}</td>
+                        <td><span className="badge badge-secondary">{r.payment_mode || 'cash'}</span></td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {activeTxTab === 'payments' && (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Payment #</th>
+                    <th>Supplier</th>
+                    <th>Amount</th>
+                    <th>Mode</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayLists.payments.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                        No payments logged today.
+                      </td>
+                    </tr>
+                  ) : (
+                    todayLists.payments.map((p) => (
+                      <tr key={p.id}>
+                        <td style={{ fontWeight: 600 }}>{p.payment_no}</td>
+                        <td style={{ fontWeight: 500 }}>{p.supplier_name || '—'}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurr(p.amount)}</td>
+                        <td><span className="badge badge-secondary">{p.payment_mode || 'bank'}</span></td>
                       </tr>
                     ))
                   )}
@@ -807,6 +889,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+
 
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Printer, Download, BookOpen } from 'lucide-react';
+import { printHtml, buildReportHtml, exportPdf, getCompanyProfile } from '../../utils/export';
 
 
 export default function CustomerLedger() {
@@ -79,8 +80,36 @@ export default function CustomerLedger() {
           <div className="page-sub">Track running balances, sales, and receipts for customers</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Ledger</button>
-          <button className="btn btn-outline"><Download size={16} /> Export PDF</button>
+          <button className="btn btn-outline" onClick={async () => {
+            if (!customerId) return alert('Please select a customer first.');
+            const co = await getCompanyProfile();
+            const cust = customers.find(c => c.id === customerId);
+            const cols = [
+              { header: 'Date', key: 'date' },
+              { header: 'Vch Type', key: 'vchType' },
+              { header: 'Vch No', key: 'vchNo' },
+              { header: 'Particulars', key: 'particulars' },
+              { header: 'Debit (₹)', key: 'debit', format: 'number' },
+              { header: 'Credit (₹)', key: 'credit', format: 'number' },
+              { header: 'Balance (₹)', key: 'balance', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: 'Customer Ledger', subtitle: cust?.name || '', company: co, columns: cols, rows: ledgerEntries, totals: { debit: totals.debit, credit: totals.credit, balance: Math.abs(closingBalance) } }));
+          }}><Printer size={16} /> Print Ledger</button>
+          <button className="btn btn-outline" onClick={async () => {
+            if (!customerId) return alert('Please select a customer first.');
+            const co = await getCompanyProfile();
+            const cust = customers.find(c => c.id === customerId);
+            const cols = [
+              { header: 'Date', key: 'date' },
+              { header: 'Vch Type', key: 'vchType' },
+              { header: 'Vch No', key: 'vchNo' },
+              { header: 'Particulars', key: 'particulars' },
+              { header: 'Debit (₹)', key: 'debit', format: 'number' },
+              { header: 'Credit (₹)', key: 'credit', format: 'number' },
+              { header: 'Balance (₹)', key: 'balance', format: 'number' },
+            ];
+            exportPdf(`customer_ledger_${(cust?.name || 'report').replace(/\s+/g, '_')}`, { title: 'Customer Ledger', subtitle: cust?.name || '', company: co, columns: cols, rows: ledgerEntries, totals: { debit: totals.debit, credit: totals.credit, balance: Math.abs(closingBalance) } });
+          }}><Download size={16} /> Export PDF</button>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, Download, Landmark } from 'lucide-react';
+import { printHtml, buildReportHtml, exportPdf, getCompanyProfile } from '../../utils/export';
 
 export default function BankBook() {
   const [bankId, setBankId] = useState('hdfc');
@@ -52,8 +53,30 @@ export default function BankBook() {
           <div className="page-sub">Track digital transactions and reconcile with bank statements</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Bank Book</button>
-          <button className="btn btn-outline"><Download size={16} /> Export PDF</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Date', key: 'date' },
+              { header: 'Particulars', key: 'particulars' },
+              { header: 'Inst / Chq No', key: 'instrument' },
+              { header: 'Withdrawal (Dr)', key: 'withdrawal', format: 'number' },
+              { header: 'Deposit (Cr)', key: 'deposit', format: 'number' },
+              { header: 'Running Balance', key: 'balance', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: 'Bank Book', company: co, columns: cols, rows: bankEntries, totals: { withdrawal: totals.withdrawal, deposit: totals.deposit, balance: closingBalance } }));
+          }}><Printer size={16} /> Print Bank Book</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Date', key: 'date' },
+              { header: 'Particulars', key: 'particulars' },
+              { header: 'Inst / Chq No', key: 'instrument' },
+              { header: 'Withdrawal (Dr)', key: 'withdrawal', format: 'number' },
+              { header: 'Deposit (Cr)', key: 'deposit', format: 'number' },
+              { header: 'Running Balance', key: 'balance', format: 'number' },
+            ];
+            exportPdf('bank_book', { title: 'Bank Book', company: co, columns: cols, rows: bankEntries, totals: { withdrawal: totals.withdrawal, deposit: totals.deposit, balance: closingBalance } });
+          }}><Download size={16} /> Export PDF</button>
         </div>
       </div>
 

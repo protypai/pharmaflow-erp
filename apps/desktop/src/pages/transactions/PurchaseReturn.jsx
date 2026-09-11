@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toStrips, packSize, formatStock } from '../../utils/units';
 import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 import { syncEntity } from '../../services/dataService';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 export default function PurchaseReturn() {
   const { id: editId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoFillItem = location.state?.autoFillItem;
   const isEditMode = !!editId;
   const [suppliers, set_suppliers] = useState([]);
   const [products, set_products] = useState([]);
@@ -22,13 +25,28 @@ export default function PurchaseReturn() {
         LEFT JOIN batches b ON p.id = b.product_id
         GROUP BY p.id
       `);
-      set_products(res_products?.data?.map(p => ({
+      const loadedProducts = res_products?.data?.map(p => ({
         ...p,
         batches: p.batches ? JSON.parse(p.batches).filter(b => b.id) : []
-      })) || []);
+      })) || [];
+      set_products(loadedProducts);
+
+      if (autoFillItem && !editId) {
+        const prod = loadedProducts.find(p => p.id.toString() === autoFillItem.productId.toString());
+        setRows([{
+          id: Date.now(),
+          product: autoFillItem.productId.toString(),
+          batch: autoFillItem.batchNo,
+          expiry: autoFillItem.expiryDate.includes('/') ? autoFillItem.expiryDate : toDisplayExpiry(autoFillItem.expiryDate),
+          qty: 1, // Pre-fill with 1 for convenience
+          ptr: autoFillItem.ptr || 0,
+          gst: prod?.gst_rate || 12,
+          amount: 0 // Will be recalculated by useEffect
+        }]);
+      }
     };
     fetchData();
-  }, []);
+  }, [editId, autoFillItem]);
 
   // Edit mode: load the existing return (header + items) into the form.
   useEffect(() => {
@@ -366,7 +384,7 @@ export default function PurchaseReturn() {
           <div className="page-sub">Return goods to supplier and issue debit note</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Debit Note</button>
+          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print Debit Note</button>
           <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {isEditMode ? 'Update Return' : 'Save Return'}</button>
         </div>
       </div>

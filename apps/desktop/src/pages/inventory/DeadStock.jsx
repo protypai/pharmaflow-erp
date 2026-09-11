@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ghost, ArrowDownToLine, Printer } from 'lucide-react';
 import { formatStock } from '../../utils/units';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 
 export default function DeadStock() {
@@ -71,7 +72,18 @@ export default function DeadStock() {
           <div className="page-sub" style={{ color: '#6B7280' }}>Identify inventory that isn't selling to free up locked capital</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Report</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Item Code', key: 'code' },
+              { header: 'Product Name', key: 'name' },
+              { header: 'Available Qty', key: 'totalQty', format: 'int' },
+              { header: 'Last Sale Date', key: 'lastSaleDateStr' },
+              { header: 'Days Idle', key: 'daysSinceLastSale', format: (v) => v === 9999 ? 'No Sales' : `${v} days` },
+              { header: 'Locked Capital (₹)', key: 'lockedCapital', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: `Dead Stock Report (No Sales in ${daysFilter}+ Days)`, company: co, columns: cols, rows: deadStockData, totals: { lockedCapital: totalLockedCapital } }));
+          }}><Printer size={16} /> Print Report</button>
         </div>
       </div>
 

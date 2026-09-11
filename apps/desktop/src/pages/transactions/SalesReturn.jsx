@@ -3,6 +3,7 @@ import { Save, Plus, Trash2, Printer, Search } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 export default function SalesReturn() {
   const { id: editId } = useParams();
@@ -391,7 +392,7 @@ export default function SalesReturn() {
           <div className="page-sub">Receive returns from customer and issue credit note</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Credit Note</button>
+          <button className="btn btn-outline" onClick={() => window.print()}><Printer size={16} /> Print Credit Note</button>
           <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {isEditMode ? 'Update Return' : 'Save Return'}</button>
         </div>
       </div>

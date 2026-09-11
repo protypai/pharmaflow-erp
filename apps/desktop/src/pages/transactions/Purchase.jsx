@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Calculator, AlertTriangle, ArrowLeft, Download } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { syncEntity } from '../../services/dataService';
 import { buildInvoiceHtml } from '../../utils/invoiceTemplate';
 import { toStrips, packSize, toBoxesFloat, perStripPrice } from '../../utils/units';
@@ -8,6 +8,8 @@ import { toIsoExpiry, toDisplayExpiry } from '../../utils/dates';
 export default function Purchase() {
   const navigate = useNavigate();
   const { id: editId } = useParams();
+  const location = useLocation();
+  const autoFillItem = location.state?.autoFillItem;
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalItems, setOriginalItems] = useState([]);
   const [rows, setRows] = useState([
@@ -35,7 +37,34 @@ export default function Purchase() {
         setSuppliersList(supRes?.data || []);
 
         const prodRes = await window.pharmaAPI.db.query("SELECT id, name, gst_rate, packing, conversion_factor, sale_unit FROM products WHERE COALESCE(status, 'active') <> 'inactive' ORDER BY name ASC");
-        setProductsList(prodRes?.data || []);
+        const loadedProducts = prodRes?.data || [];
+        setProductsList(loadedProducts);
+
+        if (autoFillItem && !editId) {
+          const prod = loadedProducts.find(p => p.id.toString() === autoFillItem.id.toString());
+          if (prod) {
+            setRows([{
+              id: crypto.randomUUID(),
+              product: prod.id,
+              productName: prod.name,
+              productSearch: prod.name,
+              batch: '',
+              batchId: null,
+              expiry: '',
+              qty: 0,
+              invPrice: 0,
+              priceUnit: 'strip',
+              boxSize: (prod.conversion_factor && Number(prod.conversion_factor) > 0) ? Number(prod.conversion_factor) : 10,
+              pts: 0,
+              ptr: 0,
+              mrp: 0,
+              disc: 0,
+              gst: prod.gst_rate || 12,
+              amount: 0,
+              effectiveUnitPrice: 0
+            }]);
+          }
+        }
       } catch (err) {
         console.error('Failed to load master data for purchase:', err);
         setErrorMsg('Failed to load suppliers/products from database.');
@@ -95,7 +124,7 @@ export default function Purchase() {
       }
     };
     fetchMasterData();
-  }, [editId]);
+  }, [editId, autoFillItem]);
 
   // Calculate row amounts and totals when rows change
   useEffect(() => {

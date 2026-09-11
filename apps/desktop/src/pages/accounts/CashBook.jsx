@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, Download, Banknote } from 'lucide-react';
+import { printHtml, buildReportHtml, exportPdf, getCompanyProfile } from '../../utils/export';
 
 export default function CashBook() {
   
@@ -54,8 +55,28 @@ export default function CashBook() {
           <div className="page-sub">Track daily physical cash flow and expenses</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline"><Printer size={16} /> Print Cash Book</button>
-          <button className="btn btn-outline"><Download size={16} /> Export PDF</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Date', key: 'date' },
+              { header: 'Particulars', key: 'particulars' },
+              { header: 'Receipt (Cash In)', key: 'receipt', format: 'number' },
+              { header: 'Payment (Cash Out)', key: 'payment', format: 'number' },
+              { header: 'Running Balance', key: 'balance', format: 'number' },
+            ];
+            printHtml(buildReportHtml({ title: 'Cash Book (Day Book)', company: co, columns: cols, rows: cashEntries, totals: { receipt: totals.receipt, payment: totals.payment, balance: closingBalance } }));
+          }}><Printer size={16} /> Print Cash Book</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Date', key: 'date' },
+              { header: 'Particulars', key: 'particulars' },
+              { header: 'Receipt (Cash In)', key: 'receipt', format: 'number' },
+              { header: 'Payment (Cash Out)', key: 'payment', format: 'number' },
+              { header: 'Running Balance', key: 'balance', format: 'number' },
+            ];
+            exportPdf('cash_book', { title: 'Cash Book (Day Book)', company: co, columns: cols, rows: cashEntries, totals: { receipt: totals.receipt, payment: totals.payment, balance: closingBalance } });
+          }}><Download size={16} /> Export PDF</button>
         </div>
       </div>
 

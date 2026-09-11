@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Printer, Edit, X } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 export default function StockAdjustment() {
   const [products, set_products] = useState([]);
@@ -232,7 +233,17 @@ export default function StockAdjustment() {
           {editingAdjId && (
             <button className="btn btn-outline" onClick={resetForm}><X size={16} /> Cancel</button>
           )}
-          <button className="btn btn-outline"><Printer size={16} /> Print Report</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Reference', key: 'entry_no' },
+              { header: 'Date', key: 'date', format: (v) => String(v || '').slice(0, 10) },
+              { header: 'Reason', key: 'reason' },
+              { header: 'Items', key: 'itemCount', format: 'int' },
+              { header: 'Authorized By', key: 'notes', format: (v) => String(v || '').replace(/^Authorized by:\s*/, '') || '—' },
+            ];
+            printHtml(buildReportHtml({ title: 'Stock Adjustment Report', company: co, columns: cols, rows: adjustmentsList }));
+          }}><Printer size={16} /> Print Report</button>
           <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {editingAdjId ? 'Update Details' : 'Save Adjustment'}</button>
         </div>
       </div>

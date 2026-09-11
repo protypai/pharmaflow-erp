@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Save, Printer, IndianRupee, Edit, X } from 'lucide-react';
 import { syncEntity } from '../../services/dataService';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 export default function Receipts() {
   const [customers, set_customers] = useState([]);
@@ -48,7 +50,8 @@ export default function Receipts() {
     setBills([]);
   };
 
-  const [customerId, setCustomerId] = useState('');
+  const location = useLocation();
+  const [customerId, setCustomerId] = useState(location.state?.autoFillCustomer || '');
   const [amountReceived, setAmountReceived] = useState(0);
   const [payMode, setPayMode] = useState('bank');
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split('T')[0]);
@@ -221,7 +224,17 @@ export default function Receipts() {
           {editingReceiptId && (
             <button className="btn btn-outline" onClick={resetForm}><X size={16} /> Cancel</button>
           )}
-          <button className="btn btn-outline"><Printer size={16} /> Print Receipt</button>
+          <button className="btn btn-outline" onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Receipt No', key: 'receipt_no' },
+              { header: 'Date', key: 'date', format: (v) => String(v || '').slice(0, 10) },
+              { header: 'Customer', key: 'customerName' },
+              { header: 'Amount (₹)', key: 'amount', format: 'number' },
+              { header: 'Mode', key: 'payment_mode' },
+            ];
+            printHtml(buildReportHtml({ title: 'Receipts Report', company: co, columns: cols, rows: receiptsList }));
+          }}><Printer size={16} /> Print Receipt</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={editingReceiptId ? false : (!amountReceived || Number(amountReceived) <= 0 || allocatedTotal > (Number(amountReceived)||0))}><Save size={16} /> {editingReceiptId ? 'Update Details' : 'Save Receipt'}</button>
         </div>
       </div>

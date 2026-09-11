@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { TrendingDown, FilePlus2, Printer } from 'lucide-react';
 import { formatStock } from '../../utils/units';
+import { printHtml, buildReportHtml, getCompanyProfile } from '../../utils/export';
 
 
 export default function LowStock() {
@@ -75,7 +76,19 @@ export default function LowStock() {
           <div className="page-sub" style={{ color: '#1E3A8A' }}>Products running below minimum stock. Generate Purchase Orders instantly.</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-outline" style={{ borderColor: '#1E40AF', color: '#1E40AF' }} onClick={() => alert("Printing Shortage List...")}><Printer size={16} /> Print Shortage List</button>
+          <button className="btn btn-outline" style={{ borderColor: '#1E40AF', color: '#1E40AF' }} onClick={async () => {
+            const co = await getCompanyProfile();
+            const cols = [
+              { header: 'Item Code', key: 'code' },
+              { header: 'Product Name', key: 'name' },
+              { header: 'Min Stock', key: 'min_stock', format: 'int' },
+              { header: 'Current Stock', key: 'totalQty', format: 'int' },
+              { header: 'Deficit Qty', key: 'deficit', format: 'int' },
+              { header: 'Suggested Order', key: 'suggestedOrder', format: 'int' },
+              { header: 'Primary Supplier', key: 'primarySupplier' },
+            ];
+            printHtml(buildReportHtml({ title: 'Low Stock - Shortage List', company: co, columns: cols, rows: lowStockData }));
+          }}><Printer size={16} /> Print Shortage List</button>
           <button className="btn btn-primary" onClick={() => alert("Generating POs for all low stock items...")}><FilePlus2 size={16} /> Generate PO for All</button>
         </div>
       </div>
